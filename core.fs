@@ -301,15 +301,6 @@ dh CONSTANT code-parse \ Expects A to be the delimiter.
   \ Compute, and push, the start of the parsing region.
   source-buffer [rb+] rx set, \ X - Start of the whole buffer
 
-  $ffef dlit log,
-  0 [rx+] log,
-  1 [rx+] log,
-  2 [rx+] log,
-  3 [rx+] log,
-  4 [rx+] log,
-  5 [rx+] log,
-  6 [rx+] log,
-
   [rc] ry set,
   rx ry add,                  \ Y - Current address inside the parse buffer
   ry rpush set,               \ Which is pushed, it's part of the output.
@@ -325,17 +316,19 @@ dh CONSTANT code-parse \ Expects A to be the delimiter.
   repeat,
 
   \ Push the length, first. It might be 0, but that's fine.
-  rx ry sub, \ Y - the length parsed
-  ry rpush set, \ Pushed!
+  ry ra set,   \ Use A for some temporary work.
+  rx ra sub,   \ A - The offset into the buffer.
+  [rc] ra sub, \ A - The actual parse length.
+  ra rpush set, \ Pushed!
 
   \ Now check if Y < Z; if that's still true then we found a delimiter.
   rz ry ifl, \ Backwards: skip when Y = Z
   if,
-    \ Advance the pointer one more, past the delimiter.
-    1 dlit ry add,
+    \ Advance the length one more, past the delimiter.
+    1 dlit ra add,
   then,
 
-  ry [rc] add, \ And add the length parsed to the >IN.
+  ra [rc] add, \ And add the length parsed to the >IN.
 
   \ Pop the two values from the stack into X and C, and return.
   rpop rc set,
@@ -378,8 +371,8 @@ dh CONSTANT code-parse-name
 
   \ Now Y is pointed at a non-delimiter.
   \ Update >IN based on these leading spaces.
-  rx ry sub, \ Y - the length parsed
-  ry [rc] add,
+  rx ry sub, \ Y - index into parse buffer
+  ry [rc] set,
 
   \ A holds the delimiter, so call into code-parse.
   \ It returns the same things I want to, so just tail call.
@@ -396,16 +389,11 @@ dh CONSTANT code-parse-name
 \ Returns the same format.
 \ Clobbers Y, Z
 dh CONSTANT code-to-number
-  0 dlit brk, \ Start the debug output.
   var-base [dlit] rz set, \ Z - base
-  $fcfc dlit log,
-  rz log,
 
   begin,
-    rc log,
     0 dlit rc ifg, \ C > 0, still digits to go
   while,
-    ry log,
     [rx] ry set, \ Read the new digit into Y
     char 0 dlit ry sub, \ Adjust so '0' -> 0
     9 dlit ry ifg, \ When new digit is > 9
@@ -539,9 +527,12 @@ dh CONSTANT code-(find)
   \ Expects X to be a character address, C the number of character.
   \ Saves I on the stack and stores the link pointer there.
   ri rpush set,
-  var-latest [dlit] ri set,
+  \ Set I to var-latest's address, actually. Then the [ri] ri set, below loads
+  \ the actual latest value.
+  var-latest dlit ri set,
 
   begin,
+    [ri] ri set,
     0 dlit ri ifn,
   while,
     \ Load the address of the name into Y, the length into Z.
@@ -557,7 +548,7 @@ dh CONSTANT code-(find)
 
     \ Now abusing repeat, it's supposed to be unconditional, but I can arrange
     \ to skip over it.
-    0 dlit ra ifn, \ When A = 0, we haven't found anything: don't skip.
+    0 dlit ra ife, \ When A = 0, we haven't found anything: don't skip, jump up.
   repeat,
 
   \ Down here, X and C are still the name, I is the header.
@@ -568,6 +559,9 @@ dh CONSTANT code-(find)
 
 
 
+\ ( addr len -- 0 0 | hdr 1 | hdr -1 )
+\ Returns 0 0 when not found. When found, returns the pointer to the header (not
+\ an xt!), and either 1 for immediate words, -1 for regular words.
 :WORD (FIND)
   rpop rc set,
   rpop rx set,
@@ -579,7 +573,6 @@ dh CONSTANT code-(find)
     0 dlit rpush set,
     0 dlit rpush set,
   else,
-    ra rpush set,
     -1 dlit rb set,
     1 [ra+] rc set, \ The length and metadata word.
     F_IMMEDIATE dlit rc ifb, \ bit in common
@@ -685,15 +678,10 @@ dh CONSTANT code-REFILL
       17 dlit rc ifn,
       if, \ not newline
         \ Write the character into the buffer and bump the pointer.
-        $ffce dlit log,
-        rc log,
-        ry log,
         rc [ry] set,
         1 dlit ry add,
       then,
     then,
-
-    $ffcc dlit log,
 
     17 dlit rc ife,
   until,
@@ -713,9 +701,15 @@ dh CONSTANT code-REFILL
   ra rpush set,
 ;WORD
 
+:WORD EMIT
+  rpop log,
+;WORD
+
 
 dh CONSTANT quit-loop-indirect
 0 dat,
+dh CONSTANT quit-loop-double-indirect
+quit-loop-indirect dat,
 
 \ QUIT process:
 \ - Empty the stacks.
@@ -742,9 +736,6 @@ dh CONSTANT code-QUIT
   begin,
     \ Try to parse a name from the input.
     code-parse-name dlit jsr, \ X = address, C = length.
-    $fff6 dlit log,
-    rx log,
-    rc log,
 
     \ Loop until C != 0, meaning we found a word.
     0 dlit rc ife,
@@ -752,20 +743,9 @@ dh CONSTANT code-QUIT
     code-REFILL dlit jsr,
   repeat,
 
-  $fffe dlit log,
-  rx log,
-  rc log,
-  $ffff dlit log,
-
   \ Now we've got a word loaded. X = address, C = length.
   \ And then try to (FIND) (preserves X, C; return *header in A)
   code-(find) dlit jsr,
-
-  $fffe dlit log,
-  rx log,
-  rc log,
-  ra log,
-  $ffff dlit log,
 
   \ If it's 0, not found. Try to parse as a number.
   0 dlit ra ife,
@@ -809,7 +789,7 @@ dh CONSTANT code-QUIT
 
     \ Advance A to the codeword address.
     MASK_LEN rb and,
-    1 dlit ra add,
+    2 dlit ra add,
     rb ra add, \ A is now the codeword address.
 
     \ Compilation is only when STATE is 1, and immediate flag is clear.
@@ -824,7 +804,7 @@ dh CONSTANT code-QUIT
     else, \ Interpreting
       \ Run the word. Codeword address is in A. I points at the next thing to
       \ do, which is the quit-loop itself.
-      quit-loop-indirect ri set,
+      quit-loop-double-indirect dlit ri set,
       [ra] rpc set,
       next,
       \ Doesn't actually reach here.
@@ -834,6 +814,7 @@ dh CONSTANT code-QUIT
 :WORD QUIT
   code-quit dlit rpc set,
 ;WORD-BARE \ No need for NEXT here, QUIT never returns.
+
 
 
 dh CONSTANT init-forth
@@ -863,9 +844,9 @@ dh CONSTANT init-forth
 \ Write the main jump into the top slot.
 init-forth main-addr h!
 
-:WORD EMIT
-  rpop log,
-;WORD
+\ Whatever the last word written was, its header address is in the host variable
+\ last-word. Write it into the target variable var-latest.
+last-word @   var-latest h!
 
 \ This needs to be the last compiled code!
 \ It sets the initial DSP (>HERE) to this location at the end of the code.

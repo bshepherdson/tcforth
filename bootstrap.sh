@@ -2,5 +2,7 @@
 
 FORTH=${FORTH:-gforth}
 
-$FORTH host.fs asm.fs core.fs bootstrap.fs
+FILES="host.fs asm.fs core.fs block.fs main.fs bootstrap.fs"
+
+$FORTH $FILES
 

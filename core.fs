@@ -10,7 +10,8 @@
 140 LOAD \ Dictionary
 163 LOAD \ Keyboard, REFILL
 190 LOAD \ QUIT
-207 LOAD \ Main()
+220 LOAD \ Blocks
+290 LOAD \ Main()
 
 
 \ Screen 91 - Heart of system
@@ -882,51 +883,4 @@ then,
 \ QUIT never returns.
 
 
-
-\ Screen 207 - Main()
-208 210 THRU
-211 LOAD
-
-
-
-\ Screen 208 - Init 1
-dh CONSTANT init-forth
-  \ Find keyboard hardware
-  \ ID 0x30c17406 in TC
-  rz hwn,
-  begin,
-    1 dlit rz sub,
-    0 dlit rz ifg,
-  while,
-    rz hwq,
-    $30c1 dlit rb ife,
-    $7406 dlit ra ife,
-
-\ Screen 209 - Init 2
-    if,
-      rz var-hw-keys [dlit] set,
-      0 dlit rz set,
-    then,
-  repeat,
-
-  \ Set DSP to memory after the
-  \ code. 0 filled in later.
-  0 long-lit var-DSP [dlit] set,
-  dh 1- CONSTANT initial-dsp
-
-  code-quit dlit rpc set,
-
-
-\ Screen 211 - main()
-\ Write jump to here at top of
-\ memory.
-init-forth main-addr h!
-
-\ (LATEST) is the last word on
-\ the host.
-last-word @   var-latest h!
-
-\ MUST BE LAST COMPILED CODE!
-\ Set initial DSP to this point.
-dh initial-dsp h!
 

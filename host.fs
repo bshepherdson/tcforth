@@ -34,3 +34,7 @@ mem 65536 2 *   0 fill
 \ Allocates space for u words.
 : ALLOT, ( u -- ) 1 lshift   out +! ;
 
+\ Neuter LOAD and THRU, we don't need to run them on the host.
+: LOAD  drop ;
+: THRU 2drop ;
+

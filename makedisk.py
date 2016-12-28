@@ -47,10 +47,10 @@ screenSize = screenWidth * screenHeight
 
 screensSeen = {}
 
-screenRegex = re.compile('^\\ screen (\d+) ', re.IGNORECASE)
-emptyRegex = re.compile('^\s*$')
+screenRegex = re.compile(r"^\\ (\d+) ", re.IGNORECASE)
+emptyRegex = re.compile(r"^\s*$")
 
-masterOutput = []
+masterOutput = {}
 
 
 def error(name, line, msg):
@@ -75,10 +75,12 @@ def readLine(name, lineNum, screen, i, line):
 
 # Returns the number of lines loaded for this screen.
 def readScreen(name, screen, lines, index):
-  if screensSeen[screen]:
+  if screen in screensSeen:
     error(name, index, 'Duplicate screen: %d' % (screen))
 
   for i in range(0, screenHeight):
+    if index + i >= len(lines):
+      return i
     line = lines[index+i]
     if i > 0 and re.search(screenRegex, line):
       return i # Bail if we find another screen header.
@@ -94,11 +96,11 @@ def readFile(f, name):
     line = lines[i]
     match = re.search(screenRegex, line)
     if match:
-      number = match.group(0)
-      line += readScreen(name, number, lines, i)
+      number = int(match.group(1))
+      i += readScreen(name, number, lines, i)
     elif re.search(emptyRegex, line):
       # Do nothing for empty lines outside of screens.
-      line += 1
+      i += 1
     else:
       error(name, i, 'Unexpected screenless text: %s' % (line))
   f.close()
@@ -113,10 +115,13 @@ def main():
   # actual disk image. masterOutput contains numbers, which I need to write out
   # as big-endian 16-bit values. Gaps in the array should be converted to 0s.
   out = open('disk.img', 'wb')
-  for i in range(0, len(masterOutput)):
-    val = masterOutput[i]
-    if val is None:
-      val = 0
+  maxKey = max(masterOutput.keys())
+  # Round up to a whole screen.
+  maxKey = (maxKey + 511) & (~511)
+  for i in range(0, maxKey+1):
+    val = 32 # Blanks are replaced with spaces.
+    if i in masterOutput:
+      val = masterOutput[i]
     out.write(struct.pack('>H', val))
 
   out.close()

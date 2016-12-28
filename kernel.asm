@@ -774,15 +774,196 @@ set a, [a + src_type]
 ife a, -1
   set pc, refill_keyboard
 
-; Error: Not yet implemented.
-; TODO Implement EVALUATE and block refill
-brk 8
-sub pc, 1
+ife a, -2
+  set pc, refill_evaluate
+
+; Otherwise, A is the block number.
+set pc, refill_block
+
+
+; Since evaluate strings are only a single line, there's nothing to refill.
+; We simply decrement the source index and return 0.
+:refill_evaluate
+sub [var_source_index], 1
+set a, 0
+set pc, pop
+
+
+
+; Block handling:
+; - Currently there's only one block buffer.
+;   - It's never dirty, so it can always be dumped.
+; - The line number is the _next_ line to read, not the current line.
+; - Blocks need to be reloaded each time the buffer is full.
+; - A cached block of -1 means nothing is cached.
+
+:cached_block dat -1
+:block_buffer .reserve 512
+
+.def disk_state_no_media, 0
+.def disk_state_ready, 1
+.def disk_state_ready_wp, 2
+.def disk_state_busy, 3
+
+; Spins until the disk is fully loaded.
+:await_disk ; () -> void
+set a, 0
+hwi [var_hw_disk] ; B = state, C = error
+ifn c, 0
+  brk 18
+ife b, disk_state_no_media
+  brk 19 ; Needs to insert disk!
+ife b, disk_state_ready
+  set pc, pop
+ife b, disk_state_ready_wp
+  set pc, pop
+set pc, await_disk
+
+; TODO: Emit a message when there's no disk.
+
+:read_block ; (blk) -> void
+set push, x
+set push, y
+set x, a
+jsr await_disk
+set [cached_block], x
+set y, block_buffer
+set a, 2 ; Read
+hwi [var_hw_disk]
+ifn b, 1 ; 1 on successfully started read.
+  brk 17
+jsr await_disk
+set y, pop
+set x, pop
+set pc, pop
+
+
+:ensure_block ; (blk) -> void
+ife [cached_block], a
+  set pc, pop
+set pc, read_block
+
+
+; Refill always increments the line number first, then loads it.
+; If you need to reload the current line without resetting it, use
+; load_current_line.
+:refill_block
+set push, x
+set push, y
+
+set x, [var_source_index]
+mul x, sizeof_src
+add x, input_sources
+
+set y, block_line_buffer
+set [x + src_buffer], y
+set [x + src_index], 0
+add [x + src_block_line], 1 ; Bump the block line.
+
+set a, [x + src_block_line]
+ife a, 16
+  set pc, refill_block_pop
+
+jsr load_current_line
+set a, -1
+set pc, refill_block_done
+
+:refill_block_pop
+jsr pop_input
+set a, -1
+
+:refill_block_done
+set y, pop
+set x, pop
+set pc, pop
+
+
+; Read the current line number.
+
+; Block flows:
+; 1. Starting a new block in LOAD:
+;   a. Set up conditions for the source.
+;   b. REFILL reads line 0
+; 2. Subsequent REFILL
+;   a. Just reads line N?
+; 3. Popping to a block
+;   a. Conditions were as saved.
+;   b. Call a helper, below REFILL, that does the right thing
+
+
+; Pops an input source. If the new top source is a block, loads current line.
+:pop_input ; () -> void
+sub [var_source_index], 1
+set a, [var_source_index]
+mul a, sizeof_src
+add a, input_sources
+set a, [a + src_type]
+ifl a, -2
+  jsr load_current_line
+set pc, pop
+
+
+; Called when the current source is a block. Reads the next line into the block
+; buffer. Doesn't move the current line or >IN.
+:load_current_line ; () -> void
+set push, x
+set x, [var_source_index]
+mul x, sizeof_src
+add x, input_sources
+
+set a, [x + src_type] ; A is the block number.
+jsr ensure_block ; That block is now loaded.
+set a, [x + src_block_line]
+shl a, 5 ; 32 characters per line
+add a, block_buffer
+set b, block_line_buffer
+set c, 32
+
+:load_current_line_loop
+set [b], [a]
+add a, 1
+add b, 1
+sub c, 1
+ifg c, 0
+  set pc, load_current_line_loop
+
+set x, pop
+set pc, pop
+
+
+
+
+; Pushes a new input source for the given block.
+:load_block ; (blk) -> void
+add [var_source_index], 1
+set c, [var_source_index]
+mul c, sizeof_src
+add c, input_sources
+
+set [c + src_type], a    ; Block number
+set [c + src_index], 32  ; At the end, let REFILL load it.
+set [c + src_block_line], -1 ; Will be bumped to 0 by REFILL
+set [c + src_length], 32
+set [c + src_buffer], block_line_buffer
+
+set pc, pop
+
+
+
+WORD "LOAD", 4, forth_load
+set a, pop
+jsr load_block
+next
 
 
 WORD "REFILL", 6, forth_refill
 jsr refill
 set push, a
+next
+
+; \ is awkward
+WORD 0x5c, 0x8001, line_comment
+jsr refill
 next
 
 

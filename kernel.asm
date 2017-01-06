@@ -85,18 +85,22 @@ set pc, main
 
 
 ; DOER words. These are actual routines with addresses. Expect A to be the CFA.
-:DOCOL
+:DOCOL dat _docol
+:_DOCOL
+brk 5
 PUSHRSP i
 set i, a
 add i, 1
 next
 
-:DOLIT
+:DOLIT dat _dolit
+:_dolit
 set push, [i]
 add i, 1
 next
 
-:DOSTRING
+:DOSTRING dat _dostring
+:_dostring
 set a, [i]
 add i, 1
 set push, i
@@ -105,7 +109,8 @@ add i, a
 next
 
 ; Pushes CFA+2. Checks cfa+1, executes it if nonzero.
-:DODOES
+:DODOES dat _dodoes
+:_dodoes
 set b, a
 add b, 2
 set push, b
@@ -578,12 +583,18 @@ ife b, 0
   set pc, make_header_done
 sub b, 1
 add x, 1
-set [x], [a]
+set c, [a]
+ifg c, 96
+  ifl c, 123
+    sub c, 32 ; Force to uppercase
+set [x], c
+
 add a, 1
 set pc, make_header_loop
 
 :make_header_done
 ; X is now the codeword address.
+add x, 1 ; X is still pointing at the last letter.
 set [var_dsp], x
 set a, x ; Codeword address in A to return.
 set x, pop
@@ -606,6 +617,7 @@ next
 ; Out: A=1 if same, 0 if not.
 ; Expects X/C to be the input string, and Y/Z to be the dictionary one.
 ; The hidden flag is included in the length for Y/Z but not for X/C.
+; Ignores case!
 :strcmp
 set a, 0
 and c, mask_len
@@ -617,7 +629,13 @@ ifn c, z
 ife c, 0
   set pc, strcmp_match
 
-ifn [x], [y]
+; Fold lowercase letters to uppercase.
+set b, [x]
+ifg b, 96
+  ifl b, 123
+    sub b, 32
+
+ifn b, [y]
   set pc, pop ; Bail, they're not equal.
 add x, 1
 add y, 1
@@ -632,11 +650,28 @@ set pc, pop
 ; Breaks the calling convention!
 ; In: X = addr, C = len.
 ; Out: header address, maybe 0.
-; Preserves X, C
+; Preserves X, C, but uppercases the input
 :find
 set push, i ; Uses I for the latest word.
 set i, [var_latest]
 
+set push, x
+set push, c
+:find_uc
+ife c, 0
+  set pc, find_uc_done
+ifg [x], 96 ; 'a' or higher
+  ifl [x], 123 ; 'z' or less
+    sub [x], 32
+add x, 1
+sub c, 1
+set pc, find_uc
+
+:find_uc_done
+set c, pop
+set x, pop
+
+; Now try to find the target string.
 :find_loop
 ife i, 0
   set pc, find_done
@@ -688,7 +723,7 @@ next
 
 WORD ":", 1, colon
 jsr make_header ; A is the CFA
-set a, docol
+set a, _docol   ; The real code for DOCOL, not indirected.
 jsr compile     ; Compile DOCOL into it.
 set [var_STATE], state_compiling
 next
@@ -697,6 +732,12 @@ WORD ";", 0x8001, semicolon
 ; Compile EXIT
 set a, exit
 jsr compile
+
+set a, [var_latest]
+set b, mask_hidden
+xor b, -1
+and [a+1], b ; Unhide the recent word.
+
 set [var_STATE], state_interpreting
 next
 
@@ -973,6 +1014,10 @@ WORD "EMIT", 4, emit
 log pop
 next
 
+WORD "DEBUG", 5, forth_debug
+brk 0
+next
+
 
 ; Global variables with Forth words to access them.
 :var_base dat 10
@@ -1055,6 +1100,7 @@ ife [var_state], state_interpreting
 
 ; Otherwise, we're compiling. Compile DOLIT, then the number.
 ; A is already pushed, so compile DOLIT first, then pop and compile the number.
+set a, dolit
 jsr compile
 set a, pop
 jsr compile
@@ -1064,11 +1110,12 @@ set pc, quit_loop ; Back to the next word.
 
 :quit_found_word ; A is the header address.
 ; Convert that to the CFA
+set push, [a+1] ; Push the length word
 jsr header_to_cfa ; A = CFA
+set b, pop ; Grab the saved length word
 ; Compilation happens only in compile state and with immediacy 0.
-set b, [a+1]
 ife [var_state], state_compiling
-  ifb b, mask_immediate ; Bits in common
+  ifc b, mask_immediate ; Immediate bit is clear.
     set pc, quit_found_word_compile
 
 ; Immediate word or interpreting mode: run it now.

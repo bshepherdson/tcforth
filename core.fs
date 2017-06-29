@@ -12,6 +12,8 @@
 12 LOAD \ Strings
 15 LOAD \ DOES> VARIABLE etc.
 18 LOAD \ DO LOOP
+22 LOAD \ Miscellany
+25 LOAD \ String literals
 30 LOAD \ Testing
 
 \ 3 - Core 1
@@ -190,8 +192,66 @@ VARIABLE (loop-top)
   swap >R ;
 
 
+\ 22 - Miscellany
+23 LOAD \ Misc 1
+24 LOAD \ Misc 2
+
+
+\ 23 - Miscellany
+: HEX 16 base ! ;
+: DECIMAL 10 base ! ;
+: MIN 2dup > IF swap THEN drop ;
+: MAX 2dup < IF swap THEN drop ;
+: RECURSE (latest) @ (>CFA) ,
+  ; IMMEDIATE
+: PICK 1+ sp@ + @ ;
+
+
+\ 24 - MOVE and friends
+: FILL -rot dup
+  0 <= IF drop 2drop EXIT THEN
+  0 DO 2dup i + ! LOOP
+  2drop ;
+
+: MOVE> 0 DO over i + @
+  over i + ! LOOP 2drop ;
+: MOVE< 1- 0  swap DO over i + @
+  over i + ! -1 +LOOP 2drop ;
+
+: MOVE
+  dup 0= IF drop 2drop EXIT THEN
+  >R 2dup <   R> swap
+  IF MOVE< ELSE MOVE> THEN ;
+
+\ 25 - String literals
+26 LOAD
+27 LOAD
+
+\ 26 - String literals setup.
+create (sbufs) 64 8 * allot
+create (slens) 8 allot
+VARIABLE (sidx) \ index
+: (S-compile) ( c-addr u )
+  dostring, dup ,
+  here swap dup >r move r> allot
+;
+
+\ 27 - String literals cont'd
+: (S-interp) ( c-addr u )
+  >R (sidx) @ dup (slens) +
+  R@ swap !   64 * (sbufs) +
+  r> move ( )
+  (sidx) @ dup 64 * (sbufs) +
+  swap (slens) + @ ( addr u )
+  (sidx) @ 1+   7 and
+  (sidx) !
+;
+: S" [char] " parse
+  state @ IF (S-compile)
+  ELSE (S-interp)
+  THEN ; IMMEDIATE
 
 \ 30 - Testing
-: test 5 0 DO i emit i 3 = IF
-UNLOOP EXIT THEN LOOP 66 emit ;
+here emit
+: test S" butts" type ;
 debug test debug

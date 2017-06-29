@@ -271,6 +271,11 @@ set push, c
 set push, b
 next
 
+WORD "SP@", 3, sp_fetch
+set a, sp
+set push, a
+next
+
 
 WORD ">R", 2, to_r
 PUSHRSP pop
@@ -1062,6 +1067,11 @@ next
 
 WORD "DOLIT,", 6, compile_dolit
 set a, DOLIT
+jsr compile
+next
+
+WORD "DOSTRING,", 9, compile_dostring
+set a, DOSTRING
 jsr compile
 next
 

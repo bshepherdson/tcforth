@@ -1065,6 +1065,33 @@ set a, DOLIT
 jsr compile
 next
 
+WORD "(LOOP-END)", 10, do_loop_end
+set x, [j]    ; X is the index
+set y, [j+1]  ; Y is the limit
+set c, x
+sub c, y      ; C is i-l
+set z, pop    ; Z is the delta
+; We want delta + index - limit
+set a, z
+add a, c ; A is delta + index - limit
+xor a, c ; A is d+i-l ^ i-l
+set b, 0
+ifc a, 0x8000 ; True when top bit is clear.
+  set b, -1
+set a, b   ; Keep the first flag in A
+
+; Then calculate delta XOR index - limit
+xor c, z
+set b, 0
+ifc c, 0x8000
+  set b, -1
+
+bor a, b  ; OR those flags
+xor a, -1 ; and negate the result
+set push, a
+add z, x  ; New index is delta + index
+set [j], z ; Write it to the index.
+next
 
 
 ; Global variables with Forth words to access them.

@@ -11,6 +11,7 @@
 9 LOAD  \ Control Structures
 12 LOAD \ Strings
 15 LOAD \ DOES> VARIABLE etc.
+18 LOAD \ DO LOOP
 30 LOAD \ Testing
 
 \ 3 - Core 1
@@ -133,14 +134,64 @@
 ; IMMEDIATE
 
 : POSTPONE parse-name (find)
-  1 = IF , ELSE
-    [literal] ['] , THEN
-  ; IMMEDIATE
+  1 = IF (>CFA) , ELSE
+    (>CFA) [literal] ['] , ,
+  THEN ; IMMEDIATE
 
 \ 17 - VARIABLE CONSTANT
 : VARIABLE create 0 , ;
 : CONSTANT create , DOES> @ ;
 
+
+
+\ 18 - DO LOOP
+19 LOAD \ DO
+20 LOAD \ +LOOP
+21 LOAD \ LEAVE I J etc.
+
+\ Basic plan: old (loop-top) on
+\ C-stack, new in (loop-top).
+\ DO compiles pushing index,
+\ limit onto runtime R-stack.
+\ Pushes literal 1, then 0branch
+
+\ 19 - DO
+VARIABLE (loop-top)
+: DO ( m i -- ) ['] swap ,
+  ['] >r dup , ,   1 [literal]
+  ['] (0branch) ,  here 0 ,
+  (loop-top) @  swap
+  (loop-top) !
+; IMMEDIATE
+
+\ 20 - +LOOP
+: +LOOP   ['] (loop-end) ,
+  ['] (0branch) , here 0 ,
+  (loop-top) @ 1+  over - swap !
+  here (loop-top) @ 2dup -
+  swap ! drop (loop-top) !
+  ['] R> dup , ,  ['] 2drop ,
+; IMMEDIATE
+
+: LOOP 1 [literal]
+  postpone +loop ; IMMEDIATE
+
+\ 21 - LEAVE UNLOOP I J
+: LEAVE (loop-top) @ 1-
+  0 [literal]
+  ['] (branch) ,
+  here - ,
+; IMMEDIATE
+
+: UNLOOP R> R> R> 2drop >R ;
+
+: I ['] R@ , ; IMMEDIATE
+: J R> R> R> R@ -rot >R >R
+  swap >R ;
+
+
+
 \ 30 - Testing
-6 CONSTANT test
-test emit
+: test 5 0 DO i emit i 3 = IF
+UNLOOP EXIT THEN LOOP 66 emit ;
+debug test debug

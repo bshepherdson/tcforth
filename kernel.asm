@@ -87,7 +87,6 @@ set pc, main
 ; DOER words. These are actual routines with addresses. Expect A to be the CFA.
 :DOCOL dat _docol
 :_DOCOL
-brk 5
 PUSHRSP i
 set i, a
 add i, 1
@@ -203,6 +202,33 @@ set a, pop
 asr peek, a
 next
 
+
+; Comparisions
+WORD "=", 1, equal
+set a, pop
+set c, 0
+ife a, pop
+  set c, -1
+set push, c
+next
+
+WORD "<", 1, less_than
+set b, pop
+set a, pop
+set c, 0
+ifu a, b
+  set c, -1
+set push, c
+next
+
+WORD "U<", 2, uless_than
+set b, pop
+set a, pop
+set c, 0
+ifl a, b
+  set c, -1
+set push, c
+next
 
 
 ; Stack operations
@@ -339,7 +365,6 @@ set push, a
 next
 
 
-
 ; Parsing and input
 
 ; Input sources are 5 words wide:
@@ -409,6 +434,7 @@ ifl y, z
 set pc, parse_done
 
 :parse_consume
+log [y]
 add y, 1
 set pc, parse_loop
 
@@ -482,6 +508,7 @@ next
 
 
 ; Number parsing
+; This does **unsigned** number parsing. If you want signed numbers, DIY.
 :to_number ; (lo, hi, count, addr) -> (lo, hi, count, addr)
 set push, y
 set push, z
@@ -604,10 +631,12 @@ set pc, pop
 
 WORD "CREATE", 6, forth_create
 jsr make_header ; A (and DSP) are now the CFA.
-set [a], dodoes  ; Codeword is DODOES
+set [a], _dodoes  ; Codeword is DODOES
 set [a+1], 0     ; DOES> slot is 0
 add a, 2
 set [var_dsp], a  ; Update DSP to be after the created word.
+set a, [var_latest]
+xor [a+1], mask_hidden ; Turn off the hidden bit
 next
 
 
@@ -1018,6 +1047,25 @@ WORD "DEBUG", 5, forth_debug
 brk 0
 next
 
+; Debugs on entry into the next word.
+; This will pause right before jumping into the codeword inside QUIT.
+WORD "DEBUG-NEXT", 10, forth_debug_next
+set [debug_next], 1
+next
+
+WORD "[LITERAL]", 9, compile_literal
+set a, dolit
+jsr compile
+set a, pop
+jsr compile
+next
+
+WORD "DOLIT,", 6, compile_dolit
+set a, DOLIT
+jsr compile
+next
+
+
 
 ; Global variables with Forth words to access them.
 :var_base dat 10
@@ -1043,6 +1091,7 @@ next
 
 
 ; Indirections for returning from interpretive words to QUIT.
+:debug_next dat 0
 :quit_cfa dat quit_ca
 :quit_ca dat quit_loop
 
@@ -1080,6 +1129,18 @@ set a, 0
 set b, 0
 set push, x
 set push, c
+
+; Handle negative numbers.
+set push, 0
+
+ifn [x], 0x2d ; '-'
+  set pc, quit_non_negative
+
+set peek, 1 ; Flip the flag.
+add x, 1
+sub c, 1
+
+:quit_non_negative
 jsr to_number ; B:A is 32-bit value.
 
 ; If the length in C is 0, we parsed it as a number.
@@ -1092,6 +1153,15 @@ sub pc, 1 ; TODO Error message here
 
 :quit_found_number ; A = number.
 ; Pop the saved X, C off the stack, we're done with them.
+; But first, check the negation flag and negate A if needed.
+set b, pop
+ife b, 0
+  set pc, quit_found_number_non_negative
+
+xor a, -1
+add a, 1
+
+:quit_found_number_non_negative
 add sp, 2
 ; Speculatively push the number.
 set push, a
@@ -1120,6 +1190,12 @@ ife [var_state], state_compiling
 
 ; Immediate word or interpreting mode: run it now.
 ; A is already the CFA. Set I to the indirection, and jump into this word.
+ife [debug_next], 0
+  set pc, quit_immediate_go
+set [debug_next], 0
+brk 1
+
+:quit_immediate_go
 set i, quit_cfa
 set pc, [a]
 

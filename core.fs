@@ -16,7 +16,6 @@
 25 LOAD \ String literals
 28 LOAD \ Miscellany 2
 33 LOAD \ Pictured output
-40 LOAD \ Testing
 
 \ 3 - Core 1
 \ The core-most pieces.
@@ -37,6 +36,7 @@
 : 2dup over over ;
 : 2drop drop drop ;
 : 2swap >r -rot r> -rot ;
+: 2over >r >r 2dup r> r> 2swap ;
 
 \ 5 - Core 1-2 - Math
 : 0< 0 < ;
@@ -74,6 +74,7 @@
 : CHAR parse-name drop @ ;
 : [CHAR]
   char [literal] ; IMMEDIATE
+: BL 32 ;
 
 \ 9 - Control Structures
 10 LOAD \ IF ELSE THEN
@@ -207,6 +208,12 @@ VARIABLE (loop-top)
 : RECURSE (latest) @ (>CFA) ,
   ; IMMEDIATE
 : PICK 1+ sp@ + @ ;
+: CR 10 emit ;
+: 2* 1 lshift ;
+: 2/ -1 1 rshift invert over and
+  swap 1 rshift   or ;
+: 2@ dup 1+ @ swap @ ;
+: 2! swap over ! 1+ ! ;
 
 
 \ 24 - MOVE and friends
@@ -283,6 +290,8 @@ VARIABLE (sidx) \ index
 : NIP swap drop ;
 : TUCK swap over ;
 : U> swap U< ;
+: THRU 1+ swap DO I dup emit
+  LOAD LOOP ;
 
 \ 33 - Pictured numeric output
 34 LOAD
@@ -321,6 +330,3 @@ VARIABLE (picout)
     sign #> THEN ;
 : . (#HOLD) type space ;
 
-
-\ 40 - Testing
-: test ." Output!" ; test

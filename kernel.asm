@@ -509,6 +509,12 @@ set push, a ; Address
 set push, b ; Length
 next
 
+WORD "SOURCE", 6, forth_source
+jsr load_source ; X is the start of the buffer, Z the end.
+set push, x
+sub z, x
+set push, z
+next
 
 
 
@@ -628,6 +634,7 @@ set pc, make_header_loop
 ; X is now the codeword address.
 add x, 1 ; X is still pointing at the last letter.
 set [var_dsp], x
+set [var_last_word], x
 set a, x ; Codeword address in A to return.
 set x, pop
 set pc, pop
@@ -762,6 +769,17 @@ jsr compile     ; Compile DOCOL into it.
 set [var_STATE], state_compiling
 next
 
+WORD ":NONAME", 7, colon_noname
+set x, [var_dsp]
+set push, x
+set [var_last_word], x
+set a, _docol
+jsr compile
+set [var_STATE], state_compiling
+next
+
+
+
 WORD ";", 0x8001, semicolon
 ; Compile EXIT
 set a, exit
@@ -874,6 +892,7 @@ set pc, pop
 
 :cached_block dat -1
 :block_buffer .reserve 512
+:disk_last_state dat 0
 
 .def disk_state_no_media, 0
 .def disk_state_ready, 1
@@ -882,17 +901,41 @@ set pc, pop
 
 ; Spins until the disk is fully loaded.
 :await_disk ; () -> void
+ifn [disk_last_state], disk_state_ready
+  set pc, await_disk
+set pc, pop
+
+; Interrupt handler for disks.
+:interrupt_handler ; (msg) -> void
+set push, b
+set push, c
 set a, 0
-hwi [var_hw_disk] ; B = state, C = error
+hwi [var_hw_disk]
 ifn c, 0
   brk 18
-ife b, disk_state_no_media
-  brk 19 ; Needs to insert disk!
-ife b, disk_state_ready
-  set pc, pop
-ife b, disk_state_ready_wp
-  set pc, pop
-set pc, await_disk
+set pc, [b+disk_state_handlers]
+
+:interrupt_handler_return
+set c, pop
+set b, pop
+rfi 0
+
+:disk_state_handlers
+.dat dsh_no_media, dsh_ready, dsh_ready, dsh_busy
+
+:dsh_no_media
+set [cached_block], -1 ; Flag that cache as empty.
+set [disk_last_state], disk_state_no_media
+set pc, interrupt_handler_return
+
+:dsh_ready
+set [disk_last_state], disk_state_ready
+set pc, interrupt_handler_return
+
+:dsh_busy
+set [disk_last_state], disk_state_busy
+set pc, interrupt_handler_return
+
 
 ; TODO: Emit a message when there's no disk.
 
@@ -1107,6 +1150,7 @@ next
 ; Global variables with Forth words to access them.
 :var_base dat 10
 :var_latest dat hdr_forth_quit ; This word must be last.
+:var_last_word dat forth_quit
 :var_dsp dat initial_dsp
 :var_state dat state_interpreting
 
@@ -1120,6 +1164,10 @@ next
 
 WORD "(LATEST)", 8, forth_latest
 set push, var_latest
+next
+
+WORD "(LAST-WORD)", 11, forth_last_word
+set push, [var_last_word]
 next
 
 WORD "BASE", 4, forth_base
@@ -1300,6 +1348,19 @@ set pc, init_hardware_loop
 
 :main
 jsr init_hardware
+
+; Set up the interrupt handler.
+ias interrupt_handler
+iaq 0
+set a, 1
+set x, 2
+hwi [var_hw_disk]
+
+; Set the disk's initial state.
+set a, 0
+hwi [var_hw_disk]
+set [disk_last_state], b
+
 set pc, quit
 
 :initial_dsp ; Must be right at the bottom.

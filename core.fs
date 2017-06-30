@@ -14,7 +14,9 @@
 18 LOAD \ DO LOOP
 22 LOAD \ Miscellany
 25 LOAD \ String literals
-30 LOAD \ Testing
+28 LOAD \ Miscellany 2
+33 LOAD \ Pictured output
+40 LOAD \ Testing
 
 \ 3 - Core 1
 \ The core-most pieces.
@@ -250,8 +252,75 @@ VARIABLE (sidx) \ index
   state @ IF (S-compile)
   ELSE (S-interp)
   THEN ; IMMEDIATE
+: ." postpone S" ['] type ,
+  ; IMMEDIATE
 
-\ 30 - Testing
-here emit
-: test S" butts" type ;
-debug test debug
+\ 28 - Miscellany 2
+29 LOAD
+30 LOAD
+
+\ 29 - Miscellany 2.1
+: UNCOUNT dup here !  here 1+
+  swap move   here ;
+: WORD parse uncount ;
+: FIND dup count (find)
+  dup 0= IF 2drop 0 ELSE
+    rot drop THEN ;
+
+: ABS dup 0< IF negate THEN ;
+: ?DUP dup IF dup THEN ;
+: WITHIN over - >R   - R> U< ;
+: <> = not ;
+: 0<> 0 = not ;
+
+\ 30 - Miscellany 2.2
+: AGAIN ['] (branch) , here - ,
+  ; IMMEDIATE
+: BUFFER: create allot ;
+: ERASE 0 fill ;
+: FALSE 0 ;
+: TRUE -1 ;
+: NIP swap drop ;
+: TUCK swap over ;
+: U> swap U< ;
+
+\ 33 - Pictured numeric output
+34 LOAD
+35 LOAD
+36 LOAD
+
+
+\ 34 - Pictured output 1
+VARIABLE (picout)
+: (picout-top) here 256 + ;
+: <# (picout-top) (picout) ! ;
+: HOLD (picout) @ 1- dup
+  (picout) ! ! ;
+: SIGN
+  0< IF [char] - hold THEN ;
+: U/MOD 2dup u/ >r umod r> ;
+
+\ 35 - Pictured output 2
+: #  drop base @ u/mod ( r q )
+  swap dup 10 < IF [char] 0 ELSE
+    10 - [char] A THEN + hold
+    0 ;
+: #S 2dup or
+  0= IF [char] 0 hold EXIT THEN
+  BEGIN 2dup or WHILE # REPEAT ;
+: #> 2drop (picout) @
+  (picout-top) over - ( a u ) ;
+
+\ 36 - Pictured output 3
+: S>D dup 0< IF -1 ELSE 0 THEN ;
+: (#UHOLD) <# 0 #S #> ;
+: U. (#UHOLD) type space ;
+: (#HOLD) dup 1 15 lshift = IF
+    <# 0 #S [char] - hold #>
+  ELSE <# dup abs s>d #s rot
+    sign #> THEN ;
+: . (#HOLD) type space ;
+
+
+\ 40 - Testing
+: test ." Output!" ; test

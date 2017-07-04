@@ -34,6 +34,9 @@ VARIABLE *out   0 *out !
 0100 CONSTANT m_hidden
 01ff CONSTANT m_len_hidden
 00ff CONSTANT m_len
+
+0000 CONSTANT return_stack_top
+fe00 CONSTANT data_stack_top
 VARIABLE dlast-word
 
 : (check-text) ( ca u da --)
@@ -265,6 +268,7 @@ next,
   label   0 d,   label swap d! ;
 
 : ;CODE next, ;
+: ;CODE-RAW ; \ Does nothing.
 
 : DIMMEDIATE dlast-word @ 1+ dup
   d@ m_immediate or swap d! ;
@@ -294,11 +298,244 @@ next,
 
 :CODE MOD
   pop  ra   set,
-  ra   peek dvi,
+  ra   peek mdi,
+;CODE
+
+:CODE U/
+  pop  ra   set,
+  ra   peek div,
+;CODE
+
+:CODE UMOD
+  pop  ra   set,
+  ra   peek mod,
+;CODE
+
+
+:CODE AND
+  pop  ra   set,
+  ra   peek and,
+;CODE
+:CODE OR
+  pop  ra   set,
+  ra   peek bor,
+;CODE
+:CODE XOR
+  pop  ra   set,
+  ra   peek xor,
+;CODE
+
+:CODE LSHIFT
+  pop  ra   set,
+  ra   peek shl,
+;CODE
+:CODE RSHIFT
+  pop  ra   set,
+  ra   peek shr,
+;CODE
+:CODE ARSHIFT
+  pop  ra   set,
+  ra   peek asr,
+;CODE
+
+
+:CODE =
+  pop   ra   set,
+  0 lit rc   set,
+  pop   ra   ife,
+    -1 lit rc set,
+  rc   push  set,
+;CODE
+
+:CODE <
+  pop   ra   set,
+  0 lit rc   set,
+  pop   ra   ifu,
+    -1 lit rc set,
+  rc   push  set,
+;CODE
+
+:CODE U<
+  pop   ra   set,
+  0 lit rc   set,
+  pop   ra   ifl,
+    -1 lit rc set,
+  rc   push  set,
+;CODE
+
+
+:CODE DUP
+  peek push set,
+;CODE
+
+:CODE DROP
+  pop ra set,
+;CODE
+
+:CODE OVER
+  1 pick push set,
+;CODE
+
+:CODE SWAP
+  pop ra set,
+  pop rb set,
+  ra push set,
+  rb push set,
+;CODE
+
+:CODE ROT
+  pop ra set,
+  pop rb set,
+  pop rc set,
+  rb push set,
+  ra push set,
+  rc push set,
+;CODE
+
+:CODE -ROT
+  pop ra set,
+  pop rb set,
+  pop rc set,
+  ra push set,
+  rc push set,
+  rb push set,
+;CODE
+
+:CODE SP@
+  sp ra set,
+  ra push set,
+;CODE
+
+:CODE >R
+  pop pushrsp
+;CODE
+
+:CODE R>
+  push poprsp
+;CODE
+
+:CODE R@
+  [rj]  push  set,
+;CODE
+
+:CODE DEPTH
+  data_stack_top lit   ra   set,
+  sp ra   sub,
+  ra push set,
 ;CODE
 
 
 
+:CODE @
+  pop  ra   set,
+  [ra] push set,
+;CODE
+
+:CODE !
+  pop  ra   set,
+  pop  [ra] set,
+;CODE
+
+
+:CODE EXECUTE
+  \ Leave I alone. Jump directly
+  \ into the target, and then it
+  \ will continue after EXECUTE.
+  pop  ra  set,
+  [ra] pc  set,
+;CODE-RAW
+
+
+label 0 d, CONSTANT var_dsp
+
+:CODE ,
+  var_dsp lit   rb  set,
+  [rb]  rc   set,
+  pop   [rc] set,
+  1 lit [rb] add,
+;CODE
+
+
+:CODE (BRANCH)
+  [ri] ri add,
+;CODE
+
+:CODE (0BRANCH)
+  1 lit ra   set,
+  pop   rb   set,
+  0 lit rb   ife,
+    [ri]  ra  set,
+  ra  ri  add,
+;CODE
+
+:CODE EXIT
+  ri poprsp
+;CODE
+
+
+
+:CODE (>CFA)
+  pop     ra  set,
+  1 [ra+] rb  set,
+  mask_len lit  rb  and,
+  2 lit ra add,
+  rb    ra add,
+  ra  push set,
+;CODE
+
+
+ 0 CONSTANT src_type
+ 1 CONSTANT src_block_line
+ 2 CONSTANT src_buffer
+ 3 CONSTANT src_index
+ 4 CONSTANT src_length
+ 5 CONSTANT sizeof_src
+
+-1 CONSTANT src_type_keyboard
+-2 CONSTANT src_type_evaluate
+
+label 0 d,
+  CONSTANT var_src_index
+
+label CONSTANT input_sources
+16 sizeof_src * dallot
+
+label CONSTANT keyboard_buffer
+64 dallot
+label CONSTANT block_line_buffer
+32 dallot
+
+
+label CONSTANT init_input
+0 lit  var_src_index [lit] set,
+src_type_keyboard lit
+  input_sources src_type + [lit]
+  set,
+0 lit input_sources src_index +
+  [lit] set,
+0 lit input_sources src_length +
+  [lit] set,
+pop pc set,
+
+
+\ WORDS TO BE CONVERTED TO
+\ TARGET FORTH.
+: src>type src_type + @ ;
+: src>block-line
+  src_block_line + @ ;
+: src>buffer src_buffer + @ ;
+: src>index  src_index  + @ ;
+: src>length src_lengt + @ ;
+: src>end dup src>buffer swap
+  src>length + ;
+
+: PARSE ( separator -- )
+  (SRC) dup src>buffer
+  over src>index + ( sep src st)
+  swap src>end ( sep st end)
+  BEGIN 2dup < 
+
+    
 
 \ NON-PORTABLE - ANS ONLY
 : dump ( c-addr u -- )

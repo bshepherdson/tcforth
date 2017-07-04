@@ -439,7 +439,7 @@ ifl y, z
 set pc, parse_done
 
 :parse_consume
-; log [y]
+log [y]
 add y, 1
 set pc, parse_loop
 
@@ -1094,46 +1094,57 @@ hwi [var_hw_lem]
 next
 
 WORD "(EMIT!)", 7, emit_store
-set [emit], pop
+set [var_emit], pop
 next
 
+:var_emit dat 0
 
-:print_str dat 0
-:print_len dat 0
-:print ; (str, len) -> void
-set [print_str], a
-set [print_len], b
+
+; Prints a C-style 0-terminated string using the Forth-level EMIT word.
+:print ; (str) -> void
 set push, x
-set push, y
-set push, z
-set push, i
-set push, j
+set x, a
 
 :print_loop
-ife b, 0
+set a, [x]
+ife a, 0
   set pc, print_done
 
-set a, [print_str]
-set push, [a]
-set i, print_cfa
-set a, [emit]
-set pc, [a]
-
-:print_cont
-add [print_str], 1
-sub [print_len], 1
+set push, a ; Load that onto the stack for the Forth word.
+add x, 1
+set a, [var_emit]
+jsr call_forth
 set pc, print_loop
 
 :print_done
-set j, pop
-set i, pop
-set z, pop
-set y, pop
 set x, pop
 set pc, pop
 
 
-:print_cfa dat print_cont
+
+:call_forth_saved .reserve 6
+:call_forth_cfa dat call_forth_ca
+:call_forth_ca dat call_forth_cont
+
+:call_forth ; (CFA) -> void
+set [call_forth_saved + 0], x
+set [call_forth_saved + 1], y
+set [call_forth_saved + 2], z
+set [call_forth_saved + 3], i
+set [call_forth_saved + 4], j
+set [call_forth_saved + 5], pop ; The saved PC I need to return to.
+
+set i, call_forth_cfa
+set pc, [a]
+
+:call_forth_cont
+set x, [call_forth_saved + 0]
+set y, [call_forth_saved + 1]
+set z, [call_forth_saved + 2]
+set i, [call_forth_saved + 3]
+set j, [call_forth_saved + 4]
+set pc, [call_forth_saved + 5]
+
 
 
 WORD "DEBUG", 5, forth_debug
@@ -1282,8 +1293,23 @@ ife c, 0
   set pc, quit_found_number
 
 ; Failed to recognize this word all around.
-brk 12
-sub pc, 1 ; TODO Error message here
+ife [var_emit], 0
+  brk 12 ; If there's no EMIT word loaded yet, just die.
+
+; Otherwise emit a nice error message.
+set a, err_not_found
+jsr print
+; Now load the input word in and give it a 0 terminator.
+
+set a, pop ; Pop the negative flag, unused here.
+set b, pop ; The length
+set a, pop ; The address
+add b, a
+set [b], 0 ; Set the terminator.
+jsr print ; And print the string.
+
+; Now jump back to the start of QUIT to keep accepting input.
+set pc, quit
 
 :quit_found_number ; A = number.
 ; Pop the saved X, C off the stack, we're done with them.
@@ -1342,6 +1368,11 @@ set pc, quit_loop
 WORD "QUIT", 4, forth_quit
 set pc, quit
 ; No next, quit never returns.
+
+
+
+; Error messages and other strings.
+:err_not_found dat "Unknown word: ", 0
 
 
 

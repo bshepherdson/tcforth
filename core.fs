@@ -17,7 +17,7 @@
 25 LOAD \ String literals
 12 LOAD \ Strings
 33 LOAD \ Pictured output
-48 LOAD \ Tests
+48 LOAD \ Intro
 
 \ 3 - Core 1
 \ The core-most pieces.

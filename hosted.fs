@@ -116,8 +116,8 @@ c4 CONSTANT map-byte
 : extra, next-extra @ !
   1 cells next-extra +! ;
 
-: arg, ( arg.. -- arg ) dup
-  long? IF >R extra, R> THEN ;
+: arg, ( arg.. -- arg )
+  dup long? IF >R extra, R> THEN ;
 
 : a-arg, .s arg, A lshift ;
 
@@ -131,8 +131,8 @@ c4 CONSTANT map-byte
 : drain-extras
   extra-words next-extra @
   2dup = IF 2drop EXIT THEN
-  1 cells - ?DO
-    i @ d,   -1 cells +LOOP ;
+  BEGIN 2dup < WHILE
+    1 cells - dup @ d, REPEAT 2drop ;
 
 : bin, ( a b op -- )
   reset-extras
@@ -204,7 +204,7 @@ c4 CONSTANT map-byte
 
 : next, [ri]   ra set,
         1 lit  ri add,
-        [ra]   pc add, ;
+        [ra]   pc set, ;
 : pushrsp ( arg.. -- )
   1 lit    rj  sub,
   ( arg ) [rj] set, ;
@@ -215,10 +215,9 @@ c4 CONSTANT map-byte
   dup long? IF R> THEN set,
   1 lit rj add, ;
 
-
 \ DOER words
 label dup CONSTANT DOCOL
-label swap d!
+0 d, label swap d!
 ri pushrsp
 ra    ri set,
 1 lit ri add,
@@ -226,14 +225,14 @@ next,
 
 
 label dup CONSTANT DOLIT
-label swap d!
+0 d, label swap d!
 [ri] push set,
 1 lit  ri add,
 next,
 
 
 label dup CONSTANT DOSTRING
-label swap d!
+0 d, label swap d!
 [ri]  ra  set,
 1 lit ri  add,
 ri  push  set,
@@ -242,7 +241,7 @@ ra    ri  add,
 next,
 
 label dup CONSTANT DODOES
-label swap d!
+0 d, label swap d!
 ra    rb  set,
 2 lit rb  add,
 rb  push  set,
@@ -262,7 +261,7 @@ next,
   dlast-word @ d, ( old-here )
   dlast-word ! ( )
   parse-name dup d,
-  0 DO dup c@ d, LOOP drop ( )
+  0 DO dup c@ d, 1+ LOOP drop ( )
   label   0 d,   label swap d! ;
 
 : ;CODE next, ;

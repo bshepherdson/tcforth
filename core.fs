@@ -9,13 +9,15 @@
 \ 1 - Main Load
 3 LOAD  \ Core
 9 LOAD  \ Control Structures
-12 LOAD \ Strings
 15 LOAD \ DOES> VARIABLE etc.
 18 LOAD \ DO LOOP
 22 LOAD \ Miscellany
-25 LOAD \ String literals
 28 LOAD \ Miscellany 2
+40 LOAD \ Terminal
+25 LOAD \ String literals
+12 LOAD \ Strings
 33 LOAD \ Pictured output
+48 LOAD \ Tests
 
 \ 3 - Core 1
 \ The core-most pieces.
@@ -208,7 +210,6 @@ VARIABLE (loop-top)
 : RECURSE (latest) @ (>CFA) ,
   ; IMMEDIATE
 : PICK 1+ sp@ + @ ;
-: CR 10 emit ;
 : 2* 1 lshift ;
 : 2/ -1 1 rshift invert over and
   swap 1 rshift   or ;
@@ -259,8 +260,6 @@ VARIABLE (sidx) \ index
   state @ IF (S-compile)
   ELSE (S-interp)
   THEN ; IMMEDIATE
-: ." postpone S" ['] type ,
-  ; IMMEDIATE
 
 \ 28 - Miscellany 2
 29 LOAD
@@ -290,8 +289,6 @@ VARIABLE (sidx) \ index
 : NIP swap drop ;
 : TUCK swap over ;
 : U> swap U< ;
-: THRU 1+ swap DO I dup emit
-  LOAD LOOP ;
 
 \ 33 - Pictured numeric output
 34 LOAD
@@ -329,4 +326,85 @@ VARIABLE (picout)
   ELSE <# dup abs s>d #s rot
     sign #> THEN ;
 : . (#HOLD) type space ;
+
+
+\ 40 - Terminal Control
+\ Drives a LEM as a scrollable
+\ terminal.
+41 LOAD \ Definitions
+42 LOAD \ Colors
+43 LOAD \ Internals 1
+44 LOAD \ Internals 2
+45 LOAD \ API
+
+vram (vram!)
+
+\ 41 - Terminal definitions
+32 CONSTANT WIDTH
+12 CONSTANT HEIGHT
+VARIABLE CURSOR   0 cursor !
+VARIABLE BG
+VARIABLE FG
+CREATE VRAM width height *
+  dup allot
+  CONSTANT VRAM-SIZE
+
+\ 42 - Terminal colors
+VARIABLE (light)  0 (light) !
+: LIGHT 8 (light) ! ;
+: (color) (light) @ +
+    0 (light) ! ;
+: BLACK   0 (color) ;
+: BLUE    1 (color) ;
+: GREEN   2 (color) ;
+: CYAN    3 (color) ;
+: RED     4 (color) ;
+: PINK    5 (color) ;
+: YELLOW  6 (color) ;
+: WHITE   7 (color) ;
+
+\ 43 - Internals
+: COLORIZE ( c bg fg -- x )
+12 lshift >r 8 lshift or r> or ;
+: WITH-COLORS
+  bg @ fg @ colorize ;
+: BLANK bl with-colors ;
+
+: SCROLL vram width +  vram
+  width height 1- * move
+  height 1- width *   vram +
+  width blank fill
+  width cursor -! ;
+
+: ?SCROLL cursor @ vram-size >=
+  IF scroll THEN ;
+
+\ 44 - Internals 2
+: CURSOR++ 1 cursor +! ?scroll ;
+
+white fg !  black bg !
+0 cursor !
+
+: BACKSPACE cursor @ 1-   0 max
+  dup cursor !   vram +
+  32 with-colors swap ! ;
+
+\ 45 - API
+: EMIT-COLOR ( c bg fg -- )
+  colorize cursor @ vram + !
+  cursor++ ;
+
+: EMIT ( c -- )
+  bg @ fg @ emit-color ;
+' EMIT (EMIT!)
+
+: CR width 1- cursor @ +
+  dup width mod -   cursor !
+  ?scroll ;
+
+: CLEAR vram  width height *
+  blank fill   0 cursor ! ;
+
+\ 48 - Intro
+S" TC FORTH version 1" type cr
 

@@ -439,7 +439,7 @@ ifl y, z
 set pc, parse_done
 
 :parse_consume
-log [y]
+; log [y]
 add y, 1
 set pc, parse_loop
 
@@ -1070,6 +1070,7 @@ set pc, pop
 
 WORD "LOAD", 4, forth_load
 set a, pop
+; log a
 jsr load_block
 next
 
@@ -1086,10 +1087,54 @@ next
 
 
 
-; TODO Remove this temporary EMIT
-WORD "EMIT", 4, emit
-log pop
+WORD "(VRAM!)", 7, vram_store
+set a, 0
+set b, pop
+hwi [var_hw_lem]
 next
+
+WORD "(EMIT!)", 7, emit_store
+set [emit], pop
+next
+
+
+:print_str dat 0
+:print_len dat 0
+:print ; (str, len) -> void
+set [print_str], a
+set [print_len], b
+set push, x
+set push, y
+set push, z
+set push, i
+set push, j
+
+:print_loop
+ife b, 0
+  set pc, print_done
+
+set a, [print_str]
+set push, [a]
+set i, print_cfa
+set a, [emit]
+set pc, [a]
+
+:print_cont
+add [print_str], 1
+sub [print_len], 1
+set pc, print_loop
+
+:print_done
+set j, pop
+set i, pop
+set z, pop
+set y, pop
+set x, pop
+set pc, pop
+
+
+:print_cfa dat print_cont
+
 
 WORD "DEBUG", 5, forth_debug
 brk 0
@@ -1099,6 +1144,10 @@ next
 ; This will pause right before jumping into the codeword inside QUIT.
 WORD "DEBUG-NEXT", 10, forth_debug_next
 set [debug_next], 1
+next
+
+WORD "(LOG)", 5, forth_log
+log pop
 next
 
 WORD "[LITERAL]", 9, compile_literal

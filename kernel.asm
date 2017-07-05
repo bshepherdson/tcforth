@@ -980,6 +980,22 @@ set y, pop
 set x, pop
 set pc, pop
 
+:write_block ; (blk, buf) -> void
+set push, x
+set push, y
+set x, a
+jsr await_disk
+set [cached_block], -1
+set y, b
+set a, 3 ; Write
+hwi [var_hw_disk]
+ifn b, 1 ; 1 on successfully started write.
+  brk 17
+jsr await_disk
+set y, pop
+set x, pop
+set pc, pop
+
 
 :ensure_block ; (blk) -> void
 ife [cached_block], a
@@ -1119,12 +1135,43 @@ set [var_accept], pop
 set [var_emit], pop
 set a, 0
 set b, pop
+set [var_vram], b
 hwi [var_hw_lem] ; Set the VRAM.
 next
 
 :var_emit dat 0
 :var_accept dat 0
 :var_cr dat 0
+:var_vram dat 0
+
+
+; Called after the system is loaded from the source code disk,
+; and streams the compiled system out to the disk.
+WORD "(BOOTSTRAP)", 11, bootstrap
+; Prepare for the bootstrap by readjusting main()
+set [main_continued], main_continued_preload
+
+set x, 0 ; X is the current disk block.
+set y, 0 ; Y is the copy pointer.
+
+:bootstrap_loop
+set a, x
+set b, y
+log b
+jsr write_block
+add x, 1
+add y, 512
+ifl y, [var_dsp]
+  set pc, bootstrap_loop
+
+; Bootstrapping complete! Say so.
+set a, msg_bootstrap_complete
+jsr print
+set a, [var_cr]
+jsr call_forth
+
+set pc, quit
+
 
 
 ; Prints a C-style 0-terminated string using the Forth-level EMIT word.
@@ -1424,6 +1471,7 @@ set pc, quit
 
 ; Error messages and other strings.
 :msg_ok dat " ok", 0
+:msg_bootstrap_complete dat "Bootstrap complete.", 0
 :err_not_found dat "Unknown word: ", 0
 
 
@@ -1493,12 +1541,28 @@ set a, 0
 hwi [var_hw_disk]
 set [disk_last_state], b
 
-; TODO: Update this once we have a bootstrapped scheme.
+set pc, [main_continued]
+
+:main_continued dat main_continued_bootstrap
+
+; This is the tail of main() for use when bootstrapping from the disk.
+; Once the bootstrap is complete, the bootstrapper will overwrite
+; [main_continued] to point at main_continued_preload
+:main_continued_bootstrap
+; Triggers an automatic 1 LOAD.
 jsr reset_state
 set a, 1
 jsr load_block
 jsr refill
 set pc, quit_loop
+
+; Called as the tail of main() when we're running an already-bootstrapped
+; standalone Forth ROM. It just starts reading from the keyboard.
+:main_continued_preload
+set a, 0
+set b, [var_vram]
+hwi [var_hw_lem]
+set pc, quit
 
 :initial_dsp ; Must be right at the bottom.
 dat 0

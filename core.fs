@@ -431,5 +431,6 @@ VARIABLE (acc-buf)
 vram ' emit ' accept ' cr
   (setup-hooks)
 
-S" TC FORTH version 1" type
+S" TC FORTH version 1" type cr
+key drop (bootstrap)
 

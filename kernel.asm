@@ -439,7 +439,7 @@ ifl y, z
 set pc, parse_done
 
 :parse_consume
-log [y]
+;log [y]
 add y, 1
 set pc, parse_loop
 
@@ -816,6 +816,9 @@ next
 
 ; Refill for keyboard.
 :refill_keyboard ; () -> valid?
+ifn [var_accept], 0
+  set pc, refill_keyboard_accept
+
 set push, x
 set push, y
 
@@ -857,6 +860,28 @@ set pc, pop
 
 ; TODO: Handle overflow, if too many characters are typed.
 
+; Uses the Forth word ACCEPT to
+; do nicely echo'd input.
+:refill_keyboard_accept ; () -> valid?
+set push, keyboard_buffer
+set push, 64
+set a, [var_accept]
+jsr call_forth
+
+; Now the stack is ( len ) the number of characters read.
+set a, pop ; A, the length, is our return value - 0 on invalid.
+set b, [var_source_index]
+mul b, sizeof_src
+add b, input_sources
+set [b + src_index], 0
+set [b + src_length], a
+set [b + src_buffer], keyboard_buffer
+
+; Emit a space before the output.
+set push, 32
+set a, [var_emit]
+jsr call_forth
+set pc, pop
 
 
 :refill ; () -> valid?
@@ -1086,18 +1111,20 @@ jsr refill
 next
 
 
-
-WORD "(VRAM!)", 7, vram_store
+; Called at the end of bootstrapping. Expects the following on the stack:
+; vram_address 'emit 'accept 'cr
+WORD "(SETUP-HOOKS)", 13, setup_hooks
+set [var_cr], pop
+set [var_accept], pop
+set [var_emit], pop
 set a, 0
 set b, pop
-hwi [var_hw_lem]
-next
-
-WORD "(EMIT!)", 7, emit_store
-set [var_emit], pop
+hwi [var_hw_lem] ; Set the VRAM.
 next
 
 :var_emit dat 0
+:var_accept dat 0
+:var_cr dat 0
 
 
 ; Prints a C-style 0-terminated string using the Forth-level EMIT word.
@@ -1235,6 +1262,18 @@ set push, var_base
 next
 
 
+:reset_state
+jsr init_input
+
+; Clear both stacks.
+set a, pop
+set sp, data_stack_top
+set j, return_stack_top
+set [var_state], state_interpreting
+set [var_base], 10
+set pc, a
+
+
 ; Indirections for returning from interpretive words to QUIT.
 :debug_next dat 0
 :quit_cfa dat quit_ca
@@ -1242,13 +1281,7 @@ next
 
 :quit ; () -> [never returns]
 ; Start by initializing everything.
-jsr init_input
-
-; Clear both stacks.
-set sp, data_stack_top
-set j, return_stack_top
-set [var_state], state_interpreting
-set [var_base], 10
+jsr reset_state
 
 ; Immediately refill, dumping the old text.
 jsr refill
@@ -1257,6 +1290,24 @@ jsr refill
 jsr parse_name ; A = addr, B = len
 ifn b, 0
   set pc, quit_found
+
+; If the source is the keyboard and var_emit is set, print " ok".
+ife [var_emit], 0
+  set pc, quit_loop_continue
+
+set a, [var_source_index]
+mul a, sizeof_src
+add a, input_sources
+ifn [a + src_type], src_type_keyboard
+  set pc, quit_loop_continue
+
+; If we're still here, print the prompt.
+set a, msg_ok
+jsr print
+set a, [var_cr]
+jsr call_forth
+
+:quit_loop_continue
 jsr refill
 set pc, quit_loop
 
@@ -1372,6 +1423,7 @@ set pc, quit
 
 
 ; Error messages and other strings.
+:msg_ok dat " ok", 0
 :err_not_found dat "Unknown word: ", 0
 
 
@@ -1441,7 +1493,12 @@ set a, 0
 hwi [var_hw_disk]
 set [disk_last_state], b
 
-set pc, quit
+; TODO: Update this once we have a bootstrapped scheme.
+jsr reset_state
+set a, 1
+jsr load_block
+jsr refill
+set pc, quit_loop
 
 :initial_dsp ; Must be right at the bottom.
 dat 0

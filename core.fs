@@ -335,9 +335,9 @@ VARIABLE (picout)
 42 LOAD \ Colors
 43 LOAD \ Internals 1
 44 LOAD \ Internals 2
-45 LOAD \ API
-
-vram (vram!)
+45 LOAD \ Terminal API
+46 LOAD \ ACCEPT internals
+47 LOAD \ ACCEPT
 
 \ 41 - Terminal definitions
 32 CONSTANT WIDTH
@@ -389,14 +389,13 @@ white fg !  black bg !
   dup cursor !   vram +
   32 with-colors swap ! ;
 
-\ 45 - API
+\ 45 - Terminal API
 : EMIT-COLOR ( c bg fg -- )
   colorize cursor @ vram + !
   cursor++ ;
 
 : EMIT ( c -- )
   bg @ fg @ emit-color ;
-' EMIT (EMIT!)
 
 : CR width 1- cursor @ +
   dup width mod -   cursor !
@@ -405,6 +404,32 @@ white fg !  black bg !
 : CLEAR vram  width height *
   blank fill   0 cursor ! ;
 
+\ 46 - ACCEPT internals
+VARIABLE (acc-buf)
+
+: SHOW-CURSOR 32 fg @ bg @
+  emit-color   -1 cursor +! ;
+
+: (BSPACE) ( c -- c' )
+  dup IF 1- 32 emit
+    -2 cursor +! THEN ;
+
+: (ACCEPT-CHAR) ( c x -- c' )
+  over (acc-buf) @ + !  1+ ;
+
+\ 47 - ACCEPT
+\ TODO Honour the max length.
+: ACCEPT ( buf len -- len )
+  drop (acc-buf) !   0
+  BEGIN show-cursor
+  key dup 17 <> WHILE
+    dup 16 = IF drop (BSPACE)
+    ELSE dup emit (ACCEPT-CHAR)
+    THEN REPEAT ( u key) drop ;
+
 \ 48 - Intro
-S" TC FORTH version 1" type cr
+vram ' emit ' accept ' cr
+  (setup-hooks)
+
+S" TC FORTH version 1" type
 

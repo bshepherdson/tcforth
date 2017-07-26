@@ -1221,6 +1221,79 @@ set pc, [call_forth_saved + 5]
 
 
 
+; Hardware control
+; In order to find and index hardware from Forth code, this is a small set of
+; words for generic indexing of hardware.
+WORD "#DEVICES", 8, count_devices
+hwn pop
+next
+
+WORD "DEVICE", 6, device_details ; ( num -- mfr_lo mfr_hi version id_lo id_hi )
+hwq pop ; Sets B:A to the ID, C to the version, and Y:X to the manufacturer.
+set push, x
+set push, y
+set push, c
+set push, a
+set push, b
+next
+
+; Registers are here given a bit each, with input in the upper byte output in
+; the lower byte: abcx yzij ABCX YZIJ.
+; The caller of HWI supplies the input register values, this mask word and the
+; device number. HWI returns the output register values.
+; Registers are in J I Z Y X C B A order.
+:hwi_backup_i dat 0
+:hwi_backup_j dat 0
+:hwi_mask dat 0
+:hwi_device dat 0
+
+WORD "HWI", 3, forth_hwi ; ( in_regs... bitmask device_num -- out_regs... )
+set [hwi_backup_i], i
+set [hwi_backup_j], j
+set [hwi_device], pop
+set [hwi_mask], pop
+
+ifb [hwi_mask], 0x8000
+  set a, pop
+ifb [hwi_mask], 0x4000
+  set b, pop
+ifb [hwi_mask], 0x2000
+  set c, pop
+ifb [hwi_mask], 0x1000
+  set x, pop
+ifb [hwi_mask], 0x0800
+  set y, pop
+ifb [hwi_mask], 0x0400
+  set z, pop
+ifb [hwi_mask], 0x0200
+  set i, pop
+ifb [hwi_mask], 0x0100
+  set j, pop
+
+hwi [hwi_device]
+
+ifb [hwi_mask], 0x0001
+  set push, j
+ifb [hwi_mask], 0x0002
+  set push, i
+ifb [hwi_mask], 0x0004
+  set push, z
+ifb [hwi_mask], 0x0008
+  set push, y
+ifb [hwi_mask], 0x0010
+  set push, x
+ifb [hwi_mask], 0x0020
+  set push, c
+ifb [hwi_mask], 0x0040
+  set push, b
+ifb [hwi_mask], 0x0080
+  set push, a
+
+set i, [hwi_backup_i]
+set j, [hwi_backup_j]
+next
+
+
 WORD "DEBUG", 5, forth_debug
 brk 0
 next

@@ -17,7 +17,8 @@
 25 LOAD \ String literals
 12 LOAD \ Strings
 33 LOAD \ Pictured output
-48 LOAD \ Intro
+48 LOAD \ Hardware control
+51 LOAD \ Intro
 
 \ 3 - Core 1
 \ The core-most pieces.
@@ -427,7 +428,33 @@ VARIABLE (acc-buf)
     ELSE dup emit (ACCEPT-CHAR)
     THEN REPEAT ( u key) drop ;
 
-\ 48 - Intro
+\ 48 - Hardware
+49 LOAD \ Device-finder
+50 LOAD \ Common devices
+
+\ 49 - Device finder
+: CHECK-DEV ( d_id1 d_id2 -- ? )
+  >R rot = swap r> = or ;
+
+: FIND-DEV ( id_lo id_hi -- dev)
+  #devices 0 DO
+    2dup i device >r >r
+    2drop drop r> r> check-dev
+    IF 2drop i unloop exit THEN
+  LOOP
+  -1 ;
+
+\ 50 - Common devices
+HEX ( -- d_id ) \ for all these
+: LEM1802     f615 734d ;
+: IMVA        a113 75f6 ;
+: PIXIE       f615 774d ;
+: KEYBOARD    7406 30c1 ;
+: M35FD       24c5 4fd5 ;
+: CLOCK       b402 12d1 ;
+DECIMAL
+
+\ 51 - Intro
 vram ' emit ' accept ' cr
   (setup-hooks)
 

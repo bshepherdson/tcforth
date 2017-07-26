@@ -11,7 +11,7 @@ kernel.bin: kernel.asm
 all: kernel.bin core.img test.img
 
 run: all FORCE
-	GODEBUG=cgocheck=0 ~/dcpu/go/src/emulator/emulator -disk core.img kernel.bin
+	GODEBUG=cgocheck=0 ~/dcpu/go/src/emulator/emulator -turbo -disk core.img kernel.bin
 
 clean: FORCE
 	rm -f kernel.bin core.img test.img

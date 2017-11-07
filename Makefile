@@ -5,7 +5,7 @@ default: all
 	./makedisk.py $<
 	mv disk.img $@
 
-kernel.bin: kernel.asm
+%.bin: %.asm
 	dasm $<
 
 all: kernel.bin core.img test.img

@@ -6,14 +6,14 @@
 # Assembles a set of regular files with special comments into a DCPU-friendly
 # disk image for the Forth system.
 #
-# The Forth system uses "screens", which are 32x16 characters in size. That's
-# 512 characters per screen. Storing one character per word, that's one block
+# The Forth system uses "screens", which are 64x16 characters in size. That's
+# 1024 characters per screen. Storing two characters per word, that's one block
 # per screen, for easy correlation.
 #
 # The Forth screens are numbered from 0 upward, just like the disk blocks.
 # By convention, screen 0 is a comments-only header, and screen 1 is the main
-# loading screen. Note that these are Forth conventions, and this tool ignores
-# them.
+# loading screen. Note that these are Forth conventions, and this tool doesn't
+# care about them.
 
 # Operation of this tool
 # ======================
@@ -41,9 +41,10 @@ import re
 import struct
 import sys
 
-screenWidth = 32
+screenWidthChars = 64
+screenWidthWords = 32
 screenHeight = 16
-screenSize = screenWidth * screenHeight
+screenSizeWords = screenWidthWords * screenHeight
 
 screensSeen = {}
 
@@ -58,19 +59,20 @@ def error(name, line, msg):
   sys.exit(1)
 
 def readLine(name, lineNum, screen, i, line):
-  offset = (screenSize * screen) + (i * screenWidth)
-  if len(line) > screenWidth:
+  offset = (screenSizeWords * screen) + (i * screenWidthWords)
+  if len(line) > screenWidthChars:
     error(name, lineNum, 'Line too long (%d): %s' % (len(line), line))
 
   # Otherwise, stream the line to masterOutput, padding with spaces.
-  i = 0
-  while i < len(line):
-    masterOutput[offset + i] = ord(line[i])
-    i += 1
+  if len(line) < screenWidthChars:
+    line = line + (" " * (screenWidthChars - len(line)))
 
-  while i < screenWidth:
-    masterOutput[offset + i] = ord(' ')
-    i += 1
+  i = 0
+  while i < screenWidthChars:
+    hi = ord(line[i])
+    lo = ord(line[i + 1])
+    masterOutput[offset + (i // 2)] = (hi << 8) | lo
+    i += 2
 
 
 # Returns the number of lines loaded for this screen.
@@ -119,7 +121,7 @@ def main():
   # Round up to a whole screen.
   maxKey = (maxKey + 511) & (~511)
   for i in range(0, maxKey+1):
-    val = 32 # Blanks are replaced with spaces.
+    val = 0x2020 # Blanks are replaced with spaces.
     if i in masterOutput:
       val = masterOutput[i]
     out.write(struct.pack('>H', val))

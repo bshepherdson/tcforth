@@ -7,9 +7,8 @@ out to another (or the same) disk.
 
 ## On Screens
 
-The Forth system on the DCPU uses "screens", 32 characters wide and 16 tall.
-That makes them 512 characters, which is a disk block. That means there's room
-for 1440 screens on a standard floppy.
+The Forth system on the DCPU uses "screens", 64 characters wide and 16 tall.
+That makes them 1024 bytes, or 512 words, which is a disk block.
 
 The `makedisk.py` script converts a set of files with specially formatted screen
 header comments into a disk image for the DCPU.

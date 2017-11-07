@@ -1,8 +1,6 @@
 \ 0 - README
-\ Forth system by
-\ Braden Shepherdson
-\ For the Techcompliant flavour
-\ of the DCPU-16.
+\ Forth system by Braden Shepherdson
+\ For the Techcompliant flavour of the DCPU-16.
 
 \ See github.com/shepheb/tcforth
 

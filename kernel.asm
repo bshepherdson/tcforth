@@ -12,8 +12,8 @@
 
 ; Screens
 ; =======
-; This is a screen-based Forth. Screens here are 32 characters wide and 16 tall.
-; Therefore a screen is 512 words, or 1K, which corresponds to a single disk
+; This is a screen-based Forth.  Screens here are 64 characters wide and 16 tall.
+; Therefore a screen is 1K, or 512 words, which corresponds to a single disk
 ; block.
 
 ; Compilation
@@ -395,7 +395,7 @@ next
 :input_sources .reserve 80 ; sizeof_src*16
 
 :keyboard_buffer .reserve 64
-:block_line_buffer .reserve 32
+:block_line_buffer .reserve 64
 
 ; Resets the input system, as on startup.
 ; By default, this dumps all sources but the keyboard.
@@ -1073,16 +1073,20 @@ add x, input_sources
 set a, [x + src_type] ; A is the block number.
 jsr ensure_block ; That block is now loaded.
 set a, [x + src_block_line]
-shl a, 5 ; 32 characters per line
+shl a, 5 ; 32 words per line
 add a, block_buffer
 set b, block_line_buffer
-set c, 32
+set c, 64
 
 :load_current_line_loop
-set [b], [a]
+set x, [a]
+set [b], x
+shr [b], 8
+and x, 255
+set [b+1], x
+add b, 2
 add a, 1
-add b, 1
-sub c, 1
+sub c, 2
 ifg c, 0
   set pc, load_current_line_loop
 
@@ -1100,9 +1104,9 @@ mul c, sizeof_src
 add c, input_sources
 
 set [c + src_type], a    ; Block number
-set [c + src_index], 32  ; At the end, let REFILL load it.
+set [c + src_index], 64  ; At the end, let REFILL load it.
 set [c + src_block_line], -1 ; Will be bumped to 0 by REFILL
-set [c + src_length], 32
+set [c + src_length], 64
 set [c + src_buffer], block_line_buffer
 
 set pc, pop
@@ -1623,6 +1627,7 @@ set pc, [main_continued]
 ; [main_continued] to point at main_continued_preload
 :main_continued_bootstrap
 ; Triggers an automatic 1 LOAD.
+brk 991
 jsr reset_state
 set a, 1
 jsr load_block

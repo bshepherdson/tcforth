@@ -1627,7 +1627,6 @@ set pc, [main_continued]
 ; [main_continued] to point at main_continued_preload
 :main_continued_bootstrap
 ; Triggers an automatic 1 LOAD.
-brk 991
 jsr reset_state
 set a, 1
 jsr load_block

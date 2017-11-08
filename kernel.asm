@@ -230,6 +230,21 @@ ifl a, b
 set push, c
 next
 
+; Math with EX for long math.
+WORD "+EX", 3, plus_ex
+set a, pop
+add a, pop
+set push, a
+set push, ex
+next
+
+WORD "*EX", 3, times_ex
+set a, pop
+mul a, pop
+set push, a
+set push, ex
+next
+
 
 ; Stack operations
 WORD "DUP", 3, dup

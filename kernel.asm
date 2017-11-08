@@ -541,6 +541,13 @@ set push, z
 
 set z, [var_base]
 
+; If the first character is '$', force the base to 16.
+ifn [x], 0x24 ; '$'
+  set pc, to_number_loop
+sub c, 1
+add x, 1
+set z, 16
+
 :to_number_loop
 ife c, 0
   set pc, to_number_done

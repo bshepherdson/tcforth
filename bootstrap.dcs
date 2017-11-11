@@ -1,6 +1,6 @@
 run 10000000
 eject
-mount preload.bin
+mount forth.rom
 type b
 run 10000000
 quit

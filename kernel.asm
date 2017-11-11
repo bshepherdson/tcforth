@@ -1292,7 +1292,6 @@ set y, 0 ; Y is the copy pointer.
 :bootstrap_loop
 set a, x
 set b, y
-log b
 jsr write_block
 add x, 1
 add y, 512

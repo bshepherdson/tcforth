@@ -1226,7 +1226,7 @@ set a, pop
 jsr load_block
 next
 
-WORD "RUN-DISK", 8, run_disk
+:run_disk ; () -> void
 add [var_source_index], 1
 set c, [var_source_index]
 mul c, sizeof_src
@@ -1238,7 +1238,17 @@ set [c + src_block_line], 0 ; First word of the file.
 set [c + src_length], 128
 set [c + src_buffer], streaming_buffer
 jsr refill
+set pc, pop
+
+WORD "RUN-DISK", 8, forth_run_disk
+jsr run_disk
 next
+
+WORD "BOOT-DISK", 9, boot_disk
+jsr run_disk
+set pc, quit_loop
+; Never returns.
+
 
 
 WORD "REFILL", 6, forth_refill
@@ -1297,6 +1307,17 @@ jsr call_forth
 
 set pc, quit
 
+
+; Can be called from Forth with an XT. If this value is nonzero, that word is
+; called at startup, rather than the keyboard interpreter.
+; NB: To configure TC-Forth for interactive use, set forth_main to 0.
+; To configure it to automatically launch the inserted disk as a stream, use
+; boot_disk
+:forth_main .dat boot_disk
+
+WORD "(MAIN!)", 7, forth_main_set
+set [forth_main], pop
+next
 
 
 ; Prints a C-style 0-terminated string using the Forth-level EMIT word.
@@ -1755,11 +1776,20 @@ jsr refill
 set pc, quit_loop
 
 ; Called as the tail of main() when we're running an already-bootstrapped
-; standalone Forth ROM. It just starts reading from the keyboard.
+; standalone Forth ROM. It checks forth_main, and calls into that XT if defined.
+; If forth_main is 0, launches the keyboard interpreter.
+; If a forth_main is set, and returns, QUIT is called.
 :main_continued_preload
 set a, 0
 set b, [var_vram]
 hwi [var_hw_lem]
+
+ife [forth_main], 0
+  set pc, quit
+
+jsr reset_state
+set a, [forth_main]
+jsr call_forth
 set pc, quit
 
 :initial_dsp ; Must be right at the bottom.

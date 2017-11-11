@@ -404,6 +404,12 @@ next
 
 .def src_type_keyboard, -1
 .def src_type_evaluate, -2
+.def src_type_stream, -3   ; Streaming files
+
+; Streaming file design: set the type to -3, and use "block line" as the
+; absolute BYTE index into the file. src_buffer points at the address in memory,
+; index offsets into it. One line at a time, up to newlines.
+; When it discovers a NUL byte, that's the end of the file.
 
 :var_source_index dat 0
 
@@ -411,6 +417,8 @@ next
 
 :keyboard_buffer .reserve 64
 :block_line_buffer .reserve 64
+
+:streaming_buffer .reserve 128
 
 ; Resets the input system, as on startup.
 ; By default, this dumps all sources but the keyboard.
@@ -911,11 +919,14 @@ set a, [var_source_index]
 mul a, sizeof_src
 add a, input_sources
 set a, [a + src_type]
-ife a, -1
+ife a, src_type_keyboard
   set pc, refill_keyboard
 
-ife a, -2
+ife a, src_type_evaluate
   set pc, refill_evaluate
+
+ife a, src_type_stream
+  set pc, refill_streaming
 
 ; Otherwise, A is the block number.
 set pc, refill_block
@@ -1059,6 +1070,80 @@ set x, pop
 set pc, pop
 
 
+
+; Slightly dumb but simple: read a byte at a time. If we read a 0 byte, that's
+; EOF. Since we still have a line in the buffer, the actual condition to pop the
+; input source is when the first byte read is a 0.
+; The inefficient part is calling ensure_block repeatedly.
+; Streaming blocks have a buffer to themselves, and cannot be nested. That
+; avoids the need to support re-reading after a pop.
+:refill_streaming ; () -> valid?
+set push, x
+set push, y
+set push, z
+
+set x, [var_source_index]
+mul x, sizeof_src
+add x, input_sources
+
+set [x + src_buffer], streaming_buffer
+set [x + src_index], 0
+set y, streaming_buffer
+
+set z, 1 ; First read.
+
+:refill_streaming_loop
+set a, [x + src_block_line]
+shr a, 12 ; Divide by 1024 to get the block number.
+jsr ensure_block ; The block is loaded.
+set a, [x + src_block_line]
+shr a, 1   ; Shift to works in words.
+and a, 511 ; The index into the block.
+set a, [a + block_buffer]
+
+ifc [x + src_block_line], 1 ; If it's even, shift the word right.
+  shr a, 8
+and a, 255 ; A is finally the read byte.
+
+ifn z, 0
+  ife a, 0 ; No data.
+    set pc, refill_streaming_end_of_disk
+
+set z, 0 ; No longer first read.
+
+; Advance to the next byte, unless we found a NUL.
+ifn a, 0
+  add [x + src_block_line], 1
+
+; Handle the special cases of A being 0 or a newline.
+ife a, 0
+  set pc, refill_streaming_end
+ife a, 10
+  set pc, refill_streaming_end
+
+; It's a real character, so record it and loop.
+set [y], a
+add y, 1
+set pc, refill_streaming_loop
+
+
+:refill_streaming_end ; Found a 0 or newline, so set the length and exit.
+sub y, [x + src_buffer]
+set [x + src_length], y
+set z, pop
+set y, pop
+set x, pop
+set pc, pop
+
+
+:refill_streaming_end_of_disk ; Found end of disk - pop the source.
+set z, pop
+set y, pop
+set x, pop
+set pc, pop_input ; Tail call
+
+
+
 ; Read the current line number.
 
 ; Block flows:
@@ -1139,6 +1224,20 @@ WORD "LOAD", 4, forth_load
 set a, pop
 ; log a
 jsr load_block
+next
+
+WORD "RUN-DISK", 8, run_disk
+add [var_source_index], 1
+set c, [var_source_index]
+mul c, sizeof_src
+add c, input_sources
+
+set [c + src_type], src_type_stream
+set [c + src_index], 128 ; At end, let REFILL load it.
+set [c + src_block_line], 0 ; First word of the file.
+set [c + src_length], 128
+set [c + src_buffer], streaming_buffer
+jsr refill
 next
 
 

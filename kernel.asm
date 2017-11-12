@@ -1102,7 +1102,7 @@ set z, 1 ; First read.
 
 :refill_streaming_loop
 set a, [x + src_block_line]
-shr a, 12 ; Divide by 1024 to get the block number.
+shr a, 10 ; Divide by 1024 to get the block number.
 jsr ensure_block ; The block is loaded.
 set a, [x + src_block_line]
 shr a, 1   ; Shift to works in words.

@@ -238,6 +238,14 @@ set push, a
 set push, ex
 next
 
+WORD "-EX", 3, sub_ex
+set a, pop
+set b, pop
+sub b, a
+set push, b
+set push, ex
+next
+
 WORD "*EX", 3, times_ex
 set a, pop
 mul a, pop

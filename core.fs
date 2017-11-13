@@ -11,36 +11,28 @@
 
 : [ 0 state ! ; IMMEDIATE
 : ] 1 state ! ;
-: 2dup over over ;
-: 2drop drop drop ;
-: 2swap >r -rot r> -rot ;
-: 2over >r >r 2dup r> r> 2swap ;
 
 \ Math and Logic
 : 0< 0 < ;
 : 0= 0 = ;
-: 1+ 1 + ;
-: 1- 1 - ;
 : INVERT -1 xor ;
 : NOT 0= ;
 : >  ( a b -- ? ) swap < ;
-: <= ( a b -- ? ) 2dup = -rot
-  < or ;
-: >= ( a b -- ? ) swap <= ;
+: <= ( a b -- ? ) swap < not ;
+: >= ( a b -- ? ) < not ;
 : U> ( a b -- ? ) swap U< ;
+: U> swap U< ;
+
 : 0> 0 > ;
 : NEGATE ( n -- n ) 0 swap - ;
 : /MOD ( a b -- r q ) 2dup mod   -rot / ;
 
 
 \ Memory operations
-: +! ( delta addr -- ) dup @   rot +   swap ! ;
-: -! >r negate r> +! ;
 : COUNT dup @ >r 1+ r> ;
 : ALLOT ( n -- ) (>HERE) +! ;
 : HERE (>HERE) @ ;
 : ,   HERE !   1 allot ;
-: R@ R> R> dup >R swap >R ;
 
 \ Parsing
 : '   parse-name (find) drop (>CFA) ;
@@ -136,7 +128,7 @@ VARIABLE (loop-top)
 
 : I ['] R@ , ; IMMEDIATE
 
-: J R> R> R> R@ -rot >R >R swap >R ;
+: J RSP@ 3 + @ ;
 
 
 
@@ -154,8 +146,6 @@ VARIABLE (loop-top)
 : 2* 1 lshift ;
 : 2/ -1 1 rshift invert over and
   swap 1 rshift   or ;
-: 2@ dup 1+ @ swap @ ;
-: 2! swap over ! 1+ ! ;
 
 
 \ MOVE and friends
@@ -183,8 +173,6 @@ VARIABLE (loop-top)
 
 : ABS dup 0< IF negate THEN ;
 
-: ?DUP dup IF dup THEN ;
-
 : WITHIN over - >R   - R> U< ;
 : <> = not ;
 : 0<> 0 = not ;
@@ -200,8 +188,6 @@ VARIABLE (loop-top)
 
 : NIP swap drop ;
 : TUCK swap over ;
-
-: U> swap U< ;
 
 
 
@@ -384,7 +370,7 @@ DECIMAL
 
 
 \ Intro
-vram ' emit ' accept ' cr   debug-next (setup-hooks)
+vram ' emit ' accept ' cr   (setup-hooks)
 
 S" TC FORTH version 4" type cr
 key drop (bootstrap)

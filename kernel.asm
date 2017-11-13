@@ -290,6 +290,9 @@ set a, sp
 set push, a
 next
 
+WORD "RSP@", 4, rsp_fetch
+set push, z
+next
 
 WORD ">R", 2, to_r
 PUSHRSP pop
@@ -321,6 +324,24 @@ set a, pop ; Address
 set [a], pop
 next
 
+WORD "2@", 2, two_fetch
+set a, pop
+set push, [a+1]
+set push, [a]
+next
+
+WORD "2!", 2, two_store
+set a, pop
+set [a], pop
+set [a+1], pop
+next
+
+WORD "?DUP", 4, qdup
+ifn peek, 0
+  set push, peek
+next
+
+
 WORD "EXECUTE", 7, execute
 ; Leave i alone. We jump directly into the target.
 ; Then the EXECUTEd word will continue after EXECUTE.
@@ -341,6 +362,51 @@ jsr compile
 next
 
 
+WORD "2DUP", 4, two_dup
+set a, peek
+set b, [sp+1]
+set push, b
+set push, a
+next
+
+WORD "2DROP", 5, two_drop
+add sp, 2
+next
+
+WORD "2SWAP", 5, two_swap
+set a, pop ; ( x c b a -- b a x c )
+set b, pop
+set c, pop
+set x, pop
+set push, b
+set push, a
+set push, x
+set push, c
+next
+
+WORD "2OVER", 5, two_over
+set push, [sp+3]
+set push, [sp+3]
+next
+
+
+WORD "1+", 2, one_plus
+add peek, 1
+next
+
+WORD "1-", 2, one_minus
+sub peek, 1
+next
+
+WORD "+!", 2, plus_store
+set a, pop
+add [a], pop
+next
+
+WORD "-!", 2, minus_store
+set a, pop
+sub [a], pop
+next
 
 
 ; Branching primitives

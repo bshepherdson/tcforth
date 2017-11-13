@@ -1,4 +1,4 @@
-run 10000000
+run 20000000
 eject
 mount forth_boot.rom
 type b

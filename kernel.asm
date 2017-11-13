@@ -20,18 +20,19 @@
 
 ; Internals
 ; =========
-; This is an indirect-threaded Forth.
-; The return stack pointer is held in register J. The return stack is the top
+; This is a primitive-based, direct-threaded Forth.
+; The return stack pointer is held in register Z. The return stack is the top
 ; 512 cells of memory, $fe00 to $ffff.
 ; The data stack pointer is held in SP. The data stack is below the return
 ; stack, from $fdff downward.
 ; Register I is used to hold the next-word pointer.
 ;
-; Using I and J in this way demands that STI and STD be avoided.
+; Using I in this way demands that STI and STD be avoided, except in NEXT and
+; the DOER words.
 ;
 ; Helper functions follow the calling convention that arguments are passed in
-; A B C X Y Z in that order, and return values are in the same order.
-; I and J are never touched. A B C are clobberable, and X Y Z I J are preserved.
+; A B C X Y, in that order, and return values are in the same order.
+; Z and I are never touched. A B C are clobberable, and X Y Z I J are preserved.
 ;
 ; Data and dictionary headers are mingled together. The dictionary is a linked
 ; list and uses the full string name of the word. Word lookup ignores case.
@@ -40,17 +41,14 @@
 ; - Link pointer (points at the previous header)
 ; - Length and metadata (Immediate flag, hidden flag, and name length)
 ; - Length words for the name.
-; - Codeword: Address of the code to run to execute this word.
-;   - For a native assembly word, this is simply the pointer to the code.
-;   - For a colon definition, a DOCOL routine pushes onto the return stack.
+; - Code.
 
 ; There are no "characters", all strings are stored unpacked, using only the low
 ; bits of a 16-bit word.
 
-; Inside this assembly file, each header is accompanied by three labels.
+; Inside this assembly file, each header is accompanied by two labels.
 ; One is hdr_NAME, which points at the top of the header (the link pointer).
-; One is NAME, which points at the codeword.
-; One is code_NAME, which points at the assembly definition, if any.
+; One is NAME, which points at the code.
 
 
 ; First line of code: a jump to the main routine at the bottom.
@@ -68,63 +66,62 @@ set pc, main
 
 ; Some macros and helpers.
 
-; NEXT implements the indirect-threaded "next" operation.
-; Leaves the codeword address in A; this is used by some of the DOER words.
-.macro NEXT=set a, [i]%n  add i, 1%n  set pc, [a]
+; NEXT implements the direct-threaded "next" operation.
+.macro NEXT=sti pc, [i]
 
 ; PUSHRSP arg - pushes arg to the return stack.
-.macro PUSHRSP=sub j, 1%n  set [j], %0
+.macro PUSHRSP=sub z, 1%n  set [z], %0
 ; POPRSP arg - pops from the return stack into arg.
-.macro POPRSP=set %0, [j]%n  add j, 1
+.macro POPRSP=set %0, [z]%n  add z, 1
 
 
-; DOER words. These are actual routines with addresses. Expect A to be the CFA.
-:DOCOL dat _docol
-:_DOCOL
+; DOER words. These are actual routines with addresses.
+
+; This is a direct-threaded Forth, so the code stream is composed of pointers to
+; code to execute. Non-primitives start with a one-word JSR docol, and pushes
+; onto the return stack.
+; Since this was called by JSR, it'll have the return address on the stack.
+; Needs to be near the top, so that JSR docol can fit in one word.
+:docol
 PUSHRSP i
-set i, a
-add i, 1
+set i, pop
 next
 
-:DOLIT dat _dolit
-:_dolit
-set push, [i]
-add i, 1
+; Needs to be near the top, so that JSR dodoes can fit in one word.
+:dodoes
+set a, peek ; DOES> slot in A.
+add peek, 1 ; TOS was the DOES> slot, now it's the code area.
+ife [a], 0
+  set pc, dodoes_boring
+
+; Interesting case: jump to the DOES> slot.
+PUSHRSP i
+set i, [a]
+:dodoes_boring
 next
 
-:DOSTRING dat _dostring
-:_dostring
-set a, [i]
-add i, 1
+
+:DOLIT
+sti push, [i]
+next
+
+:DOSTRING
+sti a, [i]
 set push, i
 set push, a
 add i, a
 next
 
-; Pushes CFA+2. Checks cfa+1, executes it if nonzero.
-:DODOES dat _dodoes
-:_dodoes
-set b, a
-add b, 2
-set push, b
-set a, [a+1]
-ife a, 0
-  set pc, dodoes_boring
 
-; Interesting case. Execute the inner word.
-PUSHRSP i
-set i, a
-:dodoes_boring
-next
+:jsr_docol  jsr docol
+:jsr_dodoes jsr dodoes
 
 
 ; Defines an assembly-backed word. The chaining of the links is automatic.
 ; WORD Forth_name, length, asm_name
 .def last_link, 0
 .macro dat_link=dat %e0
-;.macro WORD_QUOTED=:hdr_%2  dat_link last_link%n .def last_link hdr_%2%n  dat %1, %0%n  :%2  dat code_%2%n  :code_%2
-;.macro WORD=WORD_QUOTED "%0", %1, %2
-.macro WORD=:hdr_%2  dat_link last_link%n .def last_link hdr_%2%n  dat %1 %n dat %0%n  :%2  dat code_%2%n  :code_%2
+.macro WORD=:hdr_%2  dat_link last_link%n .def last_link hdr_%2%n  dat %1 %n dat %0%n  :%2
 
 ; Starting simple: arithmetic words
 WORD "+", 1, plus
@@ -303,7 +300,7 @@ POPRSP push
 next
 
 WORD "R@", 2, fetch_r
-set push, [j]
+set push, [z]
 next
 
 WORD "DEPTH", 5, depth
@@ -327,8 +324,7 @@ next
 WORD "EXECUTE", 7, execute
 ; Leave i alone. We jump directly into the target.
 ; Then the EXECUTEd word will continue after EXECUTE.
-set a, pop
-set pc, [a]
+set pc, pop
 ; Deliberately no NEXT here.
 
 
@@ -441,22 +437,22 @@ add c, src_index ; C is *>IN
 set x, [b + src_buffer] ; X = start of buffer
 set y, x
 add y, [c] ; Y = *char
-set z, [b + src_length]
+set j, [b + src_length]
 
-add z, x   ; Z = end pointer
+add j, x   ; J = end pointer
 set pc, pop
 
 
 :parse ; (delim) -> (addr, count)
 set push, x
 set push, y
-set push, z
+set push, j
 
 jsr load_source
 set push, y ; Save Y for later.
 
 :parse_loop
-ifl y, z
+ifl y, j
   ifn [y], a
     set pc, parse_consume
 set pc, parse_done
@@ -471,14 +467,14 @@ set a, y ; A = Final pointer
 sub a, peek ; A = Length parsed
 set b, a ; Keep the parsed length in B for return.
 
-; If Y < Z, skip over the delimeter.
-ifl y, z
+; If Y < J, skip over the delimeter.
+ifl y, j
   add a, 1
 add [c], a ; Move >IN
 
 set a, pop ; Grab the saved start pointer.
 ; We're ready to return now.
-set z, pop
+set j, pop
 set y, pop
 set x, pop
 set pc, pop
@@ -489,14 +485,14 @@ set pc, pop
 :parse_name ; () -> (addr, len)
 set push, x
 set push, y
-set push, z
+set push, j
 
 set a, 32 ; Space, the delimiter
 jsr load_source
 
 ; Skip leading spaces.
 :parse_name_loop
-ifl y, z
+ifl y, j
   ife [y], a
     set pc, parse_name_continue
 set pc, parse_name_done
@@ -512,7 +508,7 @@ sub y, x
 set [c], y
 
 ; Now tail-call to parse.
-set z, pop
+set j, pop
 set y, pop
 set x, pop
 set pc, parse
@@ -533,10 +529,10 @@ set push, b ; Length
 next
 
 WORD "SOURCE", 6, forth_source
-jsr load_source ; X is the start of the buffer, Z the end.
+jsr load_source ; X is the start of the buffer, J the end.
 set push, x
-sub z, x
-set push, z
+sub j, x
+set push, j
 next
 
 
@@ -627,8 +623,8 @@ set push, c
 ; Assembles a new partial dictionary header.
 ; Parses a name!
 ; The new header has the right length and a copy of the name, and is tagged as
-; hidden. Returns the address where the codeword should go.
-; Leaves DSP pointed at the codeword slot.
+; hidden. Returns the address where the code should go.
+; Leaves DSP pointed at the code area.
 :make_header ; () -> cfa
 set push, x
 set x, [var_dsp]  ; X = dsp
@@ -670,10 +666,12 @@ set x, pop
 set pc, pop
 
 
-
+; On a create call, we write a JSR dodoes. (Should be 1 word, DODOES is near the
+; top of the file.) DODOES expects DOES> address in the next slot, and the data
+; area following.
 WORD "CREATE", 6, forth_create
-jsr make_header ; A (and DSP) are now the CFA.
-set [a], _dodoes  ; Codeword is DODOES
+jsr make_header ; A (and DSP) are now the code area.
+set [a], [jsr_dodoes]  ; Codeword is DODOES
 set [a+1], 0     ; DOES> slot is 0
 add a, 2
 set [var_dsp], a  ; Update DSP to be after the created word.
@@ -723,6 +721,7 @@ set pc, pop
 ; Out: header address, maybe 0.
 ; Preserves X, C, but uppercases the input
 :find
+set push, z
 set push, i ; Uses I for the latest word.
 set i, [var_latest]
 
@@ -765,6 +764,7 @@ set pc, find_loop
 :find_done
 set a, i
 set i, pop
+set z, pop
 set pc, pop
 
 
@@ -794,8 +794,8 @@ next
 
 WORD ":", 1, colon
 jsr make_header ; A is the CFA
-set a, _docol   ; The real code for DOCOL, not indirected.
-jsr compile     ; Compile DOCOL into it.
+set a, [jsr_docol] ; The DOCOL jump at the start of the code.
+jsr compile     ; Compile JSR docol into it.
 set [var_STATE], state_compiling
 next
 
@@ -803,7 +803,7 @@ WORD ":NONAME", 7, colon_noname
 set x, [var_dsp]
 set push, x
 set [var_last_word], x
-set a, _docol
+set a, [jsr_docol]
 jsr compile
 set [var_STATE], state_compiling
 next
@@ -1096,6 +1096,7 @@ set [x + src_length], y
 set z, pop
 set y, pop
 set x, pop
+set a, -1 ; Success
 set pc, pop
 
 
@@ -1103,17 +1104,15 @@ set pc, pop
 set z, pop
 set y, pop
 set x, pop
-set pc, pop_input ; Tail call
+jsr pop_input
+set a, -1
+set pc, pop
 
 
 
 ; Pops an input source. If the new top source is a block, loads current line.
 :pop_input ; () -> void
 sub [var_source_index], 1
-set a, [var_source_index]
-mul a, sizeof_src
-add a, input_sources
-set a, [a + src_type]
 set pc, pop
 
 
@@ -1166,7 +1165,7 @@ set [var_vram], b
 hwi [var_hw_lem] ; Set the VRAM.
 next
 
-:var_emit dat 0
+:var_emit dat forth_log
 :var_accept dat 0
 :var_cr dat 0
 :var_vram dat 0
@@ -1234,7 +1233,6 @@ set pc, pop
 
 
 :call_forth_saved .reserve 6
-:call_forth_cfa dat call_forth_ca
 :call_forth_ca dat call_forth_cont
 
 :call_forth ; (CFA) -> void
@@ -1245,8 +1243,8 @@ set [call_forth_saved + 3], i
 set [call_forth_saved + 4], j
 set [call_forth_saved + 5], pop ; The saved PC I need to return to.
 
-set i, call_forth_cfa
-set pc, [a]
+set i, call_forth_ca
+set pc, a
 
 :call_forth_cont
 set x, [call_forth_saved + 0]
@@ -1280,13 +1278,13 @@ next
 ; device number. HWI returns the output register values.
 ; Registers are in J I Z Y X C B A order.
 :hwi_backup_i dat 0
-:hwi_backup_j dat 0
+:hwi_backup_z dat 0
 :hwi_mask dat 0
 :hwi_device dat 0
 
 WORD "HWI", 3, forth_hwi ; ( in_regs... bitmask device_num -- out_regs... )
 set [hwi_backup_i], i
-set [hwi_backup_j], j
+set [hwi_backup_z], z
 set [hwi_device], pop
 set [hwi_mask], pop
 
@@ -1327,7 +1325,7 @@ ifb [hwi_mask], 0x0080
   set push, a
 
 set i, [hwi_backup_i]
-set j, [hwi_backup_j]
+set z, [hwi_backup_z]
 next
 
 
@@ -1363,13 +1361,13 @@ jsr compile
 next
 
 WORD "(LOOP-END)", 10, do_loop_end
-set x, [j]    ; X is the index
-set y, [j+1]  ; Y is the limit
+set x, [z]    ; X is the index
+set y, [z+1]  ; Y is the limit
 set c, x
 sub c, y      ; C is i-l
-set z, pop    ; Z is the delta
+set j, pop    ; Z is the delta
 ; We want delta + index - limit
-set a, z
+set a, j
 add a, c ; A is delta + index - limit
 xor a, c ; A is d+i-l ^ i-l
 set b, 0
@@ -1378,7 +1376,7 @@ ifc a, 0x8000 ; True when top bit is clear.
 set a, b   ; Keep the first flag in A
 
 ; Then calculate delta XOR index - limit
-xor c, z
+xor c, j
 set b, 0
 ifc c, 0x8000
   set b, -1
@@ -1386,8 +1384,8 @@ ifc c, 0x8000
 bor a, b  ; OR those flags
 xor a, -1 ; and negate the result
 set push, a
-add z, x  ; New index is delta + index
-set [j], z ; Write it to the index.
+add j, x  ; New index is delta + index
+set [z], j ; Write it to the index.
 next
 
 
@@ -1425,7 +1423,7 @@ jsr init_input
 ; Clear both stacks.
 set a, pop
 set sp, data_stack_top
-set j, return_stack_top
+set z, return_stack_top
 set [var_state], state_interpreting
 set [var_base], 10
 set pc, a
@@ -1433,7 +1431,6 @@ set pc, a
 
 ; Indirections for returning from interpretive words to QUIT.
 :debug_next dat 0
-:quit_cfa dat quit_ca
 :quit_ca dat quit_loop
 
 :quit ; () -> [never returns]
@@ -1564,8 +1561,8 @@ set [debug_next], 0
 brk 1
 
 :quit_immediate_go
-set i, quit_cfa
-set pc, [a]
+set i, quit_ca
+set pc, a
 
 :quit_found_word_compile
 ; Compile it, it's already in A.

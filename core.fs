@@ -30,12 +30,11 @@
 : U> ( a b -- ? ) swap U< ;
 : 0> 0 > ;
 : NEGATE ( n -- n ) 0 swap - ;
-: /MOD ( a b -- r q )
-  2dup mod   -rot / ;
+: /MOD ( a b -- r q ) 2dup mod   -rot / ;
+
 
 \ Memory operations
-: +! ( delta addr -- )
-  dup @   rot +   swap ! ;
+: +! ( delta addr -- ) dup @   rot +   swap ! ;
 : -! >r negate r> +! ;
 : COUNT dup @ >r 1+ r> ;
 : ALLOT ( n -- ) (>HERE) +! ;
@@ -44,14 +43,11 @@
 : R@ R> R> dup >R swap >R ;
 
 \ Parsing
-: '   parse-name (find) drop
-  (>CFA) ;
-: ['] parse-name (find) drop
-  (>CFA) [LITERAL] ; IMMEDIATE
+: '   parse-name (find) drop (>CFA) ;
+: ['] parse-name (find) drop (>CFA) [LITERAL] ; IMMEDIATE
 
-: CHAR parse-name drop @ ;
-: [CHAR]
-  char [literal] ; IMMEDIATE
+: CHAR   parse-name drop @ ;
+: [CHAR] char [literal] ; IMMEDIATE
 : BL 32 ;
 
 
@@ -87,7 +83,6 @@
 
 
 
-\ DOES> POSTPONE
 \ Tricky!
 : (>DOES) (>CFA) 1+ ;
 
@@ -130,6 +125,7 @@ VARIABLE (loop-top)
 
 : LOOP 1 [literal]   postpone +loop ; IMMEDIATE
 
+
 : LEAVE (loop-top) @ 1-
   0 [literal]
   ['] (branch) ,
@@ -145,7 +141,7 @@ VARIABLE (loop-top)
 
 
 \ Miscellany
-: HEX 16 base ! ;
+: HEX     16 base ! ;
 : DECIMAL 10 base ! ;
 
 : MIN 2dup > IF swap THEN drop ;
@@ -295,7 +291,6 @@ VARIABLE (acc-buf)
     THEN REPEAT ( u key) drop ;
 
 
-
 \ String literals
 create (sbufs) 64 8 * allot
 create (slens) 8 allot
@@ -389,7 +384,7 @@ DECIMAL
 
 
 \ Intro
-vram ' emit ' accept ' cr   (setup-hooks)
+vram ' emit ' accept ' cr   debug-next (setup-hooks)
 
 S" TC FORTH version 4" type cr
 key drop (bootstrap)

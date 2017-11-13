@@ -1,36 +1,13 @@
-\ 0 - README
 \ Forth system by Braden Shepherdson
 \ For the Techcompliant flavour of the DCPU-16.
 
 \ See github.com/shepheb/tcforth
 
-\ 1 - Main Load
-3 LOAD  \ Core
-9 LOAD  \ Control Structures
-15 LOAD \ DOES> VARIABLE etc.
-18 LOAD \ DO LOOP
-22 LOAD \ Miscellany
-28 LOAD \ Miscellany 2
-40 LOAD \ Terminal
-25 LOAD \ String literals
-12 LOAD \ Strings
-33 LOAD \ Pictured output
-48 LOAD \ Hardware control
-51 LOAD \ Intro
 
-\ 3 - Core 1
-\ The core-most pieces.
-4 LOAD \ Core 1-1 - Fundamentals
-5 LOAD \ Core 1-2 - Math helpers
-6 LOAD \ Core 1-3 - Memory
-7 LOAD \ Core 1-4 - Parsing
+\ Fundamentals
+: IMMEDIATE (latest) @ 1 + dup @   $8000 or   swap ! ;
 
-\ 4 - Core 1-1 - Fundamentals
-: IMMEDIATE (latest) @ 1 + dup @
-  1 15 lshift or   swap ! ;
-
-: (
-  41 parse drop drop ; IMMEDIATE
+: (   41 parse drop drop ; IMMEDIATE
 
 : [ 0 state ! ; IMMEDIATE
 : ] 1 state ! ;
@@ -39,7 +16,7 @@
 : 2swap >r -rot r> -rot ;
 : 2over >r >r 2dup r> r> 2swap ;
 
-\ 5 - Core 1-2 - Math
+\ Math and Logic
 : 0< 0 < ;
 : 0= 0 = ;
 : 1+ 1 + ;
@@ -56,7 +33,7 @@
 : /MOD ( a b -- r q )
   2dup mod   -rot / ;
 
-\ 6 - Core 1-3 - Memory
+\ Memory operations
 : +! ( delta addr -- )
   dup @   rot +   swap ! ;
 : -! >r negate r> +! ;
@@ -66,7 +43,7 @@
 : ,   HERE !   1 allot ;
 : R@ R> R> dup >R swap >R ;
 
-\ 7 - Core 1-4 - Parsing
+\ Parsing
 : '   parse-name (find) drop
   (>CFA) ;
 : ['] parse-name (find) drop
@@ -77,17 +54,12 @@
   char [literal] ; IMMEDIATE
 : BL 32 ;
 
-\ 9 - Control Structures
-10 LOAD \ IF ELSE THEN
-11 LOAD \ BEGIN WHILE REPEAT
 
 
-\ 10 - IF ELSE THEN
-: IF ['] (0branch) ,  here  0 ,
-  ; IMMEDIATE
+\ Control Structures
+: IF ['] (0branch) ,  here  0 , ; IMMEDIATE
 
-: THEN   here ( if end )
-  over - swap ! ; IMMEDIATE
+: THEN   here ( if end ) over - swap ! ; IMMEDIATE
 
 : ELSE
   ['] (branch) , here ( if end)
@@ -97,42 +69,28 @@
 ; IMMEDIATE
 
 
-\ 11 - BEGIN WHILE REPEAT
 : BEGIN here ; IMMEDIATE
+
 : WHILE ( beg -- while begin )
-  ['] (0branch) ,  here  0 ,
-  swap ; IMMEDIATE
+  ['] (0branch) ,  here  0 , swap ; IMMEDIATE
+
 : REPEAT ( while begin -- )
   \ Unconditional jump to start.
   ['] (branch) ,  here  0 ,
   2dup -   swap !   drop ( wh )
   here over - swap ! ( )
 ; IMMEDIATE
+
 : UNTIL ( ? --   C: begin -- )
   ['] (0branch) ,  here  0 ,
   dup >r - r> ! ; IMMEDIATE
 
-\ 12 - Strings
-13 LOAD \ SPACES TYPE etc.
 
 
-\ 13 - Strings 1
-: SPACE 32 emit ;
-: SPACES dup 0> IF
-  BEGIN space 1- dup 0= UNTIL
-  THEN drop ;
-: TYPE BEGIN dup 0> WHILE
-    1- swap   dup @ emit
-    1+ swap
-  REPEAT 2drop ;
-
-\ 15 - DOES> etc, loader
-16 LOAD \ DOES> POSTPONE
-17 LOAD \ VARIABLE CONSTANT etc.
-
-\ 16 - DOES> POSTPONE
+\ DOES> POSTPONE
 \ Tricky!
 : (>DOES) (>CFA) 1+ ;
+
 : DOES> dolit,  here 0 ,
   ['] (latest) ,  ['] @ ,
   ['] (>DOES)  ,  ['] ! ,
@@ -144,33 +102,24 @@
     (>CFA) [literal] ['] , ,
   THEN ; IMMEDIATE
 
-\ 17 - VARIABLE CONSTANT
 : VARIABLE create 0 , ;
+
 : CONSTANT create , DOES> @ ;
 
 
-
-\ 18 - DO LOOP
-19 LOAD \ DO
-20 LOAD \ +LOOP
-21 LOAD \ LEAVE I J etc.
-
-\ Basic plan: old (loop-top) on
-\ C-stack, new in (loop-top).
-\ DO compiles pushing index,
-\ limit onto runtime R-stack.
+\ DO LOOPs
+\ Basic plan: old (loop-top) on C-stack, new in (loop-top).
+\ DO compiles pushing index, limit onto runtime R-stack.
 \ Pushes literal 1, then 0branch
 
-\ 19 - DO
 VARIABLE (loop-top)
+
 : DO ( m i -- ) ['] swap ,
   ['] >r dup , ,   1 [literal]
   ['] (0branch) ,  here 0 ,
-  (loop-top) @  swap
-  (loop-top) !
+  (loop-top) @   swap (loop-top) !
 ; IMMEDIATE
 
-\ 20 - +LOOP
 : +LOOP   ['] (loop-end) ,
   ['] (0branch) , here 0 ,
   (loop-top) @ 1+  over - swap !
@@ -179,10 +128,8 @@ VARIABLE (loop-top)
   ['] R> dup , ,  ['] 2drop ,
 ; IMMEDIATE
 
-: LOOP 1 [literal]
-  postpone +loop ; IMMEDIATE
+: LOOP 1 [literal]   postpone +loop ; IMMEDIATE
 
-\ 21 - LEAVE UNLOOP I J
 : LEAVE (loop-top) @ 1-
   0 [literal]
   ['] (branch) ,
@@ -192,23 +139,22 @@ VARIABLE (loop-top)
 : UNLOOP R> R> R> 2drop >R ;
 
 : I ['] R@ , ; IMMEDIATE
-: J R> R> R> R@ -rot >R >R
-  swap >R ;
+
+: J R> R> R> R@ -rot >R >R swap >R ;
 
 
-\ 22 - Miscellany
-23 LOAD \ Misc 1
-24 LOAD \ Misc 2
 
-
-\ 23 - Miscellany
+\ Miscellany
 : HEX 16 base ! ;
 : DECIMAL 10 base ! ;
+
 : MIN 2dup > IF swap THEN drop ;
 : MAX 2dup < IF swap THEN drop ;
-: RECURSE (latest) @ (>CFA) ,
-  ; IMMEDIATE
+
+: RECURSE (latest) @ (>CFA) , ; IMMEDIATE
+
 : PICK 1+ sp@ + @ ;
+
 : 2* 1 lshift ;
 : 2/ -1 1 rshift invert over and
   swap 1 rshift   or ;
@@ -216,7 +162,7 @@ VARIABLE (loop-top)
 : 2! swap over ! 1+ ! ;
 
 
-\ 24 - MOVE and friends
+\ MOVE and friends
 : FILL -rot dup
   0 <= IF drop 2drop EXIT THEN
   0 DO 2dup i + ! LOOP
@@ -232,127 +178,57 @@ VARIABLE (loop-top)
   >R 2dup <   R> swap
   IF MOVE< ELSE MOVE> THEN ;
 
-\ 25 - String literals
-26 LOAD
-27 LOAD
+: UNCOUNT dup here !  here 1+ swap move   here ;
 
-\ 26 - String literals setup.
-create (sbufs) 64 8 * allot
-create (slens) 8 allot
-VARIABLE (sidx) \ index
-: (S-compile) ( c-addr u )
-  dostring, dup ,
-  here swap dup >r move r> allot
-;
-
-\ 27 - String literals cont'd
-: (S-interp) ( c-addr u )
-  >R (sidx) @ dup (slens) +
-  R@ swap !   64 * (sbufs) +
-  r> move ( )
-  (sidx) @ dup 64 * (sbufs) +
-  swap (slens) + @ ( addr u )
-  (sidx) @ 1+   7 and
-  (sidx) !
-;
-: S" [char] " parse
-  state @ IF (S-compile)
-  ELSE (S-interp)
-  THEN ; IMMEDIATE
-
-\ 28 - Miscellany 2
-29 LOAD
-30 LOAD
-
-\ 29 - Miscellany 2.1
-: UNCOUNT dup here !  here 1+
-  swap move   here ;
 : WORD parse uncount ;
+
 : FIND dup count (find)
-  dup 0= IF 2drop 0 ELSE
-    rot drop THEN ;
+  dup 0= IF 2drop 0 ELSE rot drop THEN ;
 
 : ABS dup 0< IF negate THEN ;
+
 : ?DUP dup IF dup THEN ;
+
 : WITHIN over - >R   - R> U< ;
 : <> = not ;
 : 0<> 0 = not ;
 
-\ 30 - Miscellany 2.2
-: AGAIN ['] (branch) , here - ,
-  ; IMMEDIATE
+: AGAIN ['] (branch) , here - , ; IMMEDIATE
+
 : BUFFER: create allot ;
+
 : ERASE 0 fill ;
+
 : FALSE 0 ;
 : TRUE -1 ;
+
 : NIP swap drop ;
 : TUCK swap over ;
+
 : U> swap U< ;
 
-\ 33 - Pictured numeric output
-34 LOAD
-35 LOAD
-36 LOAD
 
 
-\ 34 - Pictured output 1
-VARIABLE (picout)
-: (picout-top) here 256 + ;
-: <# (picout-top) (picout) ! ;
-: HOLD (picout) @ 1- dup
-  (picout) ! ! ;
-: SIGN
-  0< IF [char] - hold THEN ;
-: U/MOD 2dup u/ >r umod r> ;
-
-\ 35 - Pictured output 2
-: #  drop base @ u/mod ( r q )
-  swap dup 10 < IF [char] 0 ELSE
-    10 - [char] A THEN + hold
-    0 ;
-: #S 2dup or
-  0= IF [char] 0 hold EXIT THEN
-  BEGIN 2dup or WHILE # REPEAT ;
-: #> 2drop (picout) @
-  (picout-top) over - ( a u ) ;
-
-\ 36 - Pictured output 3
-: S>D dup 0< IF -1 ELSE 0 THEN ;
-: (#UHOLD) <# 0 #S #> ;
-: U. (#UHOLD) type space ;
-: (#HOLD) dup 1 15 lshift = IF
-    <# 0 #S [char] - hold #>
-  ELSE <# dup abs s>d #s rot
-    sign #> THEN ;
-: . (#HOLD) type space ;
-
-
-\ 40 - Terminal Control
-\ Drives a LEM as a scrollable
-\ terminal.
-41 LOAD \ Definitions
-42 LOAD \ Colors
-43 LOAD \ Internals 1
-44 LOAD \ Internals 2
-45 LOAD \ Terminal API
-46 LOAD \ ACCEPT internals
-47 LOAD \ ACCEPT
-
-\ 41 - Terminal definitions
+\ Terminal control
+\ Drives a LEM as a scrollable terminal.
 32 CONSTANT WIDTH
 12 CONSTANT HEIGHT
+
 VARIABLE CURSOR   0 cursor !
 VARIABLE BG
 VARIABLE FG
-CREATE VRAM width height *
-  dup allot
-  CONSTANT VRAM-SIZE
 
-\ 42 - Terminal colors
+CREATE VRAM width height *
+dup allot
+CONSTANT VRAM-SIZE
+
+\ Colours
 VARIABLE (light)  0 (light) !
+
 : LIGHT 8 (light) ! ;
-: (color) (light) @ +
-    0 (light) ! ;
+
+: (color) (light) @ +   0 (light) ! ;
+
 : BLACK   0 (color) ;
 : BLUE    1 (color) ;
 : GREEN   2 (color) ;
@@ -362,11 +238,11 @@ VARIABLE (light)  0 (light) !
 : YELLOW  6 (color) ;
 : WHITE   7 (color) ;
 
-\ 43 - Internals
-: COLORIZE ( c bg fg -- x )
-12 lshift >r 8 lshift or r> or ;
-: WITH-COLORS
-  bg @ fg @ colorize ;
+
+\ Display internals
+: COLORIZE ( c bg fg -- x ) 12 lshift >r 8 lshift or r> or ;
+
+: WITH-COLORS   bg @ fg @ colorize ;
 : BLANK bl with-colors ;
 
 : SCROLL vram width +  vram
@@ -375,26 +251,20 @@ VARIABLE (light)  0 (light) !
   width blank fill
   width cursor -! ;
 
-: ?SCROLL cursor @ vram-size >=
-  IF scroll THEN ;
+: ?SCROLL cursor @ vram-size >= IF scroll THEN ;
 
-\ 44 - Internals 2
 : CURSOR++ 1 cursor +! ?scroll ;
 
-white fg !  black bg !
-0 cursor !
+white fg !   black bg !   0 cursor !
 
 : BACKSPACE cursor @ 1-   0 max
   dup cursor !   vram +
   32 with-colors swap ! ;
 
-\ 45 - Terminal API
 : EMIT-COLOR ( c bg fg -- )
-  colorize cursor @ vram + !
-  cursor++ ;
+  colorize cursor @ vram + !   cursor++ ;
 
-: EMIT ( c -- )
-  bg @ fg @ emit-color ;
+: EMIT ( c -- )   bg @ fg @ emit-color ;
 
 : CR width 1- cursor @ +
   dup width mod -   cursor !
@@ -403,7 +273,6 @@ white fg !  black bg !
 : CLEAR vram  width height *
   blank fill   0 cursor ! ;
 
-\ 46 - ACCEPT internals
 VARIABLE (acc-buf)
 
 : SHOW-CURSOR 32 fg @ bg @
@@ -416,7 +285,6 @@ VARIABLE (acc-buf)
 : (ACCEPT-CHAR) ( c x -- c' )
   over (acc-buf) @ + !  1+ ;
 
-\ 47 - ACCEPT
 \ TODO Honour the max length.
 : ACCEPT ( buf len -- len )
   drop (acc-buf) !   0
@@ -426,13 +294,80 @@ VARIABLE (acc-buf)
     ELSE dup emit (ACCEPT-CHAR)
     THEN REPEAT ( u key) drop ;
 
-\ 48 - Hardware
-49 LOAD \ Device-finder
-50 LOAD \ Common devices
 
-\ 49 - Device finder
-: CHECK-DEV ( d_id1 d_id2 -- ? )
-  >R rot = swap r> = or ;
+
+\ String literals
+create (sbufs) 64 8 * allot
+create (slens) 8 allot
+VARIABLE (sidx) \ index
+
+: (S-compile) ( c-addr u )
+  dostring, dup ,
+  here swap dup >r move r> allot
+;
+
+: (S-interp) ( c-addr u )
+  >R (sidx) @ dup (slens) +
+  R@ swap !   64 * (sbufs) +
+  r> move ( )
+  (sidx) @ dup 64 * (sbufs) +
+  swap (slens) + @ ( addr u )
+  (sidx) @ 1+   7 and
+  (sidx) !
+;
+
+: S" [char] " parse   state @ IF (S-compile) ELSE (S-interp) THEN ; IMMEDIATE
+
+
+\ String printing
+: SPACE 32 emit ;
+
+: SPACES dup 0> IF
+  BEGIN space 1- dup 0= UNTIL
+  THEN drop ;
+
+: TYPE BEGIN dup 0> WHILE
+    1- swap   dup @ emit
+    1+ swap
+  REPEAT 2drop ;
+
+
+\ Pictured numeric output
+VARIABLE (picout)
+: (picout-top) here 256 + ;
+
+: <# (picout-top) (picout) ! ;
+
+: HOLD (picout) @ 1- dup (picout) ! ! ;
+
+: SIGN 0< IF [char] - hold THEN ;
+
+: U/MOD 2dup u/ >r umod r> ;
+
+: #  drop base @ u/mod ( r q )
+  swap dup 10 < IF [char] 0 ELSE
+    10 - [char] A THEN + hold 0 ;
+
+: #S 2dup or 0= IF [char] 0 hold EXIT THEN
+  BEGIN 2dup or WHILE # REPEAT ;
+
+: #> 2drop (picout) @   (picout-top) over - ( a u ) ;
+
+: S>D dup 0< IF -1 ELSE 0 THEN ;
+
+: (#UHOLD) <# 0 #S #> ;
+: U. (#UHOLD) type space ;
+
+: (#HOLD) dup 1 15 lshift =
+  IF <# 0 #S [char] - hold #>
+  ELSE <# dup abs s>d #s rot sign #> THEN ;
+
+: . (#HOLD) type space ;
+
+
+
+\ Device finder
+: CHECK-DEV ( d_id1 d_id2 -- ? ) >R rot = swap r> = or ;
 
 : FIND-DEV ( id_lo id_hi -- dev)
   #devices 0 DO
@@ -442,7 +377,7 @@ VARIABLE (acc-buf)
   LOOP
   -1 ;
 
-\ 50 - Common devices
+\ Common devices
 HEX ( -- d_id ) \ for all these
 : LEM1802     f615 734d ;
 : IMVA        a113 75f6 ;
@@ -452,9 +387,9 @@ HEX ( -- d_id ) \ for all these
 : CLOCK       b402 12d1 ;
 DECIMAL
 
-\ 51 - Intro
-vram ' emit ' accept ' cr
-  (setup-hooks)
+
+\ Intro
+vram ' emit ' accept ' cr   (setup-hooks)
 
 S" TC FORTH version 4" type cr
 key drop (bootstrap)

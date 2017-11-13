@@ -1,4 +1,2 @@
-run 1000000
-send 1 load
-run 40000000
+run 30000000
 quit

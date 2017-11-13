@@ -10,19 +10,13 @@
 ;    loaded on demand.
 ; 4. Your applications and customizations on top.
 
-; Screens
-; =======
-; This is a screen-based Forth.  Screens here are 64 characters wide and 16 tall.
-; Therefore a screen is 1K, or 512 words, which corresponds to a single disk
-; block.
-
 ; Compilation
 ; ===========
-; The system can be bootstrapped from this assembly file, and the companion disk
-; image. The loading will be much faster, however, if a ROM is built that
-; includes the core Forth libraries already compiled.
-; Details to follow, but the disk will contain code for this that can be
-; triggered by the user to write a ROM.
+; The system can be bootstrapped from this assembly file, and the companion
+; Forth file. This file is not deployed, however. Instead, the compiled Forth
+; system is written back out to a disk. `make bootstrap` will build two images:
+; forth.rom is an interactive system. forth_boot.rom immediately reads a Forth
+; program from disk.
 
 ; Internals
 ; =========
@@ -396,15 +390,15 @@ next
 ; Parsing and input
 
 ; Input sources are 5 words wide:
-; type (-1 = keyboard, -2 = EVALUATE, 0+ = block number)
-; block line (undefined for non-blocks)
+; type (-1 = keyboard, -2 = EVALUATE, -3 = streaming file
+; stream index (undefined for other types)
 ; buffer start
 ; index into buffer (>IN)
 ; parse length
 
 ; Offset constants
 .def src_type, 0
-.def src_block_line, 1
+.def src_file_index, 1
 .def src_buffer, 2
 .def src_index, 3
 .def src_length, 4
@@ -414,7 +408,7 @@ next
 .def src_type_evaluate, -2
 .def src_type_stream, -3   ; Streaming files
 
-; Streaming file design: set the type to -3, and use "block line" as the
+; Streaming file design: set the type to -3, and file_index is the
 ; absolute BYTE index into the file. src_buffer points at the address in memory,
 ; index offsets into it. One line at a time, up to newlines.
 ; When it discovers a NUL byte, that's the end of the file.
@@ -424,8 +418,6 @@ next
 :input_sources .reserve 80 ; sizeof_src*16
 
 :keyboard_buffer .reserve 64
-:block_line_buffer .reserve 64
-
 :streaming_buffer .reserve 128
 
 ; Resets the input system, as on startup.
@@ -936,8 +928,8 @@ ife a, src_type_evaluate
 ife a, src_type_stream
   set pc, refill_streaming
 
-; Otherwise, A is the block number.
-set pc, refill_block
+; Otherwise, error out.
+brk 81
 
 
 ; Since evaluate strings are only a single line, there's nothing to refill.
@@ -949,11 +941,9 @@ set pc, pop
 
 
 
-; Block handling:
-; - Currently there's only one block buffer.
+; Disk handling:
+; - Currently there's only one disk block buffer.
 ;   - It's never dirty, so it can always be dumped.
-; - The line number is the _next_ line to read, not the current line.
-; - Blocks need to be reloaded each time the buffer is full.
 ; - A cached block of -1 means nothing is cached.
 
 :cached_block dat -1
@@ -1044,41 +1034,6 @@ ife [cached_block], a
 set pc, read_block
 
 
-; Refill always increments the line number first, then loads it.
-; If you need to reload the current line without resetting it, use
-; load_current_line.
-:refill_block
-set push, x
-set push, y
-
-set x, [var_source_index]
-mul x, sizeof_src
-add x, input_sources
-
-set y, block_line_buffer
-set [x + src_buffer], y
-set [x + src_index], 0
-add [x + src_block_line], 1 ; Bump the block line.
-
-set a, [x + src_block_line]
-ife a, 16
-  set pc, refill_block_pop
-
-jsr load_current_line
-set a, -1
-set pc, refill_block_done
-
-:refill_block_pop
-jsr pop_input
-set a, -1
-
-:refill_block_done
-set y, pop
-set x, pop
-set pc, pop
-
-
-
 ; Slightly dumb but simple: read a byte at a time. If we read a 0 byte, that's
 ; EOF. Since we still have a line in the buffer, the actual condition to pop the
 ; input source is when the first byte read is a 0.
@@ -1101,15 +1056,15 @@ set y, streaming_buffer
 set z, 1 ; First read.
 
 :refill_streaming_loop
-set a, [x + src_block_line]
+set a, [x + src_file_index]
 shr a, 10 ; Divide by 1024 to get the block number.
 jsr ensure_block ; The block is loaded.
-set a, [x + src_block_line]
+set a, [x + src_file_index]
 shr a, 1   ; Shift to works in words.
 and a, 511 ; The index into the block.
 set a, [a + block_buffer]
 
-ifc [x + src_block_line], 1 ; If it's even, shift the word right.
+ifc [x + src_file_index], 1 ; If it's even, shift the word right.
   shr a, 8
 and a, 255 ; A is finally the read byte.
 
@@ -1121,7 +1076,7 @@ set z, 0 ; No longer first read.
 
 ; Advance to the next byte, unless we found a NUL.
 ifn a, 0
-  add [x + src_block_line], 1
+  add [x + src_file_index], 1
 
 ; Handle the special cases of A being 0 or a newline.
 ife a, 0
@@ -1152,19 +1107,6 @@ set pc, pop_input ; Tail call
 
 
 
-; Read the current line number.
-
-; Block flows:
-; 1. Starting a new block in LOAD:
-;   a. Set up conditions for the source.
-;   b. REFILL reads line 0
-; 2. Subsequent REFILL
-;   a. Just reads line N?
-; 3. Popping to a block
-;   a. Conditions were as saved.
-;   b. Call a helper, below REFILL, that does the right thing
-
-
 ; Pops an input source. If the new top source is a block, loads current line.
 :pop_input ; () -> void
 sub [var_source_index], 1
@@ -1172,67 +1114,9 @@ set a, [var_source_index]
 mul a, sizeof_src
 add a, input_sources
 set a, [a + src_type]
-ifl a, -2
-  jsr load_current_line
 set pc, pop
 
 
-; Called when the current source is a block. Reads the next line into the block
-; buffer. Doesn't move the current line or >IN.
-:load_current_line ; () -> void
-set push, x
-set x, [var_source_index]
-mul x, sizeof_src
-add x, input_sources
-
-set a, [x + src_type] ; A is the block number.
-jsr ensure_block ; That block is now loaded.
-set a, [x + src_block_line]
-shl a, 5 ; 32 words per line
-add a, block_buffer
-set b, block_line_buffer
-set c, 64
-
-:load_current_line_loop
-set x, [a]
-set [b], x
-shr [b], 8
-and x, 255
-set [b+1], x
-add b, 2
-add a, 1
-sub c, 2
-ifg c, 0
-  set pc, load_current_line_loop
-
-set x, pop
-set pc, pop
-
-
-
-
-; Pushes a new input source for the given block.
-:load_block ; (blk) -> void
-add [var_source_index], 1
-set c, [var_source_index]
-mul c, sizeof_src
-add c, input_sources
-
-set [c + src_type], a    ; Block number
-set [c + src_index], 64  ; At the end, let REFILL load it.
-set [c + src_block_line], -1 ; Will be bumped to 0 by REFILL
-set [c + src_length], 64
-set [c + src_buffer], block_line_buffer
-
-set pc, pop
-
-
-
-WORD "LOAD", 4, forth_load
-set a, pop
-; log a
-jsr load_block
-next
 
 :run_disk ; () -> void
 add [var_source_index], 1
@@ -1242,7 +1126,7 @@ add c, input_sources
 
 set [c + src_type], src_type_stream
 set [c + src_index], 128 ; At end, let REFILL load it.
-set [c + src_block_line], 0 ; First word of the file.
+set [c + src_file_index], 0 ; First word of the file.
 set [c + src_length], 128
 set [c + src_buffer], streaming_buffer
 jsr refill
@@ -1319,8 +1203,8 @@ set pc, quit
 ; called at startup, rather than the keyboard interpreter.
 ; NB: To configure TC-Forth for interactive use, set forth_main to 0.
 ; To configure it to automatically launch the inserted disk as a stream, use
-; boot_disk
-:forth_main .dat boot_disk
+; boot_disk.
+; Those two settings are made in the interactive.asm and boot.asm files.
 
 WORD "(MAIN!)", 7, forth_main_set
 set [forth_main], pop
@@ -1775,11 +1659,8 @@ set pc, [main_continued]
 ; Once the bootstrap is complete, the bootstrapper will overwrite
 ; [main_continued] to point at main_continued_preload
 :main_continued_bootstrap
-; Triggers an automatic 1 LOAD.
 jsr reset_state
-set a, 1
-jsr load_block
-jsr refill
+jsr run_disk
 set pc, quit_loop
 
 ; Called as the tail of main() when we're running an already-bootstrapped
@@ -1799,5 +1680,3 @@ set a, [forth_main]
 jsr call_forth
 set pc, quit
 
-:initial_dsp ; Must be right at the bottom.
-dat 0

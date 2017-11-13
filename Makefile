@@ -1,29 +1,28 @@
-.PHONY: all
-default: all
+.PHONY: bootstrap
+default: bootstrap
 
 EMULATOR ?= dcpu
 
-%.img: %.fs makedisk.py
-	./makedisk.py $<
-	mv disk.img $@
-
-kernel.bin: kernel.asm
+%.bin: %.asm kernel.asm
 	dasm $<
 
-all: kernel.bin core.img test.img
+forth.rom: interactive.bin core.fs bootstrap_interactive.dcs
+	rm -f $@
+	touch $@
+	$(EMULATOR) -turbo -disk core.fs -script bootstrap_interactive.dcs $<
 
-forth.rom: all bootstrap.dcs
-	rm -f forth.rom
-	touch forth.rom
-	GODEBUG=cgocheck=0 $(EMULATOR) -turbo -disk core.img -script bootstrap.dcs kernel.bin
+forth_boot.rom: boot.bin core.fs bootstrap_bootable.dcs
+	rm -f $@
+	touch $@
+	$(EMULATOR) -turbo -disk core.fs -script bootstrap_bootable.dcs $<
 
-bootstrap: forth.rom FORCE
+bootstrap: forth.rom forth_boot.rom FORCE
 
-test: forth.rom FORCE
-	GODEBUG=cgocheck=0 $(EMULATOR) -turbo -disk test.img -script test.dcs forth.rom
+test: forth_boot.rom FORCE
+	$(EMULATOR) -turbo -disk test.fs -script test.dcs forth_boot.rom
 
 clean: FORCE
-	rm -f kernel.bin core.img test.img forth.rom
+	rm -f interactive.bin boot.bin forth.rom forth_boot.rom
 
 FORCE:
 

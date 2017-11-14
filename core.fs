@@ -372,6 +372,6 @@ DECIMAL
 \ Intro
 vram ' emit ' accept ' cr   (setup-hooks)
 
-S" TC FORTH version 5" type cr
+S" TC FORTH version 6" type cr
 key drop (bootstrap)
 

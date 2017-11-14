@@ -125,72 +125,59 @@ next
 
 ; Starting simple: arithmetic words
 WORD "+", 1, plus
-set a, pop
-add peek, a
+add peek, pop
 next
 
 WORD "-", 1, minus
-set a, pop
-sub peek, a
+sub peek, pop
 next
 
 WORD "*", 1, times
-set a, pop
-mul peek, a
+mul peek, pop
 next
 
 WORD "/", 1, divide
-set a, pop
-dvi peek, a
+dvi peek, pop
 next
 
 WORD "MOD", 3, modulus
-set a, pop
-mdi peek, a
+mdi peek, pop
 next
 
 WORD "U/", 2, udivide
-set a, pop
-div peek, a
+div peek, pop
 next
 
 WORD "UMOD", 4, umodulus
-set a, pop
-mod peek, a
+mod peek, pop
 next
 
 
 ; Bitwise operations
 WORD "AND", 3, bitwise_and
-set a, pop
-and peek, a
+and peek, pop
 next
 
 WORD "OR", 2, bitwise_or
-set a, pop
-bor peek, a
+bor peek, pop
 next
 
 WORD "XOR", 3, bitwise_xor
-set a, pop
-xor peek, a
+xor peek, pop
 next
 
 WORD "LSHIFT", 6, lshift
-set a, pop
-shl peek, a
+shl peek, pop
 next
 
 ; Forth's RSHIFT is unsigned/logical.
 WORD "RSHIFT", 6, rshift
-set a, pop
-shr peek, a
+shr peek, pop
 next
 
 ; Adding nonstandard arithmetic right shift.
 WORD "ARSHIFT", 7, arshift
-set a, pop
-asr peek, a
+asr peek, pop
 next
 
 
@@ -223,24 +210,17 @@ next
 
 ; Math with EX for long math.
 WORD "+EX", 3, plus_ex
-set a, pop
-add a, pop
-set push, a
+add peek, pop
 set push, ex
 next
 
 WORD "-EX", 3, sub_ex
-set a, pop
-set b, pop
-sub b, a
-set push, b
+sub peek, pop
 set push, ex
 next
 
 WORD "*EX", 3, times_ex
-set a, pop
-mul a, pop
-set push, a
+mul peek, pop
 set push, ex
 next
 

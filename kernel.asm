@@ -409,6 +409,34 @@ sub [a], pop
 next
 
 
+; The DS* family expects a double-word value, a single-cell value on top.
+; Unsigned arithmetic.
+WORD "DS+", 3, dsplus
+set a, pop ; single
+set b, pop ; high word.
+add peek, a
+add b, ex
+set push, b
+next
+
+WORD "DS-", 3, dsminus
+set a, pop ; single
+set b, pop ; high word
+sub peek, a   ; EX is now 0 or -1
+add b, ex
+set push, b
+next
+
+
+; Shorthand that expects ( delta addr_of_dword -- ) and does a double-cell add.
+WORD "DS+!", 4, dsplus_store
+set a, pop
+add [a+1], pop
+add [a], ex
+next
+
+
+
 ; Branching primitives
 
 ; (BRANCH) expects a delta at [i], relative to i, and unconditionally branches.

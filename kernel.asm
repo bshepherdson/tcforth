@@ -1061,13 +1061,13 @@ set pc, interrupt_handler_return
 
 ; TODO: Emit a message when there's no disk.
 
-:read_block ; (blk) -> void
+:read_block ; (blk, buffer) -> void
 set push, x
 set push, y
 set x, a
 jsr await_disk
 set [cached_block], x
-set y, block_buffer
+set y, b ; Block buffer
 set a, 2 ; Read
 hwi [var_hw_disk]
 ifn b, 1 ; 1 on successfully started read.
@@ -1097,7 +1097,16 @@ set pc, pop
 :ensure_block ; (blk) -> void
 ife [cached_block], a
   set pc, pop
+set b, block_buffer
 set pc, read_block
+
+
+; Reads a block into the specified buffer.
+WORD "BLK@", 4, block_fetch
+set b, pop ; Buffer
+set a, pop ; Block number
+jsr read_block
+next
 
 
 ; Slightly dumb but simple: read a byte at a time. If we read a 0 byte, that's

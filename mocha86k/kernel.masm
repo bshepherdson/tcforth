@@ -1,0 +1,1674 @@
+; Mocha 86k Forth system
+; MIT Licensed by Braden Shepherdson 2020
+
+; This is a Forth operating system for the Mocha 86k, a 32-bit successor to the
+; DCPU-16.
+; It consists of four layers:
+; 1. This handwritten assembly kernel.
+; 2. The core Forth libraries that are integral to the system, and expected to
+;    be compiled into a ROM (IF ELSE THEN, loops, hardware control, etc.)
+; 3. The Forth libraries that are expected to remain in source form and be
+;    loaded on demand.
+; 4. Your applications and customizations on top.
+
+; Compilation
+; ===========
+; The system can be bootstrapped from this assembly file, and the companion
+; Forth file. This file is not deployed, however. Instead, the compiled Forth
+; system is written back out to a disk. `make bootstrap` will build two images:
+; forth.rom is an interactive system. forth_boot.rom immediately reads a Forth
+; program from disk (making it useful for deploying your own Forth application).
+
+; NB: This file assumes at least 16MB of memory in your Mocha 86k. Adjust the
+; return_stack_top and data_stack_top values accordingly, if that's not accurate.
+
+; Internals
+; =========
+; This is a direct threaded 32-bit Forth.
+; The return stack pointer is held in J. The return stack gets the top 512 words
+; of memory. The data stack is below this, with the data stack pointer in SP.
+; Register I is used to hold the Forth IP, the pointer into the high-level Forth
+; thread.
+; TOS is held in Z.
+
+; Helper functions follow the calling convention that arguments are passed in
+; A B C X Y, in that order, and return values are in the same order.
+; I and J are never touched. A B C are clobberable, X Y Z I J are preserved
+; (unless used for arguments).
+
+; Data and dictionary headers are mingled together. The dictionary is a linked
+; list and uses the full string name of the word. Word lookup ignores case.
+
+; Dictionary headers have the following form:
+; - Link pointer (32-bit, points at the previous header)
+; - Length and metadata (16-bit, immediate flag, hidden flag, name length)
+; - Length words for the name.
+; - Code field
+
+; There are no "characters", all strings are stored unpacked, using only the low
+; 8 bits of a 16-bit word.
+
+; Inside this assembly file, each header is accompanied by two labels:
+; - hdr_NAME, which points at the top of the header (the link pointer).
+; - NAME, which points to the code field.
+
+
+; First line of code: a jump to the main routine at the bottom.
+setl pc, main
+
+; Constants
+.def return_stack_top, 0x1000000 ; 16MW
+.def data_stack_top, return_stack_top - 512
+
+.def mask_immediate, 0x8000
+.def mask_hidden, 0x100
+.def mask_len_hidden, 0x1ff
+.def mask_len, 0xff
+
+.def state_compiling, 1
+.def state_interpreting, 0
+
+
+; Some macros and hepers.
+
+; NEXT implements the direct-threaded "next" operation.
+.macro next=setl pc, [i]+
+
+; PUSHRSP arg - pushes arg to the return stack.
+.macro pushrsp=setl -[j], %0
+; POPRSP arg - pops from the return stack into arg.
+.macro poprsp=setl %0, [j]+
+
+; Writes a "longword" argument to the stream.
+.macro lw=.dat %0 >> 16, %0 & 0xffff
+
+
+; DOER words
+
+; This is a direct-threaded Forth, so the high-level Forth stream is composed of
+; pointers to code to execute. Non-primitives start with a two-word "JSRL docol"
+; which pushes the return stack and sets up to run the following code.
+; Since it was called by JSR it'll have the return address on top of the stack -
+; that's the data field address!
+
+:docol
+pushrsp i
+setl i, pop
+next
+
+:dodoes ; DOES> slot is the old PC
+setl a, pop
+setl push, z ; Push the old TOS
+setl z, a
+addl z, 2 ; TOS was the DOES> slot, now it's the data field address.
+brel [a], 0, dodoes_boring ; No DOES> routine, just push the data address (done).
+
+; Interesting case: jump to the DOES> slot with TOS the data field address.
+pushrsp i
+setl i, [a]
+:dodoes_boring
+next
+
+
+:dolit
+setl push, z
+setl z, [i]+
+next
+
+:dostring
+; Stream contains length, then the string data. We need to push
+; ( haddr u ) and move I past the string.
+setl a, [i]+
+setl push, z
+setl push, i
+setl z, a
+addl i, a
+next
+
+
+; Defines an assembly-backed word. The chaining of the links is automatic thanks
+; to the clever macro.
+.def last_link, 0
+.macro dat_link=.dat 0, %e0
+.macro WORD=:hdr_%2 dat_link last_link%n .def last_link, hdr_%2 %n .dat %1 %n .dat %0 %n :%2
+
+; Starting simple: arithmetic words
+WORD "+", 1, plus
+addl z, pop
+next
+
+WORD "-", 1, minus
+setl a, pop
+subl a, z
+setl z, a
+next
+
+WORD "*", 1, times
+mull z, pop
+next
+
+WORD "/MOD", 4, divmod
+setl a, pop ; divisor in Z, dividend in A
+dvil a, z
+setl push, ex ; remainder
+setl z, a  ; quotient on top
+next
+
+WORD "U/MOD", 5, udivmod
+setl a, pop ; divisor in Z, dividend in A
+divl a, z
+setl push, ex ; remainder
+setl z, a  ; quotient on top
+next
+
+
+; Bitwise operations
+WORD "AND", 3, bitwise_and
+andl z, pop
+next
+
+WORD "OR", 2, bitwise_or
+borl z, pop
+next
+
+WORD "XOR", 3, bitwise_xor
+xorl z, pop
+next
+
+WORD "LSHIFT", 6, lshift
+setl a, pop
+shll a, z
+setl z, a
+next
+
+WORD "RSHIFT", 6, rshift
+setl a, pop
+shrl a, z
+setl z, a
+next
+
+; Nonstandard, but useful.
+WORD "ARSHIFT", 7, arshift
+setl a, pop
+asrl a, z
+setl z, a
+next
+
+
+; Comparisons
+WORD "=", 1, equal
+setl a, z
+clrl z
+ifel pop, a
+  setl z, -1
+next
+
+WORD "<", 1, less_than
+setl a, z
+clrl z
+iful pop, a ; That's nos < tos
+  setl z, -1
+next
+
+WORD "U<", 2, uless_than
+setl a, z
+clrl z
+ifll pop, a ; That's nos < tos, which is perfect.
+  setl z, -1
+next
+
+; TODO Omitted EX-related math; probably not needed with 32-bit arithmetic?
+
+; Stack operations
+WORD "DUP", 3, dup
+setl push, z
+next
+
+WORD "DROP", 4, drop
+setl z, pop
+next
+
+WORD "OVER", 4, over
+setl a, peek
+setl push, z
+setl z, a
+next
+
+WORD "SWAP", 4, swap
+setl a, pop
+setl push, z
+setl z, a
+next
+
+WORD "ROT", 3, rot
+; ( c b a -- b a c )
+popw {b, c}
+setl push, b
+setl push, z
+setl z, c
+next
+
+WORD "-ROT", 4, negrot
+; ( c b a -- a c b )
+popw {b, c}
+pshw {c, z}
+setl z, b
+next
+
+; This is smaller and faster in assembly.
+WORD "NIP", 3, nip
+addl sp, 2
+next
+
+WORD ">R", 2, to_r
+pushrsp z
+setl z, pop
+next
+
+WORD "R>", 2, from_r
+setl push, z
+poprsp z
+next
+
+WORD "R@", 2, fetch_r
+setl push, z
+setl z, [j]
+next
+
+WORD "DEPTH", 5, depth
+setl push, z
+setl z, data_stack_top ; One extra from Z. TODO This is never 0...
+subl z, sp
+next
+
+WORD "RSP@", 4, rsp_fetch
+setl push, z
+setl z, j
+next
+
+; This is a bit odd because Z is TOS.
+WORD "SP@", 3, sp_fetch
+setl push, z
+setl z, sp
+next
+
+
+WORD "@", 1, fetch
+setl z, [z]
+next
+
+WORD "!", 1, store
+setl [z], pop ; TOS is address, in Z.
+setl z, pop ; Pop the next value into Z, since it's been consumed.
+next
+
+WORD "H@", 2, hfetch
+setl a, z
+clrl z
+setw z, [a]
+next
+
+WORD "H!", 2, hstore
+setl a, pop ; Still a 32-bit value from the stack, they always are cells.
+setw [z], a ; But then store a single word.
+setl z, pop ; Pop a fresh TOS.
+next
+
+WORD "2@", 2, two_fetch
+; 2 cells stored big-endian, and returned ( lo hi ), so hi is in Z.
+setl push, [z+2]
+setl z, [z]
+next
+
+WORD "2!", 2, two_store
+; Given ( lo hi addr -- ) store them big-endian.
+setl [z], pop
+setl [z+2], pop
+setl z, pop ; Fresh TOS into Z
+next
+
+WORD "?DUP", 4, qdup
+ifnl z, 0
+  setl push, z
+next
+
+WORD "EXECUTE", 7, execute
+; Leave I alone. Jump directly to the target.
+; If it's a DOCOL or other word, its code field will do the right thing.
+setl a, z
+setl z, pop
+setl pc, a
+; Deliberately no NEXT here.
+
+:compile ; (value) -> void
+setl b, [var_dsp]
+setl [b]+, a
+setl [var_dsp], b
+setl pc, pop
+
+WORD 0x2c, 1, comma
+setl a, z
+setl z, pop
+jsrl compile
+next
+
+WORD "2DUP", 4, two_dup
+setl a, peek ; NOS value
+setl push, z ; Push "old" TOS
+setl push, a ; Push new NOS
+; Z is still TOS.
+next
+
+WORD "2DROP", 5, two_drop
+addl sp, 2 ; Discard NOS
+setl z, pop ; Pop the new TOS
+next
+
+WORD "2SWAP", 5, two_swap
+popw {a, b, c} ; ( c b a z -- a z c b )
+setl push, a
+pshw {z, c}
+setl z, b
+next
+
+WORD "2OVER", 5, two_over
+; ( c b a z -- c b a z c b )
+setl push, z
+setl z, [sp + 4]    ; Copy new TOS (b)
+setl push, [sp + 6] ; Copy C to NOS
+next
+
+
+
+WORD "1+", 2, one_plus
+addl z, 1
+next
+
+WORD "1-", 2, one_minus
+subl z, 1
+next
+
+WORD "+!", 2, plus_store
+addl [z], pop
+setl z, pop ; Consume address
+next
+
+WORD "-!", 2, minus_store
+subl [z], pop
+setl z, pop ; Consume address
+next
+
+
+; Branching primitives
+; (BRANCH) expects a delta at [i], relative to i, and unconditionally branches.
+WORD "(BRANCH)", 8, branch
+addl i, [i]
+next
+
+; (0BRANCH) consumes TOS, and branches only if it's 0.
+WORD "(0BRANCH)", 9, zbranch
+setl a, 2
+ifel z, 0
+  setl a, [i]
+addl i, a
+setl z, pop  ; Consume the condition
+next
+
+; Words and headers
+WORD "EXIT", 4, exit
+poprsp i
+next
+
+
+
+:header_to_cfa ; (*hdr) -> cfa
+clrl b
+setw b, [a+2]
+andl b, mask_len
+addl a, 3
+addl a, b
+setl pc, pop
+
+
+; Turns a word header into a CFA.
+WORD "(>CFA)", 6, to_cfa
+setl a, z
+jsrl header_to_cfa
+setl z, a
+next
+
+
+
+; Parsing and input
+; Input sources are composed of:
+; word: type (-1 = keyboard, -2 = EVALUATE, -3 = streaming file)
+; long: streaming file index (undefined for other types)
+; long: buffer start
+; long: index into buffer (>IN)
+; word: parsed length
+; For a total length of 8 words.
+
+; Offset constants
+.def src_type, 0
+.def src_file_index, 1
+.def src_buffer, 3
+.def src_index, 5
+.def src_length, 7
+.def sizeof_src, 8
+
+.def src_type_keyboard, -1
+.def src_type_evaluate, -2
+.def src_type_stream, -3
+
+; Streaming files: set the type to -3, and file_index is the absolute BYTE index
+; into the file. src_buffer points at the address in memory for our buffer,
+; index offsets into that buffer. One line at a time, up to newlines.
+; When it discoveres a NUL byte, that's considered EOF.
+
+:var_source_index .dat 0
+
+:input_sources .reserve sizeof_src * 16
+
+:keyboard_buffer .reserve 64
+:streaming_buffer .reserve 128
+
+; Resets the input system, as on startup.
+; By default, this dumps all sources but the keyboard.
+:init_input ; () -> void
+setw [var_source_index], 0
+setw [input_sources + src_type], src_type_keyboard
+setl [input_sources + src_index], 0
+setw [input_sources + src_length], 0
+setl pc, pop
+
+
+
+:current_source ; () -> *src
+clrl a
+setw a, [var_source_index]
+mulw a, sizeof_src
+addl a, input_sources
+setl pc, pop
+
+
+:parse_region ; () -> addr, len
+jsrl current_source
+clrl b
+setw b, [a + src_length]
+subl b, [a + src_index]  ; B is now the remaining length.
+setl c, [a + src_buffer] ; C is the buffer's start.
+addl c, [a + src_index]  ; C is now the address of the next character.
+setl a, c
+setl pc, pop
+
+:save_parse_region ; (addr) -> void
+pshw {a}
+jsrl current_source
+setl b, pop ; New buffer pointer
+subl b, [a + src_buffer] ; Minus the start of the buffer
+setl [a + src_index], b  ; Gives our adjusted index.
+setl pc, pop
+
+
+:parse ; (delim) -> (addr, count)
+pshw {x, y, z}
+setl x, a
+
+setl z, 0 ; Z holds the value to subtract from the final length. 0 by default.
+jsrl parse_region ; A is the address, B the length remaining.
+setl y, a ; Save the start of our word to Y.
+
+:parse_loop
+bzrdl b, parse_done
+brnw [a]+, x, parse_loop ; A is bumped, B is decremented, not the delim, so loop.
+
+; If we fall through to right here, then we found a delimiter. We've already
+; bumped A past it, but then length is too long.
+setl z, 1
+
+:parse_done ; Either we ran out of length, or found our delimiter.
+; A is the end address.
+; Save our parse region.
+setl push, a
+jsrl save_parse_region ; Saves the new >IN based on A.
+
+; Now the ending address is on the stack, Y holds the start address.
+setl b, pop
+subl b, y ; B is now the length of our word, if we hit EOL
+subl b, z ; But we subtract Z, which was set to 1 if we hit a delimiter, else 0.
+setl a, y
+
+; Now we're ready to return, with the start address in A and length in B.
+; All the bookkeeping of the input source is up to date.
+popw {x, y, z}
+setl pc, pop
+
+
+; Consumes 0 or more leading delimiters (always spaces), then does a regular parse.
+:parse_name ; () -> (addr, count)
+jsrl parse_region ; A = addr, B = len
+brul b, 1, parse_name_empty
+
+:parse_name_leading
+bzrdl b, parse_name_done
+brew [a]+, 32, parse_name_leading ; space
+
+; If we fell out here, we found a non-delim character, but then advanced A past
+; it. So we back A up by 1.
+subl a, 1
+
+:parse_name_done
+jsrl save_parse_region ; Saves this new A to >IN.
+setl a, 32 ; space
+jsrl parse
+
+;setl push, a
+;setl push, b
+;jsrl print_len
+;setl b, pop
+;setl a, pop
+setl pc, pop ; Tail call into parse.
+
+:parse_name_empty
+setl a, 0
+setl b, 0
+setl pc, pop
+
+
+WORD "PARSE", 5, forth_parse
+setl a, z
+jsrl parse
+setl push, a ; address
+setl z, b ; length
+next
+
+WORD "PARSE-NAME", 10, forth_parse_name
+jsrl parse_name
+setl push, z ; Old TOS
+setl push, a ; address
+setl z, b ; length
+next
+
+WORD "SOURCE", 6, forth_source
+jsrl current_source
+setl push, z ; Push old TOS
+setl push, [a + src_buffer]
+clrl z
+setw z, [a + src_length]
+next
+
+
+
+; Number parsing
+; This does **unsigned** number parsing.
+:to_number  ; ( n count addr -- n' count' addr' )
+pshw {x, y}
+
+clrl y
+setl y, [var_base]
+
+; If the first character is $, force the base to 16.
+brnw [c], 0x24, to_number_loop ; '$'
+
+; It's a $, so adjust things.
+subl b, 1
+addl c, 1
+setl y, 16
+
+:to_number_loop
+brew b, 0, to_number_done
+clrl x
+setw x, [c]  ; Deliberately not advancing the pointers, in case it's not a digit.
+subw x, 0x30 ; '0' -> 0
+
+brlw x, 10, to_number_check ; It's a digit
+
+; Try uppercase letters
+subw x, 0x41 - 0x30 ; 'A' -> 0
+brlw x, 26, to_number_check_letter ; It's uppercase
+
+; Try lowercase letters.
+subw x, 0x61 - 0x41 ; 'a' -> 0
+brlw x, 26, to_number_check_letter
+
+; Still here? Digit's invalid.
+setl pc, to_number_fail
+
+:to_number_check_letter
+; X holds the digit, but it needs bumping by 10.
+addw x, 10
+
+:to_number_check
+; X holds the actual digit value. Check it against base (Y)
+brlw x, y, to_number_load
+setl pc, to_number_fail
+
+:to_number_load
+; Valid digit in X. Mix it into A.
+mull a, y
+addl a, x
+subl b, 1 ; Reduce length
+addl c, 1 ; Bump pointer.
+setl pc, to_number_loop
+
+
+:to_number_fail
+; X is not a valid digit, so return.
+:to_number_done
+; Run out of string, so return.
+popw {x, y, pc}
+
+
+WORD ">NUMBER", 7, forth_to_number
+; (u1 addr1 len1 -- u2 addr2 len2 )
+popw {a, c}
+setl b, z
+jsrl to_number
+setl push, a
+setl push, c
+setl z, b
+next
+
+
+; Assembles a new partial dictionary header.
+; Parses a name!
+; The new header has the right length and a copy of the name, and is tagged as
+; hidden. Returns the address where the code should go.
+:make_header ; () -> cfa
+pshw {x}
+setl x, [var_dsp]
+
+; Write the old LATEST at DSP.
+setl [x], [var_latest]
+; Move latest to be DSP.
+setl [var_latest], x
+addl x, 2
+
+
+; Parse a name.
+jsrl parse_name ; A = addr, B = len
+
+; Write the word's length at X.
+setw [x], b
+borw [x]+, mask_hidden ; Advance X so it's pointing at the first letter slot.
+
+:make_header_loop
+bzrdl b, make_header_done
+setw c, [a]+
+ifgw c, 96
+  iflw c, 123
+    subw c, 32  ; Force it to uppercase.
+setw [x]+, c
+setl pc, make_header_loop
+
+:make_header_done
+; X is our codeword address.
+setl [var_dsp], x
+; setl [var_last_word], x TODO I think this can be replaced with LATEST @ >CFA
+setl a, x
+popw {x, pc}
+
+
+; Never really called, but it's read out by the CREATE code.
+:jsr_dodoes
+jsrl dodoes
+
+; On a create call, we write a JSRL dodoes (two words). DODOES is in low memory,
+; so a 16-bit literal suffices. DODOES expects the DOES> address in the next
+; longword, which we write. The real data area follows.
+WORD "CREATE", 6, forth_create
+jsrl make_header ; A (and DSP) are now the code area.
+setl [a]+, [jsr_dodoes] ; Write our 2-word DODOES jump.
+setl [a]+, 0            ; And a default 0 DOES> slot.
+
+setl [var_dsp], a ; DSP points at the next free slot.
+setl a, [var_latest] ; Get the header
+xorw [a+2], mask_hidden ; And toggle off the hidden bit.
+next
+
+
+
+; Ignores case. Assumes the addr1/len1 is the input string and addr2/len2 is the
+; dictionary one - which is already uppercased.
+; The hidden flag is part of the dictionary length, therefore.
+:strcmp ; (input-addr input-len dict-addr dict-len-hidden) -> flag?
+pshw {y}
+andl b, mask_len
+andl x, mask_len_hidden
+
+brnl b, x, strcmp_fail ; Lengths don't match, they can't be the same.
+
+; Note that we never use X again - we only need one of the identical lengths.
+:strcmp_loop
+bzrdl b, strcmp_match ; If the length has run out, we're done.
+
+; Fold lowercase letters to uppercase.
+setw y, [a]+
+ifgw y, 96
+  iflw y, 123
+    subw y, 32
+brew y, [c]+, strcmp_loop ; Still equal, so loop to the top.
+
+; If that check failed, we've failed.
+:strcmp_fail
+setl a, 0
+popw {y, pc}
+
+:strcmp_match
+setl a, 1
+popw {y, pc}
+
+
+:find ; (addr, len) -> *hdr, 0 for failure.
+pshw {x, y, z, i} ; Y saves the address, Z the length, I the working header.
+setl y, a
+setl z, b
+clrl b
+
+setl i, [var_latest]
+
+:find_loop
+brel i, 0, find_done
+
+setl c, i
+addl c, 2 ; Points at the length.
+setw x, [c]+ ; Read length to X, C points to string.
+
+setl a, y
+setl b, z ; Copy in the saved input string.
+jsrl strcmp ; A is now the flag
+brnw a, 0, find_done ; Found it.
+
+; Failing that, advance I through the linked list.
+setl i, [i]
+setl pc, find_loop
+
+:find_done
+setl a, i
+popw {x, y, z, i, pc}
+
+
+WORD "(FIND)", 6, forth_find
+setl b, z    ; TOS is the length
+setl a, peek ; NOS is the address
+jsrl find    ; A is the *hdr
+brel a, 0, forth_find_not_found
+
+; Found, push the header address (A) and then the immediacy flag.
+setl peek, a
+setl z, -1 ; Assume a regular, non-immediate word for now.
+
+ifbw [a + 2], mask_immediate ; Bits in common
+  setl z, 1
+
+:forth_find_done
+next
+
+:forth_find_not_found
+setl peek, 0
+setl z, 0
+setl pc, forth_find_done
+
+
+:jsr_docol
+jsrl docol
+
+WORD ":", 1, colon
+jsrl make_header
+setl a, [jsr_docol]
+jsrl compile
+setl [var_state], state_compiling
+next
+
+WORD ":NONAME", 7, colon_noname
+setl x, [var_dsp]
+setl push, z
+setl a, [jsr_docol]
+jsrl compile
+setl [var_state], state_compiling ; TODO last word?
+next
+
+
+WORD 0x3b, 0x8001, semicolon
+; Compile EXIT
+setl a, exit
+jsrl compile
+
+setl a, [var_latest]
+setl b, mask_hidden
+notl b
+andw [a+2], b ; Unhide the new word.
+
+setl [var_state], state_interpreting
+next
+
+
+
+; Keyboard handling
+:read_key ; () -> key
+setw a, 1
+hwiw [var_hw_keyboard]
+brew c, 0, read_key
+
+; Found a key
+clrl a
+setw a, c
+setl pc, pop
+
+
+WORD "KEY", 3, key
+jsrl read_key
+setl push, z
+setl z, a
+next
+
+; Refill for keyboard.
+:refill_keyboard ; () -> valid?
+brnl [var_accept], 0, refill_keyboard_accept ; Nicer editing with Forth ACCEPT
+
+pshw {x, y}
+jsrl current_source
+setl x, a
+
+setl y, keyboard_buffer
+setl [x + src_buffer], y
+setl [x + src_index], 0
+
+; Backspace is 16, enter is 17.
+:refill_keyboard_loop
+jsrl read_key ; A is the char.
+brew a, 16, refill_keyboard_backspace
+brew a, 17, refill_keyboard_done ; Newline
+
+; Main case: write the character to our buffer.
+setw [y]+, a
+setl pc, refill_keyboard_loop
+
+:refill_keyboard_backspace
+subl y, 1
+ifll y, keyboard_buffer
+  setl y, keyboard_buffer
+setl pc, refill_keyboard_loop
+
+:refill_keyboard_done
+subl y, keyboard_buffer ; Y is now the length.
+setw [x + src_length], y
+
+setl a, -1
+popw {x, y, pc}
+
+; TODO Handle overflow in case too many characters are typed.
+
+:refill_keyboard_accept ; () -> valid?
+setl push, z
+setl push, keyboard_buffer
+setl z, 64
+setl a, [var_accept]
+jsrl call_forth
+
+; Now the stack is ( len ) the number of characters read.
+jsrl current_source ; A is now the src address.
+setl [a + src_index], 0
+setw [a + src_length], z ; TOS is the length
+setl [a + src_buffer], keyboard_buffer
+
+; Emit a space before the output.
+setl z, 32 ; space, replacing the consumed length.
+setl a, [var_emit]
+jsrl call_forth
+setl pc, pop
+
+
+
+; Most of the refills are written with Forth.
+WORD "(SRC)", 5, forth_input_source
+; Pushes the input source pointer.
+jsrl current_source
+setl push, z
+setl z, a
+next
+
+
+WORD "REFILL", 6, refill
+jsrl current_source
+clrl b
+setw b, [a + src_type]
+brew b, src_type_keyboard, refill_keyboard
+brew b, src_type_evaluate, refill_evaluate
+brew b, src_type_stream, refill_streaming
+
+; Can't happen
+brk
+
+
+; Since evaluate strings are only a single line, there's nothing to refill.
+; We simply decrement the source index and return 0.
+:refill_evaluate
+subw [var_source_index], 1
+setl a, 0
+setl pc, pop
+
+
+; Slightly dumb, but simple: read a byte at a time. If we read a 0, that's EOF.
+; Upon reading a 0, though, there's still one line for the buffer.
+; So the real condition to fail and pop the input source is when the first byte
+; read is a 0.
+:refill_streaming ; () -> valid?
+pshw {x, y, z}
+jsrl current_source
+setl x, a
+
+setl y, streaming_buffer
+setl [x + src_buffer], y
+setl [x + src_index], 0
+setl z, 1 ; First read.
+
+:refill_streaming_loop
+setl c, [x + src_file_index]
+setl a, c
+shrl a, 10 ; Divide by 1024 to get the block number.
+jsrl ensure_block
+setl a, c
+shrl a, 1 ; Shift to work in words.
+andl a, 511 ; The index into the current block (in words).
+
+clrl b
+setw b, [a + block_buffer] ; B is our word read in.
+ifcl c, 1 ; If the index is even, shift the word right.
+  shrl b, 8
+andl b, 255 ; B is finally the byte we've read.
+
+ifnl z, 0   ; First read.
+  ifel b, 0 ; No data
+    setl pc, refill_streaming_end_of_disk
+
+setl z, 0 ; No longer first read.
+; Advance to the next byte, unless we read 0.
+ifnl b, 0
+  addl [x + src_file_index], 1
+
+; Handle the special case of B being 0 or a newline.
+brel b, 0, refill_streaming_end
+brel b, 10, refill_streaming_end
+
+; It's a real character, so record it and loop.
+setw [y]+, b
+setl pc, refill_streaming_loop
+
+
+:refill_streaming_end ; Found 0 or newline, so record length and exit.
+subl y, [x + src_buffer]
+setw [x + src_length], y
+
+setl a, [x + src_buffer]
+clrl b
+setw b, [x + src_length]
+;jsrl print_len
+
+setl a, -1 ; Success
+popw {x, y, z, pc}
+
+
+:refill_streaming_end_of_disk ; Found end of disk - pop the source.
+jsrl pop_input
+setl a, -1
+popw {x, y, z, pc}
+
+; Pops an input source.
+:pop_input ; () -> void
+subw [var_source_index], 1
+setl pc, pop
+
+
+; Disk handling:
+; - Currently there's only one disk block buffer.
+; - It's never dirty, so it can always be dumped and replaced.
+; - A cached block of -1 means empty.
+:cached_block .dat -1
+:block_buffer .reserve 512
+:disk_last_state .dat 0
+
+.def disk_state_no_media, 0
+.def disk_state_ready, 1
+.def disk_state_ready_wp, 2
+.def disk_state_busy, 3
+
+; Spins until the disk is fully loaded.
+:await_disk ; () -> void
+brnw [disk_last_state], disk_state_ready, await_disk
+setl pc, pop
+
+; Interrupt handler for disk reads.
+:disk_interrupt_handler ; (msg) -> void
+pshw {b, c}
+setl a, 0
+hwiw [var_hw_disk]
+ifnw c, 0
+  brk ; Abject failure
+setw pc, [b + disk_state_handlers]
+
+
+:interrupt_handler_return
+popw {b, c}
+rfi
+
+:disk_state_handlers
+.dat dsh_no_media, dsh_ready, dsh_ready, dsh_busy
+
+:dsh_no_media
+setw [cached_block], -1 ; Empty cache.
+setw [disk_last_state], disk_state_no_media
+setl pc, interrupt_handler_return
+
+:dsh_ready
+setw [disk_last_state], disk_state_ready
+setl pc, interrupt_handler_return
+
+:dsh_busy
+setw [disk_last_state], disk_state_busy
+setl pc, interrupt_handler_return
+
+
+; TODO Emit a message when there's no disk.
+
+:read_block ; (blk, buffer) -> void
+pshw {x, y}
+setl x, a
+setl y, b
+jsrl await_disk
+setw [cached_block], x
+setl a, 2 ; Read; X and Y are already set.
+hwiw [var_hw_disk]
+ifnw b, 1 ; 1 on successfully started read.
+  brk
+jsrl await_disk
+popw {x, y, pc}
+
+:write_block ; (blk, buf) -> void
+pshw {x, y}
+setl x, a
+setl y, b
+jsrl await_disk
+setw [cached_block], -1
+setw a, 3 ; Write
+hwiw [var_hw_disk]
+ifnw b, 1 ; 1 on successfully started write.
+  brk
+jsrl await_disk
+popw {x, y, pc}
+
+
+:ensure_block ; (blk) -> void
+ifew [cached_block], a
+  setl pc, pop
+
+setl b, block_buffer
+setl pc, read_block
+
+
+; Reads a block into the specified buffer.
+WORD "BLK@", 4, block_fetch
+setl b, z ; Buffer
+setl a, pop ; Block number.
+setl z, pop
+jsrl read_block
+next
+
+
+
+; Pushes a streaming source and runs through its code.
+:run_disk ; () -> void
+addw [var_source_index], 1
+jsrl current_source
+
+setw [a + src_type], src_type_stream
+setl [a + src_index], 128 ; EOL, let REFILL load it.
+setl [a + src_file_index], 0 ; First byte of the file.
+setl [a + src_length], 128
+setl [a + src_buffer], streaming_buffer
+setl pc, refill ; Tail call into refill.
+
+WORD "RUN-DISK", 8, forth_run_disk
+jsrl run_disk
+next
+WORD "BOOT-DISK", 9, forth_boot_disk
+jsrl run_disk
+setl pc, quit_loop
+; Never returns
+
+
+WORD "REFILL", 6, forth_refill
+jsrl refill
+setl push, z
+setl z, a
+next
+
+
+; \ is awkward to spell.
+WORD 0x5c, 0x8001, line_comment
+jsrl refill
+next
+
+; Called at the end of bootstrapping.
+; Expects the following on the stack:
+; (vram_address 'emit 'accept 'cr)
+WORD "(SETUP-HOOKS)", 13, setup_hooks
+setl [var_cr], z
+setl [var_accept], pop
+setl [var_emit], pop
+
+setl a, 0
+setl b, pop
+setl [var_vram], b
+hwiw [var_hw_lem] ; Set the VRAM in the hardware.
+
+setl z, pop ; Restore TOS to Z.
+next
+
+
+; Called after the system is loaded from the source code disk, and streams the
+; compiled system out to the disk.
+WORD "(BOOTSTRAP)", 11, bootstrap
+; Prepare for the bootstrap by readjusting main()
+setl [main_continued], main_continued_preload
+
+setl x, 0 ; X is the current disk block.
+setl y, 0 ; Y is the copy pointer.
+
+:bootstrap_loop
+setl a, x
+setl b, y
+jsrl write_block
+addl x, 1
+addl y, 512
+brll y, [var_dsp], bootstrap_loop
+
+; Bootstrapping complete! Say so.
+setl a, msg_bootstrap_complete
+jsrl print
+setl a, [var_cr]
+jsrl call_forth
+setl pc, quit
+
+
+; Can be called from Forth with an XT. If this value is nonzero, that word is
+; called at startup, rather than the keyboard interpreter.
+; NB: To configure TC-Forth for interactive use, set forth_main to 0.
+; To configure it to automatically launch the inserted disk as a stream, use
+; boot_disk.
+; Those two settings are made in the interactive.masm and boot.masm files.
+WORD "(MAIN!)", 7, forth_main_set
+setl [forth_main], z
+setl z, pop
+next
+
+; Prints a C-style 0-terminated string using the Forth EMIT word.
+:print ; (str) -> void
+setl push, x
+setl x, a
+
+:print_loop
+clrl a
+setw a, [x]+
+brew a, 0, print_done
+
+setl push, z
+setl z, a
+setl a, [var_emit]
+jsrl call_forth
+setl pc, print_loop
+
+:print_done
+popw {x, pc}
+
+
+
+:call_forth_saved .reserve 6*2
+:call_forth_ca lw call_forth_cont
+
+:call_forth ; (CFA) -> void
+setl b, call_forth_saved
+setl [b]+, x
+setl [b]+, y
+setl [b]+, i
+setl [b]+, j
+setl [b]+, pop ; The saved PC I need to return to.
+setl i, call_forth_ca
+setl pc, a
+
+:call_forth_cont
+setl b, call_forth_saved
+setl x, [b]+
+setl y, [b]+
+setl i, [b]+
+setl j, [b]+
+setl pc, [b]+
+
+
+; Hardware control
+; In order to find and index hardware from Forth code, this is a small set of
+; words for generic indexing of hardware.
+WORD "#DEVICES", 8, count_devices
+setl push, z
+hwnl z
+next
+
+WORD "DEVICE", 6, device_details
+; ( num -- mfr version id )
+hwqw z ; A is the ID, C the version, X the manufacturer.
+setl push, x
+setl push, c
+setl z, a
+next
+
+; Registers are here given a bit each, with input in the upper byte output in
+; the lower byte: abcxyzij ABCXYZIJ.
+; The caller of HWI supplies the input register values, this mask word and the
+; device number. HWI returns the output register values.
+; Registers are in J I Z Y X C B A order.
+:hwi_backup_j lw 0
+:hwi_backup_i lw 0
+:hwi_mask     lw 0
+:hwi_device   lw 0
+
+WORD "HWI", 3, forth_hwi
+; ( in_regs... bitmask device-num -- out_regs... )
+setl [hwi_backup_j], j
+setl [hwi_backup_i], i ; Z is already getting mangled since it's TOS.
+setl [hwi_device], z
+setl [hwi_mask], pop ; Now all the input registers are on the stack.
+
+ifbw [hwi_mask], 0x8000
+  setl a, pop
+ifbw [hwi_mask], 0x4000
+  setl b, pop
+ifbw [hwi_mask], 0x2000
+  setl c, pop
+ifbw [hwi_mask], 0x1000
+  setl x, pop
+ifbw [hwi_mask], 0x0800
+  setl y, pop
+ifbw [hwi_mask], 0x0400
+  setl z, pop
+ifbw [hwi_mask], 0x0200
+  setl i, pop
+ifbw [hwi_mask], 0x0100
+  setl j, pop
+
+hwil [hwi_device]
+
+ifbw [hwi_mask], 0x0001
+  setl push, j
+ifbw [hwi_mask], 0x0002
+  setl push, i
+ifbw [hwi_mask], 0x0004
+  setl push, z
+ifbw [hwi_mask], 0x0008
+  setl push, y
+ifbw [hwi_mask], 0x0010
+  setl push, x
+ifbw [hwi_mask], 0x0020
+  setl push, c
+ifbw [hwi_mask], 0x0040
+  setl push, b
+ifbw [hwi_mask], 0x0080
+  setl push, a
+
+; Pop the topmost of those (or the ancient TOS, if there's no outputs) into Z.
+setl z, pop
+setl j, [hwi_backup_j]
+setl i, [hwi_backup_i]
+next
+
+
+WORD "DEBUG", 5, forth_debug
+brk
+next
+
+
+
+WORD "(LOG)", 5, forth_log
+logl z
+setl z, pop
+next
+
+WORD "(DOLIT)", 7, push_dolit
+setl push, z
+setl z, dolit
+next
+WORD "(DOSTRING)", 10, push_dostring
+setl push, z
+setl z, dostring
+next
+
+
+; TODO Consider using Y as the innermost loop counter, like Z as TOS. It can
+; give a substantial speed boost!
+WORD "(LOOP-END)", 10, do_loop_end
+setl x, [j]  ; X is the index
+setl y, [j+2]; Y is the limit
+setl c, x ; C is i - l
+subl c, y
+; Z (TOS) has our delta.
+; We want delta + index - limit
+setl a, z
+addl a, c ; A is delta + index - limit
+xorl a, c ; A is d+i-l ^ i-l
+setl b, 0
+ifcl a, 0x80000000 ; True when top bit is clear.
+  setl b, -1
+setl a, b ; Keep the first flag in A.
+
+; Then calculate delta XOR index - limit
+xorl c, z
+setl b, 0
+ifcl c, 0x80000000
+  setl b, -1
+borl a, b   ; OR those flags.
+notl a      ; and negate the result.
+addl x, z   ; New index is delta + index.
+setl [j], x ; Write the new index
+
+setl z, a  ; Push the flag, replacing the delta.
+next
+
+
+
+WORD "STATE", 5, forth_state
+setl push, z
+setl z, var_state
+next
+
+WORD "(>HERE)", 7, here_ptr
+setl push, z
+setl z, var_dsp
+next
+
+WORD "(LATEST)", 8, forth_latest
+setl push, z
+setl z, var_latest
+next
+
+; TODO Last word?
+
+WORD "BASE", 4, forth_base
+setl push, z
+setl z, var_base
+next
+
+
+; TODO This is debug only and can be dropped later.
+:print_word_name ; (*hdr) -> void
+setw b, [a + 2]
+logw b ; Print with the immediate bit and so on.
+andl b, mask_len
+addl a, 3 ; A = addr, B = len
+setl pc, print_len
+
+
+:print_len
+bzrdl b, print_len_done
+setw c, [a]+
+logw c
+setl pc, print_len
+
+:print_len_done
+setl pc, pop
+
+
+
+:reset_state
+jsrl init_input
+
+; Clear both stacks.
+setl a, pop ; Our return address.
+setl sp, data_stack_top
+setl j, return_stack_top
+setl [var_state], state_interpreting
+setl [var_base], 10
+setl pc, a
+
+
+; Indirections for returning from interpretive words to QUIT.
+:quit_ca lw quit_loop
+
+:quit ; () -> [never returns]
+; Start by initializing everything
+jsrl reset_state
+; Immediately refill, dumping any old text.
+jsrl refill
+
+:quit_loop
+jsrl parse_name ; A = addr, B = len
+brnl b, 0, quit_found
+
+; If the source is the keyboard and var_emit is set, print " ok".
+brel [var_emit], 0, quit_loop_continue
+
+jsrl current_source
+brnw [a + src_type], src_type_keyboard, quit_loop_continue
+
+; If we're still here, it's the keyboard.
+setl a, msg_ok
+jsrl print
+setl a, [var_cr]
+jsrl call_forth
+
+:quit_loop_continue
+jsrl refill
+setl pc, quit_loop
+
+
+:quit_found ; Try to find our word.
+setl x, a
+setl y, b ; Save the word.
+jsrl find
+
+brnl a, 0, quit_found_word
+
+; Try to parse it as a number.
+setl a, 0
+setl b, y
+setl c, x
+
+; Handle negative numbers.
+setl push, 0
+brnw [x], 0x2d, quit_non_negative ; '-'
+
+setl peek, 1 ; Flip our flag, and advance the input.
+addl c, 1
+subl b, 1
+
+:quit_non_negative
+jsrl to_number ; A is now the 32-bit unsigned value.
+
+; If the length in B is 0, we parsed it fully as a number.
+brel b, 0, quit_found_number
+
+setl a, pop ; Drop the negative flag.
+
+; Failed to recognize this word all around.
+ifel [var_emit], 0
+  brk ; No EMIT word yet, just die. X is the string, Y its length.
+
+; Otherwise emit a nice error message.
+setl a, err_not_found
+jsrl print
+; Now load the input word in and give it a 0 terminator.
+setw [x, y], 0 ; Set the terminator.
+setl a, x
+jsrl print ; And print the stirng.
+
+; Now jump back to the start of QUIT to keep accepting input.
+setl pc, quit
+
+
+:quit_found_number ; A = number, pushed = negative flag.
+setl b, pop
+ifnl b, 0
+  negl a
+
+brel [var_state], state_interpreting, quit_found_number_interp
+
+; We're compiling. Compile dolit, then our number.
+setl push, a
+setl a, dolit
+jsrl compile
+setl a, pop
+jsrl compile
+setl pc, quit_loop ; Continue parsing.
+
+:quit_found_number_interp ; Interpreting, so push it.
+setl push, z
+setl z, a
+setl pc, quit_loop ; And back to the top.
+
+
+:quit_found_word ; A is the *hdr
+; For debugging.
+;setl push, a
+;jsrl print_word_name
+;setl a, pop
+
+; Convert that to the CFA, but save the header word first.
+clrl x
+setw x, [a+2] ; Length word now in X.
+jsrl header_to_cfa ; A = CFA now.
+
+; Compilation happens only in compile state, and with immediacy 0.
+brel [var_state], state_interpreting, quit_found_word_interp
+brbw x, mask_immediate, quit_found_word_interp
+
+; Still here: compile it.
+jsrl compile
+setl pc, quit_loop
+
+:quit_found_word_interp ; Run it now!
+; A is our CFA. Set I to the indirection, and jump into this word.
+setl i, quit_ca ; When this word next's, it'll land on quit_loop.
+setl pc, a
+
+
+WORD "QUIT", 4, forth_quit
+setl pc, quit
+; No next, quit never returns.
+
+
+
+; Error messages and other strings.
+:msg_ok .dat " ok", 0
+:msg_bootstrap_complete .dat "Bootstrap compelte.", 0
+:err_not_found .dat "Unknown word: ", 0
+
+
+; Hardware table. 2-longword entries: ID, destination address.
+:var_hw_keyboard .dat -1
+:var_hw_lem      .dat -1
+:var_hw_disk     .dat -1
+
+:hw_table
+lw 0x30c17406
+lw var_hw_keyboard
+lw 0x4fd524c5
+lw var_hw_disk
+lw 0x734df615
+lw var_hw_lem
+:hw_table_top
+
+
+; In: Z = hardware number. Clobbers everything!
+:match_hardware
+hwqw z ; Populates A C X
+setl i, hw_table
+
+:match_hardware_loop
+brel a, [i], match_hardware_found
+
+addl i, 4
+brll i, hw_table_top, match_hardware_loop
+
+; Run out of table.
+setl pc, pop ; Found nothing.
+
+:match_hardware_found
+setl a, [i+2]
+setw [a], z
+setl pc, pop
+
+
+
+:init_hardware ; () -> void
+clrl z
+hwnw z
+
+:init_hardware_loop
+bzrdl z, init_hardware_done
+jsrl match_hardware ; Populates if found. Preserves Z.
+setl pc, init_hardware_loop
+
+:init_hardware_done
+setl pc, pop
+
+
+
+:main
+setl sp, data_stack_top
+setl j, return_stack_top
+jsrl init_hardware
+
+; Set up interrupts.
+setl ia, disk_interrupt_handler
+iaqw 0
+
+setl a, 1
+setl x, 2 ; Sets the disk interrupt message to 2.
+hwiw [var_hw_disk]
+
+; Set the disk's initial state.
+setl a, 0
+hwiw [var_hw_disk]
+setw [disk_last_state], b
+
+setl pc, [main_continued]
+
+
+:main_continued lw main_continued_bootstrap
+
+
+; This is the tail of main() for use when bootstrapping from the disk.
+; Once the bootstrap is complete, the bootstrapper will overwrite
+; [main_continued] to point at main_continued_preload.
+:main_continued_bootstrap
+jsrl reset_state
+jsrl run_disk
+setl pc, quit_loop
+
+; Called as the tail of main() when we're running an already-bootstrapped
+; standalone Forth ROM. It checks forth_main and calls into that XT if defined.
+; If forth_main is 0, launches the keyboard interpreter.
+; If a forth_main is set, and returns, QUIT is called.
+:main_continued_preload
+setl a, 0
+setl b, [var_vram]
+hwiw [var_hw_lem] ; Init the display
+
+brel [forth_main], 0, quit
+
+jsrl reset_state
+setl a, [forth_main]
+jsrl call_forth
+setl pc, quit
+
+; Global variables with Forth words to access them.
+:var_dsp  lw initial_dsp
+:var_base lw 10
+; This word must be the last word.
+:var_latest lw hdr_forth_quit
+:var_state lw state_interpreting
+
+; Forth words from core.fs that get overwritten here.
+:var_emit   lw 0
+:var_accept lw 0
+:var_cr     lw 0
+:var_vram   lw 0
+

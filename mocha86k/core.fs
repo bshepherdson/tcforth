@@ -386,5 +386,5 @@ DECIMAL
 vram ' emit ' accept ' cr   (setup-hooks)
 
 S" TC FORTH M86k version 7" type cr
-\ key drop (bootstrap)
+key drop (bootstrap)
 

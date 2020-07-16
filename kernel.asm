@@ -754,7 +754,6 @@ xor [a+1], mask_hidden ; Turn off the hidden bit
 next
 
 
-
 ; Breaks the calling convention!
 ; In: X = addr1, C = len1. Y = addr2, Z = len2
 ; Out: A=1 if same, 0 if not.

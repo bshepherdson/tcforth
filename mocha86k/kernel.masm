@@ -1131,7 +1131,7 @@ setl pc, refill ; Tail call into refill.
 WORD "RUN-DISK", 8, forth_run_disk
 jsrl run_disk
 next
-WORD "BOOT-DISK", 9, forth_boot_disk
+WORD "BOOT-DISK", 9, boot_disk
 jsrl run_disk
 setl pc, quit_loop
 ; Never returns

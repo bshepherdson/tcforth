@@ -59,6 +59,7 @@ setl pc, main
 ; Constants
 .def return_stack_top, 0x1000000 ; 16MW
 .def data_stack_top, return_stack_top - 512
+.def empty_stack_sentinel, 0x20decade
 
 .def mask_immediate, 0x8000
 .def mask_hidden, 0x100
@@ -242,7 +243,7 @@ next
 
 WORD "ROT", 3, rot
 ; ( c b a -- b a c )
-popw {b, c}
+popl {b, c}
 setl push, b
 setl push, z
 setl z, c
@@ -250,8 +251,8 @@ next
 
 WORD "-ROT", 4, negrot
 ; ( c b a -- a c b )
-popw {b, c}
-pshw {c, z}
+popl {b, c}
+pshl {c, z}
 setl z, b
 next
 
@@ -275,10 +276,13 @@ setl push, z
 setl z, [j]
 next
 
+
 WORD "DEPTH", 5, depth
 setl push, z
-setl z, data_stack_top ; One extra from Z. TODO This is never 0...
+setl z, data_stack_top
 subl z, sp
+shrl z, 1    ; That counted the words, we want to count the cells.
+subl z, 1    ; Reduce it by one because TOS is in Z.
 next
 
 WORD "RSP@", 4, rsp_fetch
@@ -365,9 +369,9 @@ setl z, pop ; Pop the new TOS
 next
 
 WORD "2SWAP", 5, two_swap
-popw {a, b, c} ; ( c b a z -- a z c b )
+popl {a, b, c} ; ( c b a z -- a z c b )
 setl push, a
-pshw {z, c}
+pshl {z, c}
 setl z, b
 next
 
@@ -502,7 +506,7 @@ setl a, c
 setl pc, pop
 
 :save_parse_region ; (addr) -> void
-pshw {a}
+pshl {a}
 jsrl current_source
 setl b, pop ; New buffer pointer
 subl b, [a + src_buffer] ; Minus the start of the buffer
@@ -511,7 +515,7 @@ setl pc, pop
 
 
 :parse ; (delim) -> (addr, count)
-pshw {x, y, z}
+pshl {x, y, z}
 setl x, a
 
 setl z, 0 ; Z holds the value to subtract from the final length. 0 by default.
@@ -540,7 +544,7 @@ setl a, y
 
 ; Now we're ready to return, with the start address in A and length in B.
 ; All the bookkeeping of the input source is up to date.
-popw {x, y, z}
+popl {x, y, z}
 setl pc, pop
 
 
@@ -602,7 +606,7 @@ next
 ; Number parsing
 ; This does **unsigned** number parsing.
 :to_number  ; ( n count addr -- n' count' addr' )
-pshw {x, y}
+pshl {x, y}
 
 clrl y
 setl y, [var_base]
@@ -656,12 +660,12 @@ setl pc, to_number_loop
 ; X is not a valid digit, so return.
 :to_number_done
 ; Run out of string, so return.
-popw {x, y, pc}
+popl {x, y, pc}
 
 
 WORD ">NUMBER", 7, forth_to_number
 ; (u1 addr1 len1 -- u2 addr2 len2 )
-popw {a, c}
+popl {a, c}
 setl b, z
 jsrl to_number
 setl push, a
@@ -675,7 +679,7 @@ next
 ; The new header has the right length and a copy of the name, and is tagged as
 ; hidden. Returns the address where the code should go.
 :make_header ; () -> cfa
-pshw {x}
+pshl {x}
 setl x, [var_dsp]
 
 ; Write the old LATEST at DSP.
@@ -706,7 +710,7 @@ setl pc, make_header_loop
 setl [var_dsp], x
 ; setl [var_last_word], x TODO I think this can be replaced with LATEST @ >CFA
 setl a, x
-popw {x, pc}
+popl {x, pc}
 
 
 ; Never really called, but it's read out by the CREATE code.
@@ -732,7 +736,7 @@ next
 ; dictionary one - which is already uppercased.
 ; The hidden flag is part of the dictionary length, therefore.
 :strcmp ; (input-addr input-len dict-addr dict-len-hidden) -> flag?
-pshw {y}
+pshl {y}
 andl b, mask_len
 andl x, mask_len_hidden
 
@@ -752,15 +756,15 @@ brew y, [c]+, strcmp_loop ; Still equal, so loop to the top.
 ; If that check failed, we've failed.
 :strcmp_fail
 setl a, 0
-popw {y, pc}
+popl {y, pc}
 
 :strcmp_match
 setl a, 1
-popw {y, pc}
+popl {y, pc}
 
 
 :find ; (addr, len) -> *hdr, 0 for failure.
-pshw {x, y, z, i} ; Y saves the address, Z the length, I the working header.
+pshl {x, y, z, i} ; Y saves the address, Z the length, I the working header.
 setl y, a
 setl z, b
 clrl b
@@ -785,7 +789,7 @@ setl pc, find_loop
 
 :find_done
 setl a, i
-popw {x, y, z, i, pc}
+popl {x, y, z, i, pc}
 
 
 WORD "(FIND)", 6, forth_find
@@ -866,7 +870,7 @@ next
 :refill_keyboard ; () -> valid?
 brnl [var_accept], 0, refill_keyboard_accept ; Nicer editing with Forth ACCEPT
 
-pshw {x, y}
+pshl {x, y}
 jsrl current_source
 setl x, a
 
@@ -895,7 +899,7 @@ subl y, keyboard_buffer ; Y is now the length.
 setw [x + src_length], y
 
 setl a, -1
-popw {x, y, pc}
+popl {x, y, pc}
 
 ; TODO Handle overflow in case too many characters are typed.
 
@@ -954,7 +958,7 @@ setl pc, pop
 ; So the real condition to fail and pop the input source is when the first byte
 ; read is a 0.
 :refill_streaming ; () -> valid?
-pshw {x, y, z}
+pshl {x, y, z}
 jsrl current_source
 setl x, a
 
@@ -1006,13 +1010,13 @@ setw b, [x + src_length]
 ;jsrl print_len
 
 setl a, -1 ; Success
-popw {x, y, z, pc}
+popl {x, y, z, pc}
 
 
 :refill_streaming_end_of_disk ; Found end of disk - pop the source.
 jsrl pop_input
 setl a, -1
-popw {x, y, z, pc}
+popl {x, y, z, pc}
 
 ; Pops an input source.
 :pop_input ; () -> void
@@ -1040,7 +1044,7 @@ setl pc, pop
 
 ; Interrupt handler for disk reads.
 :disk_interrupt_handler ; (msg) -> void
-pshw {b, c}
+pshl {b, c}
 setl a, 0
 hwiw [var_hw_disk]
 ifnw c, 0
@@ -1049,7 +1053,7 @@ setw pc, [b + disk_state_handlers]
 
 
 :interrupt_handler_return
-popw {b, c}
+popl {b, c}
 rfi
 
 :disk_state_handlers
@@ -1072,7 +1076,7 @@ setl pc, interrupt_handler_return
 ; TODO Emit a message when there's no disk.
 
 :read_block ; (blk, buffer) -> void
-pshw {x, y}
+pshl {x, y}
 setl x, a
 setl y, b
 jsrl await_disk
@@ -1082,10 +1086,10 @@ hwiw [var_hw_disk]
 ifnw b, 1 ; 1 on successfully started read.
   brk
 jsrl await_disk
-popw {x, y, pc}
+popl {x, y, pc}
 
 :write_block ; (blk, buf) -> void
-pshw {x, y}
+pshl {x, y}
 setl x, a
 setl y, b
 jsrl await_disk
@@ -1095,7 +1099,7 @@ hwiw [var_hw_disk]
 ifnw b, 1 ; 1 on successfully started write.
   brk
 jsrl await_disk
-popw {x, y, pc}
+popl {x, y, pc}
 
 
 :ensure_block ; (blk) -> void
@@ -1219,7 +1223,7 @@ jsrl call_forth
 setl pc, print_loop
 
 :print_done
-popw {x, pc}
+popl {x, pc}
 
 
 
@@ -1424,6 +1428,7 @@ jsrl init_input
 setl a, pop ; Our return address.
 setl sp, data_stack_top
 setl j, return_stack_top
+setl z, empty_stack_sentinel
 setl [var_state], state_interpreting
 setl [var_base], 10
 setl pc, a

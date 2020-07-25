@@ -159,7 +159,7 @@ VARIABLE (loop-top)
 \ Normally we'd need to bump the count by 1 because the count itself is taking
 \ up stack space, but we also need to knock the count down by 1 because TOS is
 \ in a register.
-: PICK ?dup IF dup ELSE cells sp@ + @ THEN ;
+: PICK dup 0= IF drop dup ELSE cells sp@ cell+ + @ THEN ;
 
 : 2* 1 lshift ;
 : 2/ 1 arshift ;
@@ -329,7 +329,6 @@ VARIABLE (sidx) \ index
     1+ swap
   REPEAT 2drop ;
 
-
 \ Pictured numeric output
 VARIABLE (picout)
 : (picout-top) here 256 + ;
@@ -359,7 +358,6 @@ VARIABLE (picout)
   ELSE <# dup abs s>d #s rot sign #> THEN ;
 
 : . (#HOLD) type space ;
-
 
 
 \ Device finder

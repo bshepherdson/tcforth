@@ -17,6 +17,9 @@ forth_boot.rom: boot.bin core.fs ../bootstrap_bootable.dcs
 	touch $@
 	$(EMULATOR) -turbo -disk core.fs -script ../bootstrap_bootable.dcs $<
 
+interactive: interactive.bin core.fs FORCE
+	$(EMULATOR) -turbo -disk core.fs $<
+
 bootstrap: forth.rom forth_boot.rom FORCE
 
 test: forth_boot.rom FORCE

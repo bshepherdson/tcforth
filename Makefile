@@ -1,10 +1,11 @@
 .PHONY: bootstrap
 default: bootstrap
 
+ASSEMBLER ?= drasm
 EMULATOR ?= dcpu
 
 %.bin: %.asm kernel.asm
-	dasm $<
+	$(ASSEMBLER) $<
 
 forth.rom: interactive.bin core.fs bootstrap_interactive.dcs
 	rm -f $@

@@ -1,0 +1,125 @@
+\ Forth-powered assembler for DCPU-16.
+\ Syntax style is:
+\ Canonical DCPU-16: set [a], 12
+\ This assembler:    12 #   ra []   set,
+
+\ Output is big-endian, as is common for DCPU emulators.
+
+CREATE output 65536 2* allot
+VARIABLE optr
+0 optr !
+VARIABLE max-out
+0 max-out !
+
+: +max ( t-addr -- ) max-out @ max max-out ! ;
+
+: wa ( t-addr -- c-addr ) 2* output + ;
+: w@ ( t-addr -- w ) wa   dup c@ 8 lshift   swap 1+ c@ or ;
+: w! ( w t-addr -- )
+  dup +max wa >R
+  dup 8 rshift 255 and .s R@    c!
+               255 and R> 1+ c! ;
+
+: asm, ( w -- ) optr @ w!   1 optr +! ;
+
+\ Handling the extra words after the opcode.
+CREATE extras 2 cells allot
+VARIABLE #extras
+: +extra ( w -- ) #extras @ cells extras + !   1 #extras +! ;
+
+\ This runs *backwards*, since we assemble b, then a.
+: extras, ( -- )
+  #extras @ BEGIN dup WHILE
+    1- dup cells extras + @ asm,
+  REPEAT drop   0 #extras ! ;
+
+\ Addressing modes
+\ ================
+
+: op-bits ( operand-code a? -- op ) IF 10 ELSE 5 THEN lshift ;
+
+\ Register:          ra         ( r )
+\ Register indirect: ra []      ( r+8 )
+\ Register indexed:  20 ra []+  ( 20 r+$10 )
+: ra    0 ;   : rb    1 ;   : rc    2 ;   : rx    3 ;
+: ry    4 ;   : rz    5 ;   : ri    6 ;   : rj    7 ;
+: [a]   8 ;   : [b]   9 ;   : [c]  10 ;   : [x]  11 ;
+: [y]  12 ;   : [z]  13 ;   : [i]  14 ;   : [j]  15 ;
+: [a+] 16 ;   : [b+] 17 ;   : [c+] 18 ;   : [x+] 19 ;
+: [y+] 20 ;   : [z+] 21 ;   : [i+] 22 ;   : [j+] 23 ;
+
+\ Push/pop:          push | pop ( $18 )
+: push $18 ;
+: pop  $18 ;
+: peek $19 ;
+
+\ Pick               7 picc     ( 7 $1a )
+: picc ( n -- operand ) $1a ;
+
+\ SP                 sp         ( $1b )
+\ PC                 pc         ( $1c )
+\ EX                 ex         ( $1d )
+: sp $1b ;   : pc $1c ;   : ex $1d ;
+
+\ [lit]              77 [#]     ( 77 $1e )
+: [#] ( n -- operand ) $1e ;
+\ lit                77 #       ( 77 $1f ) - Might be assembled as inline
+: #   ( n -- operand ) $1f ;
+
+\ Operand assemblers
+: extra-op  ( extra operand a? -- op ) op-bits swap +extra ;
+: lit-fits? ( n -- ? ) dup $ffff and $ffff =   swap 0 31 within or ;
+: lit-op    ( n a? -- op ) IF dup lit-fits? IF $21 + 10 lshift EXIT THEN THEN
+  +extra   $1f 10 lshift ;
+
+: operand ( ... operand a? -- op )
+  \ $10 to $17, $1a, $1e and maybe $1f have extra words.
+  over $10 $18 within IF extra-op    EXIT THEN
+  over $1a =          IF extra-op    EXIT THEN
+  over $1e =          IF extra-op    EXIT THEN
+  over $1f =          IF nip lit-op  EXIT THEN
+  op-bits ;
+
+
+\ Binary operations have the form:
+\ aaaaaa bbbbb ooooo
+: binary ( opcode "name" --    X: rhs lhs -- )
+  CREATE , DOES>
+    @ >R
+    false operand R> or >R
+    true  operand R> or
+    asm, extras, ;
+
+$01 binary set,   $02 binary add,   $03 binary sub,
+$04 binary mul,   $05 binary mli,   $06 binary div,
+$07 binary dvi,   $08 binary mod,   $09 binary mdi,
+$0a binary and,   $0b binary bor,   $0c binary xor,
+$0d binary shr,   $0e binary asr,   $0f binary shl,
+$10 binary ifb,   $11 binary ifc,   $12 binary ife,   $13 binary ifn,
+$14 binary ifg,   $15 binary ifa,   $16 binary ifl,   $17 binary ifu,
+
+$1a binary adx,   $1b binary sbx,
+$1e binary sti,   $1f binary std,
+
+\ Unary operations have the form:
+\ aaaaaa ooooo 00000
+: unary ( opcode "name" --    X: rhs -- )
+  CREATE , DOES> @ >R   true operand R> 5 lshift or   asm, extras, ;
+
+$01 unary jsr,   $08 unary int,   $09 unary iag,
+$0a unary ias,   $0b unary rfi,   $0c unary iaq,
+$10 unary hwn,   $11 unary hwq,   $12 unary hwi,
+$13 unary log,   $14 unary brk,   $15 unary hlt,
+
+
+: label ( "name" --    X: -- t-addr ) optr @ CONSTANT ;
+
+\ Control structures
+
+: dump ( c-addr u -- )
+  cr cr ." Assembling to " 2dup type cr
+  W/O BIN create-file ABORT" Failed to open output file" >R
+  output   max-out @ 1+ 2*   R@ write-file ABORT" Failed to write"
+  R@ flush-file ABORT" Failed to flush"
+  R> close-file ABORT" Failed to close" ;
+

@@ -1,0 +1,573 @@
+\ Kernel (layer 1) for the DCPU-16.
+\ This is a host Forth file that depends on the ANS Forth assembler for DCPU-16.
+
+\ Design:
+\ - Direct threading
+\ - Return stack: RSP in Z; top 128 cells of memory, $ff80 to $ffff.
+\ - Data stack: PSP is SP; TOS on stack (PUSH, PEEK etc. are super fast)
+\ - IP is I (so STI can be used in NEXT)
+\ - A B C X Y are free; J is reserved (it gets clobbered by STI)
+\   - (No STI, STD aside from that use.)
+
+\ Standard dictionary headers: link, length+immediate+hidden word, len words of
+\ name, code field.
+
+$0000 CONSTANT rp0
+$ff80 CONSTANT sp0
+
+$8000 CONSTANT f_immed
+$4000 CONSTANT f_hidden
+$2fff CONSTANT mask_len
+$7fff CONSTANT mask_len_hidden
+
+VARIABLE there
+0 there ! \ DCPU assembly starts at the bottom by default.
+
+: t,        ( w -- )  asm, ;
+: tcompile, ( xt -- ) asm, ;
+
+CREATE name-scratch 256 allot
+
+VARIABLE last-word
+0 last-word !
+
+\ First line of code, the entry point. Jump to COLD.
+0 # pc set, \ The target will be fixed later.
+
+\ Some macros
+: next,    ( -- ) [i] pc sti, ;
+: pushrsp, ( rhs -- ) 1 # rz sub,   ( rhs ) [z] set, ;
+: poprsp,  ( lhs -- ) [z] 2swap ( rhs lhs ) set,   1 # rz add, ;
+
+\ DOCOL and DODOES right at the top so they can be JSR DOCOL'd with the inline
+\ literal from the code fields!
+
+\ This is called by JSR, so the parameter field address is on the data stack.
+label DOCOL
+  ri pushrsp,
+  pop ri set,
+  next,
+
+label DODOES
+  pop  ra   set, \ DOES> slot address now in A.
+  ra   push set, \ Push it
+  1 #  peek add, \ And +1 so it's now the parameter field address.
+  \ Now check if the DOES> slot has anything good in it.
+  0 #  [a]  ife,
+    fwd   pc set, \ Boring, 0 in the slot. Just leave the PFA on the stack.
+
+  \ Interesting case: jump to the DOES> slot.
+  ri pushrsp,
+  [a] ri set,
+
+  resolve
+  next,
+
+
+\ Not words, just assembler routines.
+label LIT
+  [i] push sti,
+  next,
+
+label DOSTRING
+  \ Next word in the thread is the length, then that many characters.
+  [i] ra   sti, \ Length into TOS, I now points at the string.
+  ri  push set, \ Push the string address as NOS
+  ra  push set, \ And the length above that.
+  ra  ri   add, \ Advance I past the string.
+  next,
+
+
+
+\ Creates a new assembly definition, empty code field.
+\ Creates two host labels: hdr_NAME and cf_NAME, pointing to the header and the
+\ code field respectively.
+: T(CREATE) ( "name" -- )
+  S" label hdr_"  name-scratch      swap move \ "label hdr_"
+  parse-name 2dup name-scratch 10 + swap move \ "label hdr_NAME" ( c-addr u )
+  name-scratch over 10 + EVALUATE \ Creates the hdr_NAME label
+  \ Now compile the header.
+  there @   last-word @ t,   last-word ! ( c-addr u )
+  dup t, \ Compile the length
+  dup >R \ Save the length
+  0 DO ( c-addr ) dup i + c@ asm, LOOP drop ( R: u )
+  \ Now THERE is pointing at the code field.
+  S" label  cf_" name-scratch swap move \ Overwrite the first chunk.
+  name-scratch R> 10 + EVALUATE \ Creates cf_NAME label ( )
+;
+
+: tcode ( "name" -- ) T(CREATE) ;
+: ;tcode      ( -- ) next, ;
+
+\ End marker, but no NEXT.
+: ;tcode-bare ( -- ) ;
+
+
+
+tcode +        pop peek add,   ;tcode
+tcode -        pop peek sub,   ;tcode \ This is correct NOS - TOS order!
+tcode *        pop peek mli,   ;tcode
+tcode -        pop peek sub,   ;tcode
+tcode /        pop peek dvi,   ;tcode
+tcode MOD      pop peek mdi,   ;tcode
+tcode U/       pop peek div,   ;tcode
+tcode UMOD     pop peek mod,   ;tcode
+tcode AND      pop peek and,   ;tcode
+tcode OR       pop peek bor,   ;tcode
+tcode XOR      pop peek xor,   ;tcode
+tcode LSHIFT   pop peek lsl,   ;tcode
+tcode RSHIFT   pop peek lsr,   ;tcode
+tcode ARSHIFT  pop peek asr,   ;tcode
+
+tcode INVERT   $ffff # peek xor, ;tcode
+tcode NOT 
+
+\ Comparison operators all have the same shape with different branches.
+: comparison ( if-xt "name" -- )
+  >R
+  tcode
+    0 # ra set,
+    pop pop   R> execute
+      -1 # ra set,
+    ra push set,
+  ;tcode
+;
+
+' ife, comparison =
+' ifu, comparison <
+' ifl, comparison U<
+
+
+\ Stack operations
+tcode DUP    peek   push set,  ;tcode
+tcode DROP   pop    ra   set,  ;tcode
+tcode OVER   1 picc push set,  ;tcode
+
+tcode SWAP
+  pop  ra   set,
+  pop  rb   set,
+  ra   push set,
+  rb   push set,
+;tcode
+
+tcode ROT ( c b a -- b a c )
+  pop  ra   set,
+  pop  rb   set,
+  pop  rc   set,
+  rb   push set,
+  ra   push set,
+  rc   push set,
+;tcode
+
+tcode -ROT ( c b a -- a c b )
+  pop  ra   set,
+  pop  rb   set,
+  pop  rc   set,
+  ra   push set,
+  rc   push set,
+  rb   push set,
+;tcode
+
+tcode ?DUP
+  0 # peek ifn,
+    peek push set,
+;tcode
+
+tcode NIP ( y x -- x )
+  pop ra   set,
+  ra  peek set,
+;tcode
+
+
+tcode SP@
+  sp ra   set,
+  ra push set,
+;tcode
+
+tcode RP@   rz push set,   ;tcode
+
+tcode >R    pop  pushrsp,   ;tcode
+tcode R>    push poprsp,    ;tcode
+tcode R@    [z]  push set,  ;tcode
+
+tcode DEPTH
+  sp0 # ra set,
+  sp    ra sub,
+  ra  push set,
+;tcode
+
+
+tcode @
+  pop  ra   set,
+  [a]  push set,
+;tcode
+
+tcode !
+  pop  ra  set,
+  pop  [a] set,
+;tcode
+
+\ These store as hi, lo in memory, but push as ( lo hi ) double-words.
+tcode 2@
+  pop    ra   set,
+  1 [a+] push set,
+  [a]    push set,
+;tcode
+
+tcode 2!
+  pop    ra   set,
+  pop    [a]  set,
+  pop  1 [a+] set,
+;tcode
+
+tcode +!
+  pop ra  set,
+  pop [a] add,
+;tcode
+
+
+\ Leaves I alone. Jump directly into the target's code field.
+\ The EXECUTEd word's NEXT will continue after here (eventually).
+tcode EXECUTE
+  pop pc set,
+;tcode-bare
+
+
+
+\ System variables
+label var_dsp    0 asm,
+label var_base   0 asm,
+label var_state  0 asm,
+
+label tcompile  \ (value) -> void
+  var_dsp # rb  set,
+  [b]       rc  set,
+  ra        [c] set,
+  1 #       [b] add,
+  pop       pc  set,
+
+
+tcode ,
+  pop ra set,
+  tcompile # jsr,
+;tcode
+
+
+
+tcode 2DUP
+  1 picc push set,
+  1 picc push set,
+;tcode
+
+tcode 2DROP
+  2 # sp add,
+;tcode
+
+tcode 2SWAP ( x c b a -- b a x c )
+  pop   ra   set,
+  pop   rb   set,
+  pop   rc   set,
+  pop   rx   set,
+  rb    push set,
+  ra    push set,
+  rx    push set,
+  rc    push set,
+;tcode
+
+tcode 2OVER
+  3 picc push set,
+  3 picc push set,
+;tcode
+
+
+tcode 1+      1 # peek add,   ;tcode
+tcode CELL+   1 # peek add,   ;tcode
+tcode CHAR+   1 # peek add,   ;tcode
+
+tcode 1-      1 # peek sub,   ;tcode
+
+\ These are no-ops
+tcode CELLS   ;tcode
+tcode CHARS   ;tcode
+
+tcode CELL   1 # push set,   ;tcode
+
+
+\ Double-cell arithmetic
+\ TODO 123. double-cell conversion in the >NUMBER interpreter
+tcode S>D
+  0 #     ra   set,
+  $8000 # peek ifb, \ Bit in common
+    -1  # ra   set,
+  ra   push  set,
+;tcode
+
+\ D>S is DROP
+tcode D>S   1 # sp add,  ;tcode
+
+tcode D+  ( l1 h1 l2 h2 -- l3 h3 )
+  pop  rb     set, \ h2
+  pop  ra     set, \ l2
+  ra   1 picc add, \ l1+l2    -> l3, EX
+  rb   peek   adx, \ h1+h2+EX -> h3
+;tcode
+
+tcode D-  ( l1 h1 l2 h2 -- l3 h3 )
+  pop  rb     set, \ h2
+  pop  ra     set, \ l2
+  ra   1 picc sub, \ l1-l2    -> l3, EX
+  rb   peek   sbx, \ h1-h2+EX -> h3
+;tcode
+
+\ TODO More double-cell arithmetic
+
+
+\ Branches are abstracted, because they differ signficantly on STC systems,
+\ and even on others they might prefer relative or absolute branches.
+\ ,BRANCH ,DEST and !DEST handle that abstraction between the kernel and the
+\ shared high-level Forth control structures.
+
+\ On the DCPU, these are absolute new I values in the next slot of the thread.
+tcode (BRANCH)
+  [i] ri sti,
+;tcode
+
+tcode (0BRANCH)
+  [i] ra sti, \ I advanced; A holds the optional target.
+  0 # pop ife,
+    ra ri set, \ Branch passed, so set I to the target.
+;tcode
+
+
+tcode EXIT
+  ri poprsp,
+;tcode
+
+\ Converts a name token (ie. a hdr pointer) into the code field address, by
+\ skipping over the name.
+tcode >CFA ( nt -- xt )
+  pop        ra   set, \ A is the NT
+  1 [a+]     rb   set,
+  mask_len # rb   and, \ B now the length
+  2 #        ra   add,
+  rb         ra   add, \ A is now the CFA
+  ra         push set,
+;tcode
+
+
+\ Input system
+\ ============
+\ 'SOURCE is a 2VARIABLE with ( c-addr len ) for the input buffer.
+\ >IN is a VARIABLE holding the offset into that buffer.
+\ Most of that system is written in hand-rolled Forth threads in a shared lib.
+\ Here we just defined the variables.
+label var_SOURCE    0 asm, 0 asm,
+label var_SOURCE-ID 0 asm,
+label var_TIB       256 there +!
+label var_>IN       0 asm,
+
+tcode 'SOURCE      var_SOURCE    # push set,  ;tcode
+tcode 'SOURCE-ID   var_SOURCE-ID # push set,  ;tcode
+tcode TIB          var_TIB       # push set,  ;tcode
+tcode >IN          var_>IN       # push set,  ;tcode
+
+
+: TSTR= ( c-addr u t-addr u -- ? )
+  rot over <> ( c-addr t-addr u len-diff? ) IF 2drop drop 0 EXIT THEN
+  0 DO ( c-addr t-addr )
+    over i + c@
+    over i + w@
+    <> IF 2drop UNLOOP EXIT THEN \ Different, so bail.
+  LOOP 2drop ;
+
+: TFIND ( c-addr u -- nt|0 )
+  last-word @ BEGIN dup WHILE
+    >R 2dup R@ 1+   dup 1+ swap w@ mask_len and ( a u a u  ta len   R: nt )
+    TSTR= ( a u match?   R: nt ) IF 2drop R> EXIT THEN
+    R> w@ ( a u nt' )
+  REPEAT >R 2drop R> ;
+
+: NT>CFA ( nt -- xt ) 1+ dup w@ mask_len and   + 1+ ;
+
+
+\ Wrappers for the fundamental DCPU-family hardware instructions.
+\ This allows the hardware interfaces to be written in high-level Forth.
+tcode #DEVICES ( -- n )
+  ra hwn,
+  ra push set,
+;tcode
+
+tcode DEVINFO ( dev-num -- version d-MAKER d-ID )
+  pop ra set,
+  ra hwq,     \ B:A is ID_hi:lo; C is version; Y:X is manufacturer.
+  rc push set,
+  rx push set,
+  ry push set,
+  ra push set,
+  rb push set,
+;tcode
+
+\ Sends a hardware interrupt in DCPU style.
+
+\ The stack before and after has the register values ordered
+\ ( a b c x y z i j mask dev-num -- a b c x y z i j ) but only the ones in the
+\ mask are included on either side.
+\ The mask is JIZYXCBAjizyxcba, with the low bits being inputs and high ones
+\ outputs.
+label >DEVICE-saved-i 0 ,,
+label >DEVICE-saved-z 0 ,,
+label >DEVICE-dev     0 ,,
+
+tcode >DEVICE
+  pop >DEVICE-dev       [#] set,
+  pop ex                    set, \ EX holds the mask
+
+  \ Save the meaningful registers.
+  rz  >DEVICE-saved-z [#] set,
+  ri  >DEVICE-stash-i [#] set,
+
+  \ Now get them off the stack.
+  $80 # ex ifb,    pop rj set,
+  $40 # ex ifb,    pop ri set,
+  $20 # ex ifb,    pop rz set,
+  $10 # ex ifb,    pop ry set,
+  $08 # ex ifb,    pop rx set,
+  $04 # ex ifb,    pop rc set,
+  $02 # ex ifb,    pop rb set,
+  $01 # ex ifb,    pop ra set,
+
+  \ Do the interrupt!
+  ex push set,
+  >DEVICE-dev [#] hwi,
+  pop  ex set,
+
+  $0100 # ex ifb,    ra push set,
+  $0200 # ex ifb,    rb push set,
+  $0400 # ex ifb,    rc push set,
+  $0800 # ex ifb,    rx push set,
+  $1000 # ex ifb,    ry push set,
+  $2000 # ex ifb,    rz push set,
+  $4000 # ex ifb,    ri push set,
+  $8000 # ex ifb,    rj push set,
+
+  \ Now restore our registers.
+  >DEVICE-saved-i [#]  ri  set,
+  >DEVICE-saved-z [#]  rz  set,
+;tcode
+
+
+\ The above >DEVICE is pretty expensive, which is fine for occasional HWIs
+\ like setting up the LEM1802 memory maps, but is really bad for reading the
+\ keyboard. Thus (KEY) is separately coded to get the next key typed.
+tcode (KEY) ( dev-num -- key )
+  1 # a set, \ Read next key
+  peek hwi,
+  0 # rc ife,
+    cf_(KEY) # pc set,
+  rc peek set, \ Overwrite the device number on top.
+;tcode
+
+
+tcode DEBUG
+  0 # brk,
+;tcode
+
+tcode (LOG)
+  pop log,
+;tcode
+
+
+tcode (LOOP-END)
+  [z]     rx set,     \ X is the index
+  [z+1]   ry set,     \ Y is the limit
+  rx      rc set,
+  ry      rc sub,     \ C is i-l
+  pop     rj set,     \ J is the delta
+  \ We want delta + index - limit
+  rj      ra set,
+  rc      ra add,     \ A is delta + index - limit
+  rc      ra xor,     \ A is d+i-l ^ i-l
+  0 #     rb set,
+  $8000 # ra ifc,     \ True when top bit is clear.
+    -1 # rb set,
+  rb      ra set,     \ Keep the first flag in A.
+
+  \ Then calculate delta XOR index - limit
+  rj      rc xor,
+  0 #     rb set,
+  $8000 # rc ifc,
+    -1 # rb set,
+
+  rb      ra bor,     \ OR those flags
+  -1 #    ra xor,     \ and invert the result
+  ra    push set,
+  rx      rj add,     \ New index is delta + index
+  rj     [z] set,     \ Write it back to the stack.
+;tcode
+
+
+tcode STATE
+  var_state # push set,
+;tcode
+
+label var_latest 0 ,,
+tcode LATEST
+  var_latest # push set,
+;tcode
+
+tcode BASE
+  var_base # push set,
+;tcode
+
+
+\ Interrupts ==================================
+\ interrupt_handler is what actually gets IAS'd.
+\ It's a machine code routine that sets up a Forth thread with the high-level
+\ interrupt routine and its own tail routine.
+\ The interrupt message is in A and the old A was pushed onto the stack. Since
+\ we might be mid-routine elsewhere, we need to preserve that A!
+\ The stack effect of the user handler is ( msg -- )
+
+\ This is the tail-end routine that finishes the interrupt. It restores the old
+\ registers off the stack and then does RFI.
+label int-EXIT
+  \ Restoring JIYXCB - A is already saved, and we're using Z.
+  pop rj set,   pop ri set,   pop ry set,
+  pop rx set,   pop rc set,   pop rb set,
+  0 # rfi,
+
+label interrupt-thread 0 ,, int-EXIT ,,
+
+tcode (>INTERRUPT) ( xt -- )
+  pop   interrupt-thread [#]  set,  \ The first word of the thread.
+;tcode
+
+label interrupt_handler
+  \ First a special case - if the interrupt word is 0, just bail since no one is
+  \ listening.
+  0 #   interrupt-thread [#] ife,
+    0 # rfi,
+
+  \ Gotta save ~all the registers, since Forth words might clobber nearly any
+  \ of them. Don't need to save Z or A (A is already saved; Z is handled safely)
+  rj push set,   ri push set,   ry push set,
+  rx push set,   rc push set,   rb push set,
+  \ Make the interrupt-thread the new I
+  interrupt-thread # ri set,
+  \ And NEXT into it!
+  next,
+
+
+\ The high-level code will put the xt of COLD here for the startup code.
+label 'COLD 0 ,,
+
+\ Machine code entry point, jumped to by the first word at the top.
+\ Mostly this sets up the code to call
+label main
+  1 # iaq,                  \ Queueing on for safety.
+  interrupt_handler #  ias, \ Set up interrupts.
+  'COLD [#]         ri set,
+  0 # iaq,                  \ Queueing off, interrupts on.
+  next, \ Never returns to here.
+
+

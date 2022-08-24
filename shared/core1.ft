@@ -1,0 +1,39 @@
+\ First round of core bits written in hand-rolled Forth threads.
+
+t: MIN ( x y -- x|y ) \ 2dup < IF swap THEN drop
+  cf_2DUP ,, cf_< ,, cf_(0BRANCH) ,, label min-slot 0 ,, ( IF )
+    cf_SWAP ,,
+  there @ min-slot w! ( THEN )
+  cf_DROP ,,
+;t
+
+T: TUCK ( x y -- y x y ) cf_SWAP ,, cf_OVER ,, ;t
+T: 0=   ( x -- ? )       lit ,, 0 ,, cf_= ,, ;t
+T: NOT  ( x -- ?' )      cf_0= ,, ;t
+T: <>   ( x y -- ? ) cf_=    ,, cf_0= ,, ;t
+T: >    ( x y -- ? ) cf_SWAP ,, cf_<  ,, ;t
+T: <=   ( x y -- ? ) cf_>    ,, cf_0= ,, ;t
+T: >=   ( x y -- ? ) cf_<    ,, cf_0= ,, ;t
+T: U>   ( x y -- ? ) cf_SWAP ,, cf_U< ,, ;t
+T: U>=  ( x y -- ? ) cf_U<   ,, cf_0= ,, ;t
+T: U>=  ( x y -- ? ) cf_U>   ,, cf_0= ,, ;t
+
+T: WITHIN ( x lo hi -- ? ) \ >R OVER U<= SWAP R> U< AND
+  cf_OVER ,, cf_- ,, cf_>R ,, cf_- ,, cf_R> ,, cf_U< ,, ;t
+
+T: STR= ( c-addr u c-addr u -- eq? )
+  \ rot over <> IF drop 2drop EXIT THEN   Length mismatch
+  cf_ROT ,, cf_OVER ,, cf_<>   if,   cf_DROP ,, cf_2DROP ,, cf_EXIT ,, then,
+  \ ( c1 c2 u ) BEGIN dup WHILE
+  begin, cf_DUP ,, while,
+  \   1- >R   over R@ + c@   over R@ + c@   ( c1 c2 ch1 ch2    R: u )
+    cf_1- ,, cf_>R ,,
+    cf_OVER ,, cf_R@ ,, cf_+ ,, cf_C@ ,,
+    cf_OVER ,, cf_R@ ,, cf_+ ,, cf_C@ ,,
+  \   <> IF 2drop R> drop EXIT THEN
+    cf_<> ,, if, cf_2DROP ,, cf_R> ,, cf_DROP ,, cf_EXIT ,, then,
+  \   R> REPEAT ( c1 c2 0 ) drop 2drop ;
+    cf_R> ,, repeat,
+  cf_DROP ,, cf_2DROP ,, ;t
+
+

@@ -1,0 +1,175 @@
+\ The fundamental stack is:
+\ INTERPRET interprets or compiles the line of Forth code in that buffer.
+\ QUIT clears return stack (only) and does BEGIN refill WHILE interpret REPEAT
+\ COLD clears data stack and calls QUIT
+
+\ REFILL is clever and does the Right Thing for each source type:
+\ Keyboard: ACCEPT
+\ EVALUATE: just return 0
+\ File:     read the next line; return 0 if no more
+\ Block:    chain to the next block, I guess. (: -> refill drop ;)
+
+\ The return stack is used as the input source stack as needed.
+\ - EVALUATE pushes the old 'SOURCE and >IN to the return stack and puts the
+\   string in their place, then calls INTERPRET. It restores when done.
+\   - S" QUIT" EVALUATE works correctly - the old inputs are thrown away!
+\ - REQUIRED and friends also work: they stack the current source, set up the
+\   file as the new source, and QUIT
+
+2VARIABLE 'SOURCE
+: SOURCE    ( -- c-addr u )  cf_'SOURCE ,, cf_2@ ,, ;t
+t: SOURCE-ID ( -- id )        cf_'SOURCE-ID ,, cf_@ ,, ;t
+
+\ Advances a string by n1.
+T: /STRING   ( c-addr1 u1 n1 -- c-addr2 u2 )
+  \ DUP >R - SWAP R> + SWAP
+  cf_DUP ,, cf_>R ,, cf_- ,, cf_SWAP ,, cf_R> ,, cf_+ ,, cf_SWAP ,, ;t
+
+tcode BL 32 # push set, ;tcode
+T: ISSPACE?    ( c -- ? ) \ bl 1+ U<
+  cf_BL ,, cf_1+ ,, cf_U< ,, ;t
+T: ISNOTSPACE? ( c -- ? ) cf_ISSPACE? ,, cf_0= ,, ;t
+
+\ Skip all characters satisfying xt ( c -- f )
+T: XT-SKIP     ( a1 n1 xt -- a2 n2 )
+  \ >R BEGIN dup WHILE
+  cf_>R ,,   begin,   cf_DUP ,,   while,
+  \   over c@ R@ execute 0= IF ( a1 n1 ) R> drop EXIT THEN
+  cf_OVER ,, cf_C@ ,, cf_R@ ,, cf_EXECUTE ,, cf_0= ,,   if,
+    cf_R> ,, cf_DROP ,, cf_EXIT ,,   then,
+
+  \   1 /string REPEAT ;
+  lit ,, 1 ,, cf_/STRING ,,   repeat,
+  cf_R> ,, cf_DROP ,,
+;t
+
+T: PARSE-NAME ( "<spaces>name<space>" -- c-addr u )
+  \ source   >IN @   /STRING
+  cf_SOURCE ,, cf_>IN ,, cf_@ ,, cf_/STRING ,,
+  \ ['] ISSPACE?    xt-skip over >R
+  lit ,, cf_ISSPACE?    ,, cf_XT-SKIP ,, cf_OVER ,, cf_>R ,,
+  \ ['] ISNOTSPACE? xt-skip ( end-word restlen R: start-word )
+  lit ,, cf_ISNOTSPACE? ,, cf_XT-SKIP ,,
+  \ 2dup 1 min +  ( end-word restlen after-end    R: start-word )
+  cf_2DUP ,, lit ,, 1 ,, cf_MIN ,, cf_+ ,,
+  \ source drop - ( end-word restlen (after-end - tib)
+  \ >IN !         ( end-word restlen )
+  cf_SOURCE ,, cf_DROP ,, cf_- ,, cf_>IN ,, cf_! ,,
+  \ drop R> tuck -  ( start-word end-start=len )
+  cf_DROP ,, cf_R> ,, cf_TUCK ,, cf_- ,,
+;t
+
+\ Character to digit value, ignoring BASE
+T: UPPERCASE? ( ch -- ? ) lit ,, 'A' ,, lit ,, 'Z' 1+ ,, cf_WITHIN ,, ;t
+T: LOWERCASE? ( ch -- ? ) lit ,, 'a' ,, lit ,, 'z' 1+ ,, cf_WITHIN ,, ;t
+T: LOWER>DIGIT  ( ch -- u ) \ dup lowercase? IF 'a' - 10 + ELSE drop 1000 THEN
+  cf_DUP ,, cf_LOWERCASE? ,,   if,
+    lit ,, 'a' 10 - ,, cf_- ,,
+  else,
+    cf_DROP ,, lit ,, 1000 ,,
+  then,
+;t
+
+T: LETTER>DIGIT ( ch -- u ) \ dup uppercase? IF 'A' - 10 + ELSE lower>digit THEN
+  cf_DUP ,, cf_UPPERCASE? ,,   if,
+    lit ,, 'A' 10 - ,, cf_- ,,
+  else,
+    cf_LOWER>DIGIT ,,
+  then,
+;t
+
+T: >DIGIT ( ch -- u ) \ dup '0' '9' 1+ WITHIN IF '0' - ELSE LETTER>DIGIT THEN
+  cf_DUP ,, lit ,, '0' ,, lit ,, '9' 1+ ,, cf_WITHIN ,, if,
+    lit ,, '0' ,, cf_- ,,
+  else,
+    cf_LETTER>DIGIT ,,
+  then,
+;t
+
+T: >NUMBER ( ud1 c-addr1 u1 -- ud2 c-addr2 u2 )
+  \ BEGIN DUP WHILE ( ud a u )
+  label >number-top ( BEGIN ) cf_DUP ,, cf_(0BRANCH) ,, label >NUMBER-while-slot 0 ,,
+  \   >R DUP >R C@ ( ud c    R: u a )
+  cf_>R ,, cf_DUP ,, cf_>R ,, cf_C@ ,,
+  \   >DIGIT       ( ud dig  R: u a )
+  cf_>DIGIT ,,
+  \   dup BASE @ >= IF \ Too big for BASE
+  cf_DUP ,, cf_BASE ,, cf_@ ,, cf_>= ,,   if,
+    \ drop R> R> EXIT THEN
+    cf_DROP ,, cf_R> ,, cf_R> ,, cf_EXIT ,, then,
+  \ It's a legal digit! Multiply by BASE and add it in. ( ud dig )
+  \   >R BASE @ UM* R> M+ ( ud' )
+  cf_>R ,, cf_BASE ,, cf_@ ,, cf_UM* ,, cf_R> ,, cf_M+ ,, ( ud' )
+  \   R> R> 1 /STRING ( ud' a+1 u-1 )
+  cf_R> ,, cf_R> ,, lit ,, 1 ,, cf_/STRING ,,
+  \ REPEAT ( ud a u ) ;
+  repeat,
+;t
+
+\ $7890 CONSTANT LATEST \ Variable, holds nt of the most-recently-compiled word.
+\ $7892 CONSTANT TSTATE  \ VARIABLE, a standard one.
+t: FIND-NAME ( c-addr u -- nt|0 )
+  \ LATEST @ BEGIN DUP WHILE ( a u nt )
+  cf_LATEST ,, cf_@ ,, begin, cf_DUP ,, while,
+    \   DUP >R   CELL+ C@ f_lenmask_hidden AND ( a u len   R: nt )
+    cf_DUP ,, cf_>R ,, cf_CELL+ ,, cf_C@ ,, lit ,, mask_len_hidden ,, cf_AND ,,
+    \   R@ 3 + SWAP (STR=) ( ? R: nt ) IF R> EXIT THEN
+    cf_R@ ,, lit ,, 3 ,, cf_+ ,, cf_SWAP ,, cf_STR= ,, if, cf_R> ,, cf_EXIT ,, then,
+  \   R> @ ( nt' )
+  cf_R> ,, cf_@ ,,
+  \ REPEAT ( 0 ) ;
+  repeat, ;t
+
+: TIMMEDIATE ( -- ) last-word @ 1+ dup w@ f_immediate or swap w! ;
+
+t: LITERAL ( x -- ) lit ,, lit ,, cf_, ,, cf_, ,, ;t    TIMMEDIATE
+
+t: INTERPRET ( -- ) \ Expects SOURCE and >IN to be set up properly.
+  \ BEGIN
+  \   PARSE-NAME DUP \ The length will be 0 at end-of-line.
+  \ WHILE ( c-addr u )
+  begin, cf_PARSE-NAME ,, cf_DUP ,, while,
+  \ 2DUP FIND-NAME ?DUP IF ( a u nt )
+    cf_2DUP ,, cf_FIND-NAME ,, cf_?DUP ,, if,
+  \   \ Found a word!
+  \   >R 2DROP R> ( nt ) \ We need the stack to be net-empty when we EXECUTE.
+      cf_>R ,, cf_2DROP ,, cf_R> ,,
+  \   STATE @   OVER CELL+ c@ f_immed AND 0=   AND IF ( nt )
+      cf_STATE ,, cf_@ ,,
+      cf_OVER ,, cf_CELL+ ,, cf_C@ ,, lit ,, f_immediate ,, cf_AND ,, cf_0= ,,
+      cf_AND ,, if,
+  \       \ Actually compiling
+          cf_>CFA ,, cf_COMPILE, ,,
+  \   ELSE \ Interpreting
+      else,
+  \     >CFA EXECUTE
+        cf_>CFA ,, cf_EXECUTE ,,
+  \   THEN
+      then,
+  \ ELSE ( a u )
+    else,
+  \   \ Failed to parse, so try it as a number.
+  \   OVER C@ '-' = IF TRUE NEGATIVE? !   1 /STRING THEN \ Save negative flag
+      cf_OVER ,, cf_C@ ,, lit ,, '-' ,, cf_= ,, if,
+        lit ,, -1 ,, cf_NEGATIVE? ,, cf_! ,,    lit ,, 1 ,, cf_/STRING ,, then,
+  \   BASE @ >R \ Preserve the old BASE always
+      cf_BASE ,, cf_@ ,, cf_>R ,,
+  \   OVER C@ '$' = IF 16 BASE !   1 /STRING THEN        \ $ is hex.
+      cf_OVER ,, cf_C@ ,, lit ,, '$' ,, cf_= ,, if,
+        lit ,, 16 ,, cf_BASE ,, cf_! ,,   lit ,, 1 ,, cf_/STRING ,, then,
+  \   0 0 2SWAP >NUMBER ( ud a u ) ABORT" Failed to parse number" ( ud a )
+      lit ,, 0 ,, lit ,, 0 ,, cf_2SWAP ,, cf_>NUMBER ,, cf_0= ,, if, cf_BYE ,, then,
+  \   DROP D>S ( u )
+      cf_DROP ,, cf_D>S ,,
+  \   R> BASE ! \ Put back the BASE.
+      cf_R> ,, cf_BASE ,, cf_! ,,
+  \   NEGATIVE? @ IF NEGATE THEN \ Properly negated now.
+      cf_NEGATIVE? ,, cf_@ ,, if, cf_NEGATAE ,, then,
+  \   ( n )
+  \   TSTATE @ IF LITERAL THEN \ Compile it, or leave it on the stack.
+      cf_STATE ,, cf_@ ,, if, cf_LITERAL ,, then,
+  \ THEN
+    then,
+  \ REPEAT 2DROP ;
+  repeat, cf_2DROP ,, ;t
+

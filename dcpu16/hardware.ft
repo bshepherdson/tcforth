@@ -1,0 +1,15 @@
+label var_hw_keyboard -1 ,,
+label var_hw_disk     -1 ,,
+label var_hw_lem      -1 ,,
+
+label hw_table
+$30c1 ,, $7406 ,, var_hw_keyboard
+$4fd5 ,, $24c5 ,, var_hw_disk
+$734d ,, $f615 ,, var_hw_lem
+label hw_table_top
+
+\ Block until reading a single key. No echoing.
+tcode KEY
+  1 # ra set, \ Message for reading next key.
+
+

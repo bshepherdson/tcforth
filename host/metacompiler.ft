@@ -1,0 +1,148 @@
+\ Herein are host-side Forth words building up to a metacompiler.
+\ The objective is to redefine, eventually, : ; VARIABLE CONSTANT and others,
+\ so that the library files are fully in target-side code, but running on the
+\ host.
+
+\ Mostly this is the compiler and : but also any IMMEDIATE words eg. IF, need
+\ three versions:
+\ 1. the target code they actually compile
+\ 2. host code that compiles #1
+\ 3. target code that compiles #1 as well
+
+\ This is handled by having a "special words" list on the host side, that is
+\ searched first by the compiler. It contains the #2s above, the host-side code
+\ for all the IMMEDIATE words.
+VARIABLE tstate
+2VARIABLE 'tsource
+VARIABLE  tfile
+VARIABLE  T>IN
+
+
+wordlist CONSTANT immediates \ The ones that must run as immediates.
+
+\ Those words that have interpretation semantics and can be run during
+\ metacompilation:  :  ,  compile,  CREATE  VARIABLE  CONSTANT  etc.
+wordlist CONSTANT host-words
+
+
+\ Differently-named : for the target.
+\ Starts a new target-side colon definition, including the code field.
+\ Semicolon is handled above by the immediate words.
+
+\ Duplicated internals of a Forth compiler on the host.
+: tsource ( -- c-addr u ) 'tsource 2@ ;
+
+: isspace?    ( ch -- ? ) bl 1+ u< ;
+: isnotspace? ( ch -- ? ) isspace? 0= ;
+
+: xt-skip ( c-addr1 u1 xt -- c-addr2 u2 )
+  >R BEGIN dup WHILE
+    over c@ R@ execute
+  WHILE
+    1 /string
+  REPEAT THEN
+  R> drop ;
+
+: tparse-name ( "<spaces>name<space>" -- c-addr u )
+  tsource T>IN @ /string
+  ['] isspace?    xt-skip over >R
+  ['] isnotspace? xt-skip ( end-word restlen R: start-word )
+  2dup 1 min + tsource drop - T>IN !
+  drop R> tuck - ;
+
+: tparse ( term "<chars>term" -- c-addr u )
+  tsource T>IN @ /string ( start restlen ) over >R >R ( ca u   R: start term )
+  BEGIN dup WHILE
+    over c@ R@ = IF \ Found the terminator - it's consumed but excluded.
+      1 /string   'source 1+ w!   dup 'source w! ( end   R: start term )
+      R> drop R> tuck - ( start u ) EXIT THEN
+    1 /string
+  REPEAT ( c-addr 0   R: start term ) ABORT" Parsing off end of line" ;
+
+VARIABLE negative?
+: ?negative ( c-addr u -- c-addr' u' )
+  over c@ '-' =   dup negative !   IF 1 /string THEN ;
+
+: parse-number ( c-addr u -- n valid? )
+  base @ >R
+  ?negative   over c@ '$' = IF 16 base !   1 /string THEN
+  0 0 2swap >NUMBER ( ud c-addr u )
+  IF drop 2drop   0 false ELSE
+    drop D>S true   negative? @ IF negate THEN THEN
+  R> base ! ;
+
+: tinterpret1 ( -- )
+  tparse-name ( c-addr u )
+  dup 0= IF 2drop exit then \ Empty, so bail.
+  \ Try the overlay wordlist first, in case of host-words.
+  2dup immediates search-wordlist IF ( ca u xt )
+    >R 2drop R> execute \ Run an immediate (host) word
+    EXIT THEN
+
+  \ Otherwise try to do a regular compile.
+  \ Target-side word. First try to TFIND it.
+  2dup TFIND ( ca u nt|0 ) ?dup IF \ Found the word
+    NT>CFA   tstate @ IF ,, 2drop ELSE
+      drop ( ca u )
+      \ We can't interpret a target-side word. It has to be in host-words.
+      2dup host-words search-wordlist IF ( ca u xt )
+        >R 2drop R> execute
+      ELSE
+        ." Can't run " drop type ."  in target state" cr
+      THEN
+    THEN
+  ELSE ( ca u ) \ Not found, try as a number.
+    2dup parse-number ( ca u n ? ) IF \ Parsed it.
+      >R 2drop R> tstate @ IF lit ,, ,, THEN ( n )
+    ELSE ( ca u )
+      ." *** Unknown target word: " type cr abort
+    THEN
+  THEN
+;
+
+CREATE TTIB 256 allot
+
+\ Parses a Forth file into the target binary, with the metacompiler.
+: TINCLUDED ( c-addr u -- )
+  R/O OPEN-FILE ABORT" Failed to open target include" tfile ! ( )
+  BEGIN
+    ttib 256 tfile @ read-line ABORT" Failed to read line of input"
+  WHILE ( u-read )
+    ttib swap 'source 2!
+    tinterpret1
+  REPEAT
+;
+
+
+immediates set-current
+: IF   ( C: -- if-slot ) cf_(0BRANCH) ,, there @ 0 ,, ;
+: ELSE ( C: if-slot -- else-slot )
+  cf_(BRANCH) ,, there @ 0 ,, ( if-slot else-slot )
+  swap there @ swap w! ( else-slot ) ;
+: THEN ( C: if-slot -- ) there @ swap w! ;
+
+: BEGIN  ( C: -- top-loc )     there @ ;
+: AGAIN  ( C: top-loc -- )     cf_(BRANCH)  ,, ,, ;
+: WHILE  ( C: -- while-slot )  cf_(0BRANCH) ,, there @ 0 ,, ;
+: REPEAT ( C: top-loc while-slot -- )
+  cf_(BRANCH) ,, swap ,, there @ swap w! ;
+
+\ New semicolon that compiles EXIT on the target.
+: ; ( -- ) cf_EXIT ,,   0 tstate ! ;
+: ( 
+
+\ Back to the regular wordlist
+host-words set-current
+
+\ Defining words
+: CREATE    T(CREATE)   dodoes # jsr,   0 ,, ;
+: :         T(CREATE)   docol  # jsr,   1 tstate ! ;
+: VARIABLE  T(CREATE)   dodoes # jsr,   0 ,, 0 ,, ;
+: 2VARIABLE T(CREATE)   dodoes # jsr,   0 ,, 0 ,, 0 ,, ;
+: CONSTANT  T(CREATE)   dodoes # jsr,   0 ,, 0 ,, 0 ,, ;
+: ,         ,, ;
+: compile,  ,, ; \ TODO machine-specific
+
+forth-wordlist set-current
+
+

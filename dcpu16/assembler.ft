@@ -6,8 +6,8 @@
 \ Output is big-endian, as is common for DCPU emulators.
 
 CREATE output 65536 2* allot
-VARIABLE optr
-0 optr !
+VARIABLE there
+0 there !
 VARIABLE max-out
 0 max-out !
 
@@ -20,7 +20,7 @@ VARIABLE max-out
   dup 8 rshift 255 and .s R@    c!
                255 and R> 1+ c! ;
 
-: asm, ( w -- ) optr @ w!   1 optr +! ;
+: asm, ( w -- ) there @ w!   1 there +! ;
 
 \ Handling the extra words after the opcode.
 CREATE extras 2 cells allot
@@ -35,23 +35,26 @@ VARIABLE #extras
 
 \ Addressing modes
 \ ================
+\ These all are two cells wide on the stack, ( value mode )
+\ Lots of them don't need the value, and it's just 0.
+\ But then you always know how they sit on the stack.
 
 : op-bits ( operand-code a? -- op ) IF 10 ELSE 5 THEN lshift ;
 
-\ Register:          ra         ( r )
-\ Register indirect: ra []      ( r+8 )
+\ Register:          ra         ( 0 r )
+\ Register indirect: ra []      ( 0 r+8 )
 \ Register indexed:  20 ra []+  ( 20 r+$10 )
-: ra    0 ;   : rb    1 ;   : rc    2 ;   : rx    3 ;
-: ry    4 ;   : rz    5 ;   : ri    6 ;   : rj    7 ;
-: [a]   8 ;   : [b]   9 ;   : [c]  10 ;   : [x]  11 ;
-: [y]  12 ;   : [z]  13 ;   : [i]  14 ;   : [j]  15 ;
-: [a+] 16 ;   : [b+] 17 ;   : [c+] 18 ;   : [x+] 19 ;
-: [y+] 20 ;   : [z+] 21 ;   : [i+] 22 ;   : [j+] 23 ;
+: ra   0  0 ;   : rb   0  1 ;   : rc   0  2 ;   : rx   0  3 ;
+: ry   0  4 ;   : rz   0  5 ;   : ri   0  6 ;   : rj   0  7 ;
+: [a]  0  8 ;   : [b]  0  9 ;   : [c]  0 10 ;   : [x]  0 11 ;
+: [y]  0 12 ;   : [z]  0 13 ;   : [i]  0 14 ;   : [j]  0 15 ;
+: [a+]   16 ;   : [b+]   17 ;   : [c+]   18 ;   : [x+]   19 ;
+: [y+]   20 ;   : [z+]   21 ;   : [i+]   22 ;   : [j+]   23 ;
 
 \ Push/pop:          push | pop ( $18 )
-: push $18 ;
-: pop  $18 ;
-: peek $19 ;
+: push 0 $18 ;
+: pop  0 $18 ;
+: peek 0 $19 ;
 
 \ Pick               7 picc     ( 7 $1a )
 : picc ( n -- operand ) $1a ;
@@ -59,7 +62,7 @@ VARIABLE #extras
 \ SP                 sp         ( $1b )
 \ PC                 pc         ( $1c )
 \ EX                 ex         ( $1d )
-: sp $1b ;   : pc $1c ;   : ex $1d ;
+: sp 0 $1b ;   : pc 0 $1c ;   : ex 0 $1d ;
 
 \ [lit]              77 [#]     ( 77 $1e )
 : [#] ( n -- operand ) $1e ;
@@ -72,13 +75,13 @@ VARIABLE #extras
 : lit-op    ( n a? -- op ) IF dup lit-fits? IF $21 + 10 lshift EXIT THEN THEN
   +extra   $1f 10 lshift ;
 
-: operand ( ... operand a? -- op )
+: operand ( value operand a? -- op )
   \ $10 to $17, $1a, $1e and maybe $1f have extra words.
   over $10 $18 within IF extra-op    EXIT THEN
   over $1a =          IF extra-op    EXIT THEN
   over $1e =          IF extra-op    EXIT THEN
   over $1f =          IF nip lit-op  EXIT THEN
-  op-bits ;
+  nip op-bits ;
 
 
 \ Binary operations have the form:
@@ -112,9 +115,24 @@ $10 unary hwn,   $11 unary hwq,   $12 unary hwi,
 $13 unary log,   $14 unary brk,   $15 unary hlt,
 
 
-: label ( "name" --    X: -- t-addr ) optr @ CONSTANT ;
+: label ( "name" --    X: -- t-addr ) there @ CONSTANT ;
 
 \ Control structures
+\ ==================
+\ These are made awkward by the DCPU's weird IFx instructions.
+\ The convention used here is always
+\ ifx some, condition
+\   set pc, target
+\ ...
+\ So we really need a forward label we can resolve.
+
+\ This is called at the spot where the jump address would go. It contrives to
+\ compile a long-form literal, noting the address as a newly defined word.
+\ A later resolve will write it back.
+\ NB: Only works for RHS arguments.
+: fwd     ( -- resolve-token value operand ) there @ 1+   1000 # ;
+: resolve ( resolve-token ) there @ swap w! ;
+
 
 : dump ( c-addr u -- )
   cr cr ." Assembling to " 2dup type cr

@@ -16,160 +16,219 @@
 \ - REQUIRED and friends also work: they stack the current source, set up the
 \   file as the new source, and QUIT
 
-2VARIABLE 'SOURCE
-: SOURCE    ( -- c-addr u )  cf_'SOURCE ,, cf_2@ ,, ;t
-t: SOURCE-ID ( -- id )        cf_'SOURCE-ID ,, cf_@ ,, ;t
-
-\ Advances a string by n1.
-T: /STRING   ( c-addr1 u1 n1 -- c-addr2 u2 )
-  \ DUP >R - SWAP R> + SWAP
-  cf_DUP ,, cf_>R ,, cf_- ,, cf_SWAP ,, cf_R> ,, cf_+ ,, cf_SWAP ,, ;t
-
-tcode BL 32 # push set, ;tcode
-T: ISSPACE?    ( c -- ? ) \ bl 1+ U<
-  cf_BL ,, cf_1+ ,, cf_U< ,, ;t
-T: ISNOTSPACE? ( c -- ? ) cf_ISSPACE? ,, cf_0= ,, ;t
-
-\ Skip all characters satisfying xt ( c -- f )
-T: XT-SKIP     ( a1 n1 xt -- a2 n2 )
-  \ >R BEGIN dup WHILE
-  cf_>R ,,   begin,   cf_DUP ,,   while,
-  \   over c@ R@ execute 0= IF ( a1 n1 ) R> drop EXIT THEN
-  cf_OVER ,, cf_C@ ,, cf_R@ ,, cf_EXECUTE ,, cf_0= ,,   if,
-    cf_R> ,, cf_DROP ,, cf_EXIT ,,   then,
-
-  \   1 /string REPEAT ;
-  lit ,, 1 ,, cf_/STRING ,,   repeat,
-  cf_R> ,, cf_DROP ,,
-;t
-
-T: PARSE-NAME ( "<spaces>name<space>" -- c-addr u )
-  \ source   >IN @   /STRING
-  cf_SOURCE ,, cf_>IN ,, cf_@ ,, cf_/STRING ,,
-  \ ['] ISSPACE?    xt-skip over >R
-  lit ,, cf_ISSPACE?    ,, cf_XT-SKIP ,, cf_OVER ,, cf_>R ,,
-  \ ['] ISNOTSPACE? xt-skip ( end-word restlen R: start-word )
-  lit ,, cf_ISNOTSPACE? ,, cf_XT-SKIP ,,
-  \ 2dup 1 min +  ( end-word restlen after-end    R: start-word )
-  cf_2DUP ,, lit ,, 1 ,, cf_MIN ,, cf_+ ,,
-  \ source drop - ( end-word restlen (after-end - tib)
-  \ >IN !         ( end-word restlen )
-  cf_SOURCE ,, cf_DROP ,, cf_- ,, cf_>IN ,, cf_! ,,
-  \ drop R> tuck -  ( start-word end-start=len )
-  cf_DROP ,, cf_R> ,, cf_TUCK ,, cf_- ,,
-;t
-
-\ Character to digit value, ignoring BASE
-T: UPPERCASE? ( ch -- ? ) lit ,, 'A' ,, lit ,, 'Z' 1+ ,, cf_WITHIN ,, ;t
-T: LOWERCASE? ( ch -- ? ) lit ,, 'a' ,, lit ,, 'z' 1+ ,, cf_WITHIN ,, ;t
-T: LOWER>DIGIT  ( ch -- u ) \ dup lowercase? IF 'a' - 10 + ELSE drop 1000 THEN
-  cf_DUP ,, cf_LOWERCASE? ,,   if,
-    lit ,, 'a' 10 - ,, cf_- ,,
-  else,
-    cf_DROP ,, lit ,, 1000 ,,
-  then,
-;t
-
-T: LETTER>DIGIT ( ch -- u ) \ dup uppercase? IF 'A' - 10 + ELSE lower>digit THEN
-  cf_DUP ,, cf_UPPERCASE? ,,   if,
-    lit ,, 'A' 10 - ,, cf_- ,,
-  else,
-    cf_LOWER>DIGIT ,,
-  then,
-;t
-
-T: >DIGIT ( ch -- u ) \ dup '0' '9' 1+ WITHIN IF '0' - ELSE LETTER>DIGIT THEN
-  cf_DUP ,, lit ,, '0' ,, lit ,, '9' 1+ ,, cf_WITHIN ,, if,
-    lit ,, '0' ,, cf_- ,,
-  else,
-    cf_LETTER>DIGIT ,,
-  then,
-;t
-
-T: >NUMBER ( ud1 c-addr1 u1 -- ud2 c-addr2 u2 )
-  \ BEGIN DUP WHILE ( ud a u )
-  label >number-top ( BEGIN ) cf_DUP ,, cf_(0BRANCH) ,, label >NUMBER-while-slot 0 ,,
-  \   >R DUP >R C@ ( ud c    R: u a )
-  cf_>R ,, cf_DUP ,, cf_>R ,, cf_C@ ,,
-  \   >DIGIT       ( ud dig  R: u a )
-  cf_>DIGIT ,,
-  \   dup BASE @ >= IF \ Too big for BASE
-  cf_DUP ,, cf_BASE ,, cf_@ ,, cf_>= ,,   if,
-    \ drop R> R> EXIT THEN
-    cf_DROP ,, cf_R> ,, cf_R> ,, cf_EXIT ,, then,
-  \ It's a legal digit! Multiply by BASE and add it in. ( ud dig )
-  \   >R BASE @ UM* R> M+ ( ud' )
-  cf_>R ,, cf_BASE ,, cf_@ ,, cf_UM* ,, cf_R> ,, cf_M+ ,, ( ud' )
-  \   R> R> 1 /STRING ( ud' a+1 u-1 )
-  cf_R> ,, cf_R> ,, lit ,, 1 ,, cf_/STRING ,,
-  \ REPEAT ( ud a u ) ;
-  repeat,
-;t
-
-\ $7890 CONSTANT LATEST \ Variable, holds nt of the most-recently-compiled word.
-\ $7892 CONSTANT TSTATE  \ VARIABLE, a standard one.
-t: FIND-NAME ( c-addr u -- nt|0 )
-  \ LATEST @ BEGIN DUP WHILE ( a u nt )
-  cf_LATEST ,, cf_@ ,, begin, cf_DUP ,, while,
-    \   DUP >R   CELL+ C@ f_lenmask_hidden AND ( a u len   R: nt )
-    cf_DUP ,, cf_>R ,, cf_CELL+ ,, cf_C@ ,, lit ,, mask_len_hidden ,, cf_AND ,,
-    \   R@ 3 + SWAP (STR=) ( ? R: nt ) IF R> EXIT THEN
-    cf_R@ ,, lit ,, 3 ,, cf_+ ,, cf_SWAP ,, cf_STR= ,, if, cf_R> ,, cf_EXIT ,, then,
-  \   R> @ ( nt' )
-  cf_R> ,, cf_@ ,,
-  \ REPEAT ( 0 ) ;
-  repeat, ;t
-
-: TIMMEDIATE ( -- ) last-word @ 1+ dup w@ f_immediate or swap w! ;
-
-t: LITERAL ( x -- ) lit ,, lit ,, cf_, ,, cf_, ,, ;t    TIMMEDIATE
-
-t: INTERPRET ( -- ) \ Expects SOURCE and >IN to be set up properly.
-  \ BEGIN
-  \   PARSE-NAME DUP \ The length will be 0 at end-of-line.
-  \ WHILE ( c-addr u )
-  begin, cf_PARSE-NAME ,, cf_DUP ,, while,
-  \ 2DUP FIND-NAME ?DUP IF ( a u nt )
-    cf_2DUP ,, cf_FIND-NAME ,, cf_?DUP ,, if,
-  \   \ Found a word!
-  \   >R 2DROP R> ( nt ) \ We need the stack to be net-empty when we EXECUTE.
-      cf_>R ,, cf_2DROP ,, cf_R> ,,
-  \   STATE @   OVER CELL+ c@ f_immed AND 0=   AND IF ( nt )
-      cf_STATE ,, cf_@ ,,
-      cf_OVER ,, cf_CELL+ ,, cf_C@ ,, lit ,, f_immediate ,, cf_AND ,, cf_0= ,,
-      cf_AND ,, if,
-  \       \ Actually compiling
-          cf_>CFA ,, cf_COMPILE, ,,
-  \   ELSE \ Interpreting
-      else,
-  \     >CFA EXECUTE
-        cf_>CFA ,, cf_EXECUTE ,,
-  \   THEN
-      then,
-  \ ELSE ( a u )
-    else,
-  \   \ Failed to parse, so try it as a number.
-  \   OVER C@ '-' = IF TRUE NEGATIVE? !   1 /STRING THEN \ Save negative flag
-      cf_OVER ,, cf_C@ ,, lit ,, '-' ,, cf_= ,, if,
-        lit ,, -1 ,, cf_NEGATIVE? ,, cf_! ,,    lit ,, 1 ,, cf_/STRING ,, then,
-  \   BASE @ >R \ Preserve the old BASE always
-      cf_BASE ,, cf_@ ,, cf_>R ,,
-  \   OVER C@ '$' = IF 16 BASE !   1 /STRING THEN        \ $ is hex.
-      cf_OVER ,, cf_C@ ,, lit ,, '$' ,, cf_= ,, if,
-        lit ,, 16 ,, cf_BASE ,, cf_! ,,   lit ,, 1 ,, cf_/STRING ,, then,
-  \   0 0 2SWAP >NUMBER ( ud a u ) ABORT" Failed to parse number" ( ud a )
-      lit ,, 0 ,, lit ,, 0 ,, cf_2SWAP ,, cf_>NUMBER ,, cf_0= ,, if, cf_BYE ,, then,
-  \   DROP D>S ( u )
-      cf_DROP ,, cf_D>S ,,
-  \   R> BASE ! \ Put back the BASE.
-      cf_R> ,, cf_BASE ,, cf_! ,,
-  \   NEGATIVE? @ IF NEGATE THEN \ Properly negated now.
-      cf_NEGATIVE? ,, cf_@ ,, if, cf_NEGATAE ,, then,
-  \   ( n )
-  \   TSTATE @ IF LITERAL THEN \ Compile it, or leave it on the stack.
-      cf_STATE ,, cf_@ ,, if, cf_LITERAL ,, then,
-  \ THEN
-    then,
-  \ REPEAT 2DROP ;
-  repeat, cf_2DROP ,, ;t
-
+\ \ Input system
+\ \ ============
+\ \ 'SOURCE is a 2VARIABLE with ( c-addr len ) for the input buffer.
+\ \ >IN is a VARIABLE holding the offset into that buffer.
+\ \ Most of that system is written in hand-rolled Forth threads in a shared lib.
+\ \ Here we just defined the variables.
+\ label var_SOURCE    0 asm, 0 asm,
+\ label var_SOURCE-ID 0 asm,
+\ label var_TIB       256 there +!
+\ label var_>IN       0 asm,
+\ 
+\ tcode 'SOURCE      var_SOURCE    # push set,  ;tcode
+\ tcode 'SOURCE-ID   var_SOURCE-ID # push set,  ;tcode
+\ tcode TIB          var_TIB       # push set,  ;tcode
+\ tcode >IN          var_>IN       # push set,  ;tcode
+\ 
+\ 
+\ : TSTR= ( c-addr u t-addr u -- ? )
+\   rot over <> ( c-addr t-addr u len-diff? ) IF 2drop drop 0 EXIT THEN
+\   0 DO ( c-addr t-addr )
+\     over i + c@
+\     over i + w@
+\     <> IF 2drop UNLOOP EXIT THEN \ Different, so bail.
+\   LOOP 2drop ;
+\ 
+\ : TFIND ( c-addr u -- nt|0 )
+\   last-word @ BEGIN dup WHILE
+\     >R 2dup R@ 1+   dup 1+ swap w@ mask_len and ( a u a u  ta len   R: nt )
+\     TSTR= ( a u match?   R: nt ) IF 2drop R> EXIT THEN
+\     R> w@ ( a u nt' )
+\   REPEAT >R 2drop R> ;
+\ 
+\ : NT>CFA ( nt -- xt ) 1+ dup w@ mask_len and   + 1+ ;
+\ 
+\ 
+\ \ Wrappers for the fundamental DCPU-family hardware instructions.
+\ \ This allows the hardware interfaces to be written in high-level Forth.
+\ tcode #DEVICES ( -- n )
+\   ra hwn,
+\   ra push set,
+\ ;tcode
+\ 
+\ tcode DEVINFO ( dev-num -- version d-MAKER d-ID )
+\   pop ra set,
+\   ra hwq,     \ B:A is ID_hi:lo; C is version; Y:X is manufacturer.
+\   rc push set,
+\   rx push set,
+\   ry push set,
+\   ra push set,
+\   rb push set,
+\ ;tcode
+\ 
+\ \ Sends a hardware interrupt in DCPU style.
+\ 
+\ \ The stack before and after has the register values ordered
+\ \ ( a b c x y z i j mask dev-num -- a b c x y z i j ) but only the ones in the
+\ \ mask are included on either side.
+\ \ The mask is JIZYXCBAjizyxcba, with the low bits being inputs and high ones
+\ \ outputs.
+\ label >DEVICE-saved-i 0 ,,
+\ label >DEVICE-saved-z 0 ,,
+\ label >DEVICE-dev     0 ,,
+\ 
+\ tcode >DEVICE
+\   pop >DEVICE-dev       [#] set,
+\   pop ex                    set, \ EX holds the mask
+\ 
+\   \ Save the meaningful registers.
+\   rz  >DEVICE-saved-z [#] set,
+\   ri  >DEVICE-stash-i [#] set,
+\ 
+\   \ Now get them off the stack.
+\   $80 # ex ifb,    pop rj set,
+\   $40 # ex ifb,    pop ri set,
+\   $20 # ex ifb,    pop rz set,
+\   $10 # ex ifb,    pop ry set,
+\   $08 # ex ifb,    pop rx set,
+\   $04 # ex ifb,    pop rc set,
+\   $02 # ex ifb,    pop rb set,
+\   $01 # ex ifb,    pop ra set,
+\ 
+\   \ Do the interrupt!
+\   ex push set,
+\   >DEVICE-dev [#] hwi,
+\   pop  ex set,
+\ 
+\   $0100 # ex ifb,    ra push set,
+\   $0200 # ex ifb,    rb push set,
+\   $0400 # ex ifb,    rc push set,
+\   $0800 # ex ifb,    rx push set,
+\   $1000 # ex ifb,    ry push set,
+\   $2000 # ex ifb,    rz push set,
+\   $4000 # ex ifb,    ri push set,
+\   $8000 # ex ifb,    rj push set,
+\ 
+\   \ Now restore our registers.
+\   >DEVICE-saved-i [#]  ri  set,
+\   >DEVICE-saved-z [#]  rz  set,
+\ ;tcode
+\ 
+\ 
+\ \ The above >DEVICE is pretty expensive, which is fine for occasional HWIs
+\ \ like setting up the LEM1802 memory maps, but is really bad for reading the
+\ \ keyboard. Thus (KEY) is separately coded to get the next key typed.
+\ tcode (KEY) ( dev-num -- key )
+\   1 # a set, \ Read next key
+\   peek hwi,
+\   0 # rc ife,
+\     cf_(KEY) # pc set,
+\   rc peek set, \ Overwrite the device number on top.
+\ ;tcode
+\ 
+\ 
+\ tcode DEBUG
+\   0 # brk,
+\ ;tcode
+\ 
+\ tcode (LOG)
+\   pop log,
+\ ;tcode
+\ 
+\ 
+\ tcode (LOOP-END)
+\   [z]     rx set,     \ X is the index
+\   [z+1]   ry set,     \ Y is the limit
+\   rx      rc set,
+\   ry      rc sub,     \ C is i-l
+\   pop     rj set,     \ J is the delta
+\   \ We want delta + index - limit
+\   rj      ra set,
+\   rc      ra add,     \ A is delta + index - limit
+\   rc      ra xor,     \ A is d+i-l ^ i-l
+\   0 #     rb set,
+\   $8000 # ra ifc,     \ True when top bit is clear.
+\     -1 # rb set,
+\   rb      ra set,     \ Keep the first flag in A.
+\ 
+\   \ Then calculate delta XOR index - limit
+\   rj      rc xor,
+\   0 #     rb set,
+\   $8000 # rc ifc,
+\     -1 # rb set,
+\ 
+\   rb      ra bor,     \ OR those flags
+\   -1 #    ra xor,     \ and invert the result
+\   ra    push set,
+\   rx      rj add,     \ New index is delta + index
+\   rj     [z] set,     \ Write it back to the stack.
+\ ;tcode
+\ 
+\ 
+\ tcode STATE
+\   var_state # push set,
+\ ;tcode
+\ 
+\ label var_latest 0 ,,
+\ tcode LATEST
+\   var_latest # push set,
+\ ;tcode
+\ 
+\ tcode BASE
+\   var_base # push set,
+\ ;tcode
+\ 
+\ 
+\ \ Interrupts ==================================
+\ \ interrupt_handler is what actually gets IAS'd.
+\ \ It's a machine code routine that sets up a Forth thread with the high-level
+\ \ interrupt routine and its own tail routine.
+\ \ The interrupt message is in A and the old A was pushed onto the stack. Since
+\ \ we might be mid-routine elsewhere, we need to preserve that A!
+\ \ The stack effect of the user handler is ( msg -- )
+\ 
+\ \ This is the tail-end routine that finishes the interrupt. It restores the old
+\ \ registers off the stack and then does RFI.
+\ label int-EXIT
+\   \ Restoring JIYXCB - A is already saved, and we're using Z.
+\   pop rj set,   pop ri set,   pop ry set,
+\   pop rx set,   pop rc set,   pop rb set,
+\   0 # rfi,
+\ 
+\ label interrupt-thread 0 ,, int-EXIT ,,
+\ 
+\ tcode (>INTERRUPT) ( xt -- )
+\   pop   interrupt-thread [#]  set,  \ The first word of the thread.
+\ ;tcode
+\ 
+\ label interrupt_handler
+\   \ First a special case - if the interrupt word is 0, just bail since no one is
+\   \ listening.
+\   0 #   interrupt-thread [#] ife,
+\     0 # rfi,
+\ 
+\   \ Gotta save ~all the registers, since Forth words might clobber nearly any
+\   \ of them. Don't need to save Z or A (A is already saved; Z is handled safely)
+\   rj push set,   ri push set,   ry push set,
+\   rx push set,   rc push set,   rb push set,
+\   \ Make the interrupt-thread the new I
+\   interrupt-thread # ri set,
+\   \ And NEXT into it!
+\   next,
+\ 
+\ 
+\ \ The high-level code will put the xt of COLD here for the startup code.
+\ label 'COLD 0 ,,
+\ 
+\ \ Machine code entry point, jumped to by the first word at the top.
+\ \ Mostly this sets up the code to call
+\ label main
+\   1 # iaq,                  \ Queueing on for safety.
+\   interrupt_handler #  ias, \ Set up interrupts.
+\   'COLD [#]         ri set,
+\   0 # iaq,                  \ Queueing off, interrupts on.
+\   next, \ Never returns to here.
+\ 
+\ 

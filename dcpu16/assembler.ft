@@ -13,14 +13,14 @@ VARIABLE max-out
 
 : +max ( t-addr -- ) max-out @ max max-out ! ;
 
-: wa ( t-addr -- c-addr ) 2* output + ;
-: w@ ( t-addr -- w ) wa   dup c@ 8 lshift   swap 1+ c@ or ;
-: w! ( w t-addr -- )
-  dup +max wa >R
-  dup 8 rshift 255 and .s R@    c!
+: ta ( t-addr -- c-addr ) 2* output + ;
+: t@ ( t-addr -- w ) ta   dup c@ 8 lshift   swap 1+ c@ or ;
+: t! ( w t-addr -- )
+  dup +max ta >R
+  dup 8 rshift 255 and R@    c!
                255 and R> 1+ c! ;
 
-: asm, ( w -- ) there @ w!   1 there +! ;
+: asm, ( w -- ) there @ t!   1 there +! ;
 
 \ Handling the extra words after the opcode.
 CREATE extras 2 cells allot
@@ -81,7 +81,7 @@ VARIABLE #extras
   over $1a =          IF extra-op    EXIT THEN
   over $1e =          IF extra-op    EXIT THEN
   over $1f =          IF nip lit-op  EXIT THEN
-  nip op-bits ;
+  rot drop ( operand a? ) op-bits ;
 
 
 \ Binary operations have the form:
@@ -131,7 +131,7 @@ $13 unary log,   $14 unary brk,   $15 unary hlt,
 \ A later resolve will write it back.
 \ NB: Only works for RHS arguments.
 : fwd     ( -- resolve-token value operand ) there @ 1+   1000 # ;
-: resolve ( resolve-token ) there @ swap w! ;
+: resolve ( resolve-token ) there @ swap t! ;
 
 
 : dump ( c-addr u -- )

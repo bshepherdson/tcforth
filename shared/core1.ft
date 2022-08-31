@@ -1,39 +1,76 @@
-\ First round of core bits written in hand-rolled Forth threads.
+\ Common Forth high-level words
+\ These are intended to be portable to any machine the metacompiler can target.
+\ ANS Forth standard names and arguments where practical.
+target definitions
 
-t: MIN ( x y -- x|y ) \ 2dup < IF swap THEN drop
-  cf_2DUP ,, cf_< ,, cf_(0BRANCH) ,, label min-slot 0 ,, ( IF )
-    cf_SWAP ,,
-  there @ min-slot w! ( THEN )
-  cf_DROP ,,
-;t
+\ LATEST gives the name token. Skip over the link pointer and check the length.
+: IMMEDIATE 'latest @ cell+   dup @   $8000 or   swap ! ;
+host acts: drop latest tcell+ dup t@   f_immed or   swap t! ;
 
-T: TUCK ( x y -- y x y ) cf_SWAP ,, cf_OVER ,, ;t
-T: 0=   ( x -- ? )       lit ,, 0 ,, cf_= ,, ;t
-T: NOT  ( x -- ?' )      cf_0= ,, ;t
-T: <>   ( x y -- ? ) cf_=    ,, cf_0= ,, ;t
-T: >    ( x y -- ? ) cf_SWAP ,, cf_<  ,, ;t
-T: <=   ( x y -- ? ) cf_>    ,, cf_0= ,, ;t
-T: >=   ( x y -- ? ) cf_<    ,, cf_0= ,, ;t
-T: U>   ( x y -- ? ) cf_SWAP ,, cf_U< ,, ;t
-T: U>=  ( x y -- ? ) cf_U<   ,, cf_0= ,, ;t
-T: U>=  ( x y -- ? ) cf_U>   ,, cf_0= ,, ;t
+target : [ 0 state ! ; IMMEDIATE
+host acts: 0 state ! ; IMPERATIVE
 
-T: WITHIN ( x lo hi -- ? ) \ >R OVER U<= SWAP R> U< AND
-  cf_OVER ,, cf_- ,, cf_>R ,, cf_- ,, cf_R> ,, cf_U< ,, ;t
+target : ] 1 state ! ;
+host acts: ] ;
 
-T: STR= ( c-addr u c-addr u -- eq? )
-  \ rot over <> IF drop 2drop EXIT THEN   Length mismatch
-  cf_ROT ,, cf_OVER ,, cf_<>   if,   cf_DROP ,, cf_2DROP ,, cf_EXIT ,, then,
-  \ ( c1 c2 u ) BEGIN dup WHILE
-  begin, cf_DUP ,, while,
-  \   1- >R   over R@ + c@   over R@ + c@   ( c1 c2 ch1 ch2    R: u )
-    cf_1- ,, cf_>R ,,
-    cf_OVER ,, cf_R@ ,, cf_+ ,, cf_C@ ,,
-    cf_OVER ,, cf_R@ ,, cf_+ ,, cf_C@ ,,
-  \   <> IF 2drop R> drop EXIT THEN
-    cf_<> ,, if, cf_2DROP ,, cf_R> ,, cf_DROP ,, cf_EXIT ,, then,
-  \   R> REPEAT ( c1 c2 0 ) drop 2drop ;
-    cf_R> ,, repeat,
-  cf_DROP ,, cf_2DROP ,, ;t
+target
+: 0<   0 < ;
+: 0=   0 = ;
+: NOT  0= ;
+: >    swap < ;
+: <=   > not ;
+: >=   < not ;
+: U>   swap U< ;
+
+: /MOD ( a b -- r q ) 2dup mod   -rot / ;
+
+\ Memory operations
+: COUNT dup c@ >R char+ R> ;
+
+: ALLOT ( n -- ) dp +! ;
+host acts: drop dp +! ;
+target
+
+: HERE dp @ ;
+host acts: dp @ ;
+target
+
+
+\ Control structures
+\ TODO Okay, I keep tripping over forward references. I should just defined a
+\ scheme for those. I should look into the screens too - how do they bootstrap?
+\ Maybe there's a better order or clever technique.
+target : [0BRANCH]   [ T0BRANCH tliteral ] compile, ;
+target : [BRANCH]    [ TBRANCH  tliteral ] compile, ;
+target : ,DEST       , ;
+target : !DEST ( dest slot -- ) here swap ! ;
+
+target : IF   ( ? --     C: -- if-slot ) [0BRANCH]   here 0 ,dest ; IMMEDIATE
+  host acts: drop T0BRANCH t,   here 0 ,dest ; IMPERATIVE
+target : THEN ( ? --     C: if-slot -- ) here swap !dest ; IMMEDIATE
+  host acts: drop here swap !dest ; IMPERATIVE
+target : ELSE ( ? --     C: if-slot -- else-slot )
+    [BRANCH] here 0 ,dest   swap here swap !dest ; IMMEDIATE
+  host acts: drop TBRANCH  t,   here 0 ,dest   swap here swap !dest ; IMPERATIVE
+
+target : BEGIN  ( --       C: -- top-loc ) here ; IMMEDIATE
+  host acts: drop here ; IMPERATIVE
+target : AGAIN  ( --       C: top-loc -- ) [BRANCH] ,dest ; IMMEDIATE
+  host acts: drop TBRANCH t, ,dest ; IMPERATIVE
+target : WHILE  ( ? --     C: -- while-slot ) [0BRANCH] here 0 ,dest ; IMMEDIATE
+  host acts: drop T0BRANCH t,   here 0 ,dest ; IMPERATIVE
+target : REPEAT ( --       C: top-loc while-slot )
+    [BRANCH] swap ,dest   ( while-slot ) here swap !dest ; IMMEDIATE
+  host acts: drop TBRANCH t,   swap ,dest   here swap !dest ; IMPERATIVE
+
+target : FOO IF + ELSE - THEN ;
+
+
+\ Input handling
+\ 'SOURCE >IN and TIB are defined in the kernel, to avoid circular refs.
+\ : SOURCE    'SOURCE 2@ ;
+\ : SOURCE-ID 'source-id @ ;
+\ : /STRING   ( c-addr u n -- c-addr' u' ) dup >R -   swap R> + swap ;
+\ : BL        32 ;
 
 

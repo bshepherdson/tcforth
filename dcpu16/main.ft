@@ -1,0 +1,49 @@
+\ Entry point for metacompiling the portable kernel to DCPU-16.
+\ Most of the heavy lifting is done in other files, this is just orchestrating.
+
+\ "Host" is the machine and Forth that are running the metacompiler. Typically
+\ x86_64 or ARM or something.
+\ "Target" is the machine for which we're metacompiling, perhaps DCPU-16.
+
+\ There are four relevant vocabularies when metacompiling:
+\ - NATIVE    is the actual host system, Gforth or similar ANS Forth.
+\ - HOST      holds some metacompiler words which hide ANS names like HERE.
+\ - TARGET    holds "mirror words" that compile themselves into the Target.
+\ - Plus the actual Target dictionary under construction, which is not used to
+\   look anything up.
+
+\ First, let's defined handy words to switch the ANS search order between
+\ NATIVE, HOST and TARGET.
+
+\ First the native-side words.
+: NATIVE   only forth   definitions ; immediate
+
+wordlist CONSTANT host-wl
+wordlist CONSTANT target-wl
+
+: wordlist! ( wid -- ) >R get-order nip R> swap set-order ;
+: HOST     postpone native also host-wl   wordlist! ; immediate
+HOST DEFINITIONS
+
+: TARGET   postpone host   also target-wl wordlist! ; immediate
+
+\ Some DCPU-specific constants
+$0000 CONSTANT rp0
+$ff80 CONSTANT sp0
+
+$8000 CONSTANT f_immed
+$4000 CONSTANT f_hidden
+$2fff CONSTANT mask_len
+$7fff CONSTANT mask_len_hidden
+
+REQUIRE assembler.ft      \ DCPU-16 assembler
+REQUIRE metacompiler.ft   \ Kernel code and code words
+\ Note that HOST CODE constructs two words:
+\ - The actual header and definition in the Target image
+\ - A mirror word in the TARGET vocabulary that compiles itself for the target.
+
+\ At this point the assembler's output region should be complete. Dump the
+\ resulting binary.
+
+S" forth.bin" dump
+bye

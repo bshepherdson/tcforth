@@ -1,0 +1,133 @@
+\ These are constructed for DTC, RSP in Z, IP in I.
+
+HOST definitions
+
+\ These are pseudooperands that hide what registers are used for what.
+: rsp     ( -- op ) rz  ;
+: [rsp]   ( -- op ) [z] ;
+: ip      ( -- op ) ri  ;
+: [ip]    ( -- op ) [i] ;
+
+: <[ip]+, ( lhs -- ) [i] swap sti, ;
+
+\ Some assembler macros
+: next,    ( -- ) [ip] pc sti, ;
+: pushrsp, ( rhs -- ) 1 # rsp sub,   ( rhs ) [rsp] set, ;
+: poprsp,  ( lhs -- ) [rsp] 2swap ( rhs lhs ) set,   1 # rsp add, ;
+
+: tcells    ( n -- n2 ) 2* ;
+: tcell+    ( n -- n2 ) 2 + ;
+: tcompile, t, ;
+
+
+\ DOCOL and DODOES right at the top so they can be JSR DOCOL'd with the inline
+\ literal from the code fields!
+
+\ This is called by JSR, so the parameter field address is on the data stack.
+label DOCOL
+  ip pushrsp,
+  pop ip set,
+  next,
+
+\ DOVAR is the code word for a CREATEd definition without a DOES> - it pushes
+\ the address of the parameter field. In order to support DOES>, however, a two-
+\ word code field is needed. CREATE assembles JSR DOVAR, which fits in one word
+\ since DOVAR is at the very top of memory (circa $0007) and fits inline.
+\ So CREATE "wastes" one word.
+\ See the DOES> design below.
+
+label DOVAR
+  1 # peek add,
+  next,
+
+\ DOES> design for DTC =======================================================
+\ This is different from the original TC-Forth DODOES scheme.
+\ Sequence 1: while eg. : CONSTANT create , DOES> @ ; is being defined.
+\ Sequence 2: while CONSTANT is running, defining a new constant.
+\ Sequence 3: while a particular constant is executing.
+
+\ DOES> is an immediate word, it runs during "Sequence 1".
+\ It compiles   (DOES>) EXIT dodoes-asm   at the end of CONSTANT.
+\ Then the Forth code after DOES> is compiled. The final CONSTANT looks like:
+\ link | len | CONSTANT | jsr docol | (blank) | CREATE | , | (DOES>) | EXIT |
+\ dodoes-code | @ | EXIT
+\ Sequence 2 (eg. 7 CONSTANT FOO) CREATEs the new header with the default
+\ JSR DOVAR in its code field, but then (DOES>) runs and patches it to
+\ JSR &dodoes-code as above, ie. after the EXIT:
+\ link | len | FOO | jsr lit | &dodoes-code | 7
+
+\ In DTC, the dodoes-code is entered with the parameter field (pointer to 7)
+\ conveniently already on the stack, because that's what's after the code field
+\ of FOO and was pushed by the JSR.
+
+\ The actual dodoes-code can be simply JSR DOCOL as well in this system, since
+\ that will enter the thread with IP pointing at the right place! That's nice
+\ because it's fast and compact (1 word).
+
+\ This HOST word is invoked by Host-side DOES> to compile the necessary pieces.
+VARIABLE '(DOES>)
+VARIABLE 'EXIT   \ These get populated later.
+: DOES, ( -- ) '(DOES>) @ t,   'EXIT @ t,   DOCOL # jsr, ;
+
+
+\ Old TC-Forth DODOES, which has been obsoleted.
+\ label DODOES
+\   pop  ra   set, \ DOES> slot address now in A.
+\   ra   push set, \ Push it
+\   1 #  peek add, \ And +1 so it's now the parameter field address.
+\   \ Now check if the DOES> slot has anything good in it.
+\   0 #  [a]  ife,
+\     fwd   pc set, \ Boring, 0 in the slot. Just leave the PFA on the stack.
+\ 
+\   \ Interesting case: jump to the DOES> slot.
+\   ri pushrsp,
+\   [a] ri set,
+\ 
+\   resolve
+\   next,
+
+
+\ Not really words, just assembler routines.
+\ TODO Maybe these are better as mirror words without Target-side headers?
+label LIT
+  [i] push sti,
+  next,
+
+label DOSTRING
+  \ Next word in the thread is the length, then that many characters.
+  [i] ra   sti, \ Length into TOS, I now points at the string.
+  ri  push set, \ Push the string address as NOS
+  ra  push set, \ And the length above that.
+  ra  ri   add, \ Advance I past the string.
+  next,
+
+
+
+\ Compiles a fresh Target header with an empty code field.
+\ Converts the name text to upper-case.
+: >upper ( ch -- ch' ) dup 'a' 'z' 1+ within IF 'a' 'A' - - THEN ;
+
+: (mk-header) ( c-addr u -- target-xt )
+  here   latest t,   'latest !
+  dup tc, \ Length byte
+  0 DO ( c-addr ) dup i + c@ >upper tc, LOOP drop ( )
+  here ( target-xt ) ;
+
+\ Compiles the code field (address) for a colon declaration.
+\ For DTC that means assembling a JSR docol.
+: ,docol ( -- ) docol # jsr, ;
+
+\ Compile a literal. This is in the model because eg. STC doesn't use the two-
+\ cell [LIT|x] pattern.
+: tliteral ( x --    X: -- x ) lit tcompile,   t, ;
+
+: ,dest ( x -- ) t, ;
+: !dest ( dest slot -- ) t! ;
+
+
+\ Some dictionary header pieces.
+$8000 CONSTANT f_immed
+$4000 CONSTANT f_hidden
+$7fff CONSTANT mask_len_hidden
+$3fff CONSTANT mask_len
+

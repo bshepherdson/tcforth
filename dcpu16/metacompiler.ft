@@ -1,0 +1,224 @@
+\ Kernel (layer 1) for the DCPU-16.
+\ This is a host Forth file that depends on the ANS Forth assembler for DCPU-16.
+
+\ Design:
+\ - Direct threading
+\ - Return stack: RSP in Z; top 128 cells of memory, $ff80 to $ffff.
+\ - Data stack: PSP is SP; TOS on stack (PUSH, PEEK etc. are super fast)
+\ - IP is I (so STI can be used in NEXT)
+\ - A B C X Y are free; J is reserved (it gets clobbered by STI)
+\   - (No STI, STD aside from that use.)
+
+\ Standard dictionary headers: link, length+immediate+hidden word, len words of
+\ name, code field.
+
+\ This is a little surprising, but it makes sense when you think deeper:
+\ NATIVE HERE pushes the Host's dictionary pointer.
+\ HOST   HERE pushes the Target's dictionary pointer
+\ TARGET HERE is the mirror word that compiles the Target xt for HERE (!)
+HOST DEFINITIONS
+
+\ The assembler defines a THERE pointer for the Target dictionary.
+\ We capture that address as the HOST DP as well.
+there CONSTANT DP
+: here dp @ ;
+0 dp !   \ DCPU execution starts at $0000 by default.
+
+: t,        ( w -- )  asm, ;
+: tc,       ( b -- )  asm, ;   \ Byte-width assemble. That's just t, here.
+: tc@ t@ ;
+: tc! t! ;
+: tallot dp +! ;
+
+VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
+: LATEST ( -- nt ) 'latest @ ;
+0 'latest !
+
+\ Controls whether headers are created by (TCREATE); some definitions are
+\ headless.
+VARIABLE ?heads   0 ?heads !
+
+
+\ First line of code, the entry point. Jump to COLD.
+$8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
+
+
+\ ===================== MACHINE/MODEL DEPENDENT SECTION ======================
+\ Trying to keep the system as portable across both machines and Forth models
+\ as possible. model.ft implements a few key routines (eg. DOCOL) and assembler
+\ macros (eg. pushrsp,) to hide the details of the model as much as possible.
+REQUIRE model.ft
+
+HOST DEFINITIONS
+
+
+\ =========================== MIRROR WORDS ===================================
+\ The mirror words go in the TARGET vocabulary, the one that's active while
+\ metacompiling the target application.
+\ There are several points to note that drive the design:
+
+\ First, there are *four* actions for each word, some of which have defaults:
+\ - When executed by the target.
+\ - When compiled by the target.
+\ - When executed by the metacompiler
+\ - When compiled by the metacompiler
+
+\ Note that the metacompiler leaves the hosting Forth in "interpreting" STATE
+\ (ie. NATIVE STATE) throughout. However, the metacompiler has a separate STATE,
+\ controlling whether it is "metacompiling" or "metainterpreting". This is
+\ HOST STATE.
+
+\ Regular words (eg. DUP) can have defaults fill in three of the actions:
+\ - Target exec: TARGET DEFINITIONS HOST CODE DUP some asm code, END-CODE
+\ - Target compile: compile the xt, the default for non-IMMEDIATE words.
+\ - Host exec: Throw an error - can't execute regular Target words.
+\ - Host compile: compile the Target xt into the image
+\   - This is the default action of mirror words; their raison d'etre.
+
+\ IMMEDIATE words (eg. IF) work like this:
+\ - Target exec: (undefined, probably throw an error via ?comp)
+\ - Target compile: run immediately, compile 0branch and a target.
+\ - Host exec: Throw an error also.
+\ - Host compile: Run a Host-side action, compiling TARGET 0BRANCH and the dest
+\     just like Target compiling.
+\ This is achieved with HOST ACTS: ... ; IMPERATIVE
+
+\ Defining words (eg. CONSTANT) that use DOES> are yet more complex.
+\ See DESIGN.md for the details.
+HOST
+VARIABLE STATE
+VARIABLE 'mirror \ Holds the body address of the last mirror word defined.
+
+: interpX ( addr -- )
+  drop 1 ABORT" Can't interpret TARGET word without HOST ACTS:" ;
+: interpX-imperative ( addr -- )
+  drop 1 ABORT" Can't interpret IMPERATIVE mirror word" ;
+
+: mirror-compile ( addr -- ) @ T, ;
+
+\ The parameter field of a mirror word contains:
+\ Target xt, metainterpreting xt, metacompiling xt
+: mirror ( target-xt "name" -- )
+    CREATE
+    native   dup hex. latest name>string type cr   here   host 'mirror !
+    ( target-xt ) ,   ['] interpX ,   ['] mirror-compile ,
+  DOES>
+    dup @ hex.
+    dup STATE @ dup . cr IF 2 cells + ELSE cell+ THEN
+    \ ." mirror about to run" cr dup xt-see
+    @ execute ;
+
+\ Creates a new, bare dictionary entry on the Target, and its mirror word in the
+\ TARGET vocabulary! They both have the same name.
+\ Leaves the vocabulary set to HOST.
+: (TCREATE) ( "name" -- )
+  \ Create the Target header first, so we have its xt.
+  \ But save the input pointer so we can hoik the name again.
+  >IN @ >R
+  parse-name ( c-addr u ) (mk-header)  ( xt )
+  R> >IN !   \ Input pointer is aimed at the name again.
+  \ Set up compilation into the TARGET vocabulary, but without switching to
+  \ looking words up in it.
+  get-current >R   target-wl set-current
+  mirror
+  R> set-current \ And back.
+;
+
+host definitions
+
+\ These are HOST vocab words that define assembler words on the Target - their
+\ mirror words are regular.
+: code      ( "name" -- ) (TCREATE) ;
+: end-code  ( -- )        next, ;
+\ End marker, but no NEXT.
+: end-code-bare ( -- ) ;
+
+
+\ Now we have what we need to metacompile the CODE definitions at the heart of
+\ the new kernel.
+REQUIRE kernel.ft
+
+
+
+\ Metacompiling Forth words ==================================================
+\ In the TARGET vocab, : creates a new definition with codeword, in both HOST
+\ and TARGET, just like HOST CODE.
+
+\ It switches the *metacompiler* to compiling state, but not the Host's own
+\ compiler. Therefore the words in the definition will be executed by the host,
+\ rather than compiled. These are the mirror words, and executing them compiles
+\ themselves into the Target.
+
+\ Replacement parser for the target "compiler", runs during colon definitions.
+\ This is a normal compiler. The regular one would have worked except for two
+\ things: (1) HOST STATE is not NATIVE STATE; (2) capturing numbers.
+: ] ( -- )
+  1 state ! \ Start off in the metacompiling state.
+  BEGIN state @ WHILE
+    parse-name ?dup IF ( c-addr u )
+      2dup find-name ( ca u nt|0 ) ?dup IF
+        \ Found it. Execute the target word.
+        >R 2drop R> name>int execute
+      ELSE ( ca u )
+        2dup s>number? IF ( ca u d ) D>S >R 2drop R> ( n ) LIT T, T, THEN
+      THEN ( )
+    ELSE ( c-addr ) refill 2drop THEN ( )
+  REPEAT ;
+
+
+\ Bootstrapping the : for use by the target. It needs to (TCREATE) and compile
+\ jsr docol in the target, then activate the ] parser.
+\ These need their host and target sides defined.
+\ START HERE: This is a tricky bootstrapping problem. Probably make a host-only
+\ : and ; and then replace them later with the target-side equivalents once
+\ eg. CREATE is defined on the target?
+\ Forward references are one path, or I can just leave a few blank words in the
+\ target's : and fill them in later.
+
+\ Runs in the HOST. Replaces the metainterpretation action for the most-recent
+\ mirror word.
+\ Use IMPERATIVE to make this the metacompilation action instead.
+VARIABLE acting?
+: ACTS: ( "name" --    X: target-addr-body -- ) acting? on   :noname ;
+
+\ Regular semicolon, plus check acting? and update the 'mirror word.
+: ;   postpone ;   acting? @ IF acting? off   ( xt ) 'mirror @ cell+ ! THEN ;
+IMMEDIATE
+
+\ Like IMMEDIATE for metacompilation - copies the metainterpretation action to
+\ be the metacompilation action instead, and makes the metainterpretation action
+\ an error.
+: IMPERATIVE ( -- )
+  'mirror @ cell+ dup >R  ( 'interp    R: 'interp )
+  @   R@ cell+ !
+  ['] interpX-imperative   R> ! ;
+
+
+: T' ( "name" -- target-xt )
+  parse-name target-wl search-wordlist IF >body @ ELSE 1 ABORT" Bad T'" THEN ;
+
+
+T' (0BRANCH) CONSTANT T0BRANCH
+T' (BRANCH)  CONSTANT TBRANCH
+
+\ Hand-roll the target+mirror definitions for : and ;
+\ They don't work on the target yet, just making space.
+target definitions host
+code : end-code 0 t, 0 t, 0 t, 0 t,
+host acts: ." host :" cr (TCREATE)   ,docol   ] ;
+
+code ; end-code 0 t, 0 t, 0 t, 0 t,
+host acts: 0 state !   target ['] exit host >body @ t, ; IMPERATIVE
+
+host here ." Metacompilation starts at " dup hex.  ." (" 2* hex. ." )" cr
+
+target definitions
+
+REQUIRE ../shared/core1.ft
+
+\ host 'mirror @ dup @ hex. cell+ @ xt-see
+
+host S" forth.bin" dump bye
+
+\ REQUIRE model-target.ft
+

@@ -1,0 +1,22 @@
+\ Exception word set was added to the core, and it's not hard to include and
+\ use for eg. undefined word.
+
+target : CATCH ( ...1 xt -- ...2  ex# | 0 )
+  SP@ >R   handler @ >R   rp@ handler ! \ ( R: ret old-sp old-handler )
+  EXECUTE  \ Only returns if no THROW
+  R> handler !   R> drop   0 ;
+
+\ If the argument to throw is non-zero, it's as if the containing CATCH returned
+\ that exception number.
+\ Note that QUIT contains an exception handler, so there's always such a handler.
+target : THROW ( ...1 n -- ...1 | ...2 n )
+  ?dup IF \ 0 throw is a no-op
+    handler @ rp!   R> handler !   R> swap >R ( saved-sp   R: exc# )
+    sp! drop R> ( exc#  R: ret-of-catch )
+    \ This returns to CATCH's caller with exc# on top.
+  THEN ;
+
+target : ERR-UNDEFINED ( -- exc# ) -13 ;
+
+target : ABORT ( -- ) -1 throw ;
+

@@ -94,7 +94,7 @@ VARIABLE 'mirror \ Holds the body address of the last mirror word defined.
 : interpX-imperative ( addr -- )
   drop 1 ABORT" Can't interpret IMPERATIVE mirror word" ;
 
-: mirror-compile ( addr -- ) @ T, ;
+: mirror-compile ( addr -- ) @ dup ." compiling " hex. cr T, ;
 
 \ The parameter field of a mirror word contains:
 \ Target xt, metainterpreting xt, metacompiling xt
@@ -102,9 +102,10 @@ VARIABLE 'mirror \ Holds the body address of the last mirror word defined.
     CREATE
     native   dup hex. latest name>string type cr   here   host 'mirror !
     ( target-xt ) ,   ['] interpX ,   ['] mirror-compile ,
+    native latest host ,
   DOES>
-    dup @ hex.
-    dup STATE @ dup . cr IF 2 cells + ELSE cell+ THEN
+    dup 3 cells + @ id.
+    dup STATE @ IF 2 cells + ELSE cell+ THEN
     \ ." mirror about to run" cr dup xt-see
     @ execute ;
 
@@ -137,7 +138,11 @@ host definitions
 \ Now we have what we need to metacompile the CODE definitions at the heart of
 \ the new kernel.
 REQUIRE kernel.ft
+host
 
+\ Overwrite the jump target of the entry code to be main.
+\ The instruction is at $0000 and its target argument at $0001.
+main 1 t!
 
 
 \ Metacompiling Forth words ==================================================
@@ -153,17 +158,23 @@ REQUIRE kernel.ft
 \ This is a normal compiler. The regular one would have worked except for two
 \ things: (1) HOST STATE is not NATIVE STATE; (2) capturing numbers.
 : ] ( -- )
+  \ ." top of ] " .s cr
   1 state ! \ Start off in the metacompiling state.
   BEGIN state @ WHILE
     parse-name ?dup IF ( c-addr u )
       2dup find-name ( ca u nt|0 ) ?dup IF
         \ Found it. Execute the target word.
-        >R 2drop R> name>int execute
+        >R 2drop R> name>int execute \ ." Before: " .s execute ."    after: " .s cr
       ELSE ( ca u )
-        2dup s>number? IF ( ca u d ) D>S >R 2drop R> ( n ) LIT T, T, THEN
+        2dup s>number? IF ( ca u d )
+          D>S >R 2drop R> ( n ) LIT T, T,
+        ELSE
+          2drop 2drop
+        THEN ( )
       THEN ( )
     ELSE ( c-addr ) refill 2drop THEN ( )
-  REPEAT ;
+  REPEAT \ ." end of ]" .s cr
+  ;
 
 
 \ Bootstrapping the : for use by the target. It needs to (TCREATE) and compile
@@ -200,25 +211,24 @@ IMMEDIATE
 
 T' (0BRANCH) CONSTANT T0BRANCH
 T' (BRANCH)  CONSTANT TBRANCH
+T' DROP      CONSTANT TDROP
+T' OVER      CONSTANT TOVER
+T' =         CONSTANT T=
+
 
 \ Hand-roll the target+mirror definitions for : and ;
 \ They don't work on the target yet, just making space.
 target definitions host
+
 code : end-code 0 t, 0 t, 0 t, 0 t,
-host acts: ." host :" cr (TCREATE)   ,docol   ] ;
+  host acts: drop   ." host :" cr (TCREATE)   ,docol   ] ;
 
 code ; end-code 0 t, 0 t, 0 t, 0 t,
-host acts: 0 state !   target ['] exit host >body @ t, ; IMPERATIVE
+host acts: drop   0 state !   'EXIT @ tcompile, ; IMPERATIVE
 
 host here ." Metacompilation starts at " dup hex.  ." (" 2* hex. ." )" cr
 
-target definitions
-
+host .s cr
 REQUIRE ../shared/core1.ft
 
-\ host 'mirror @ dup @ hex. cell+ @ xt-see
-
-host S" forth.bin" dump bye
-
-\ REQUIRE model-target.ft
-
+\ entry-point should now be set properly for the :main routine.

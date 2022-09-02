@@ -96,13 +96,19 @@ code NIP ( y x -- x )
   ra  peek set,
 end-code
 
-
-code SP@
-  sp ra   set,
-  ra push set,
+code TUCK ( y x -- x y x )
+  pop ra   set,
+  pop rb   set,
+  ra  push set,
+  rb  push set,
+  ra  push set,
 end-code
 
-code RP@   rz push set,   end-code
+
+code SP@   sp  push set,   end-code
+code SP!   pop sp   set,   end-code
+code RP@   rz  push set,   end-code
+code RP!   pop rz   set,   end-code
 
 code >R    pop  pushrsp,   end-code
 code R>    push poprsp,    end-code
@@ -161,11 +167,23 @@ code EXECUTE
   pop pc set,
 end-code-bare
 
+\ Uses the built-in, TechCompliant DCPU LOG instruction to log TOS.
+code LOG ( x -- )
+  pop log,
+end-code
+\ Likewise, DCPU BRK
+code BREAK ( -- )
+  0 # brk,
+end-code
+
 
 
 label var_dp          0 asm,
 label var_latest      0 asm,
+label var_base        0 asm,
 label var_state       0 asm,
+label var_handler     0 asm,
+
 label var_source      0 asm, 0 asm,
 label var_in_ptr      0 asm,
 label var_source_id   0 asm,
@@ -176,18 +194,23 @@ code DP
 end-code
 
 code ,
+label (compile)
   var_dp  # rb  set,
   [b]       rc  set,
   pop       [c] set,
   1 #       [b] add,
 end-code
 
-code 'LATEST      var_latest # push set, end-code
-code STATE        var_state  # push set, end-code
-code 'SOURCE      var_source # push set, end-code
-code 'SOURCE-ID   var_source # push set, end-code
-code >IN          var_in_ptr # push set, end-code
-code TIB          input-buf  # push set, end-code
+code COMPILE,   (compile) # pc set, end-code-bare
+
+code HANDLER      var_handler # push set, end-code
+code 'LATEST      var_latest  # push set, end-code
+code STATE        var_state   # push set, end-code
+code BASE         var_base    # push set, end-code
+code 'SOURCE      var_source  # push set, end-code
+code 'SOURCE-ID   var_source  # push set, end-code
+code >IN          var_in_ptr  # push set, end-code
+code TIB          input-buf   # push set, end-code
 
 
 code 2DUP
@@ -254,6 +277,19 @@ code D-  ( l1 h1 l2 h2 -- l3 h3 )
   rb   peek   sbx, \ h1-h2+EX -> h3
 end-code
 
+code UDM* ( l1 h1 n2 -- l3 h3 )
+  pop  ra   set,
+  pop  rb   set,
+  pop  rc   set,
+  ra   rc   mul, \ C is lo*n, EX is the carry
+  ex   push set, \ Save EX
+  ra   rb   mul, \ B is hi*n
+  pop  rb   add, \ Add the old carry from lo to h3
+  rc   push set, \ Push lo
+  rb   push set, \ Push hi
+end-code
+
+
 \ TODO More double-cell arithmetic
 
 
@@ -264,7 +300,7 @@ end-code
 
 \ On the DCPU, these are absolute new I values in the next slot of the thread.
 code (BRANCH)
-  ip <[ip]+,
+  [ip] ip set,
 end-code
 
 code (0BRANCH)
@@ -302,4 +338,164 @@ code ,DOCOL ( -- )
   1 #   var_dp  [#] add, \ Update the DP
 end-code
 
+code (LOOP-END)
+  [z]     rx set,     \ X is the index
+  1 [z+]  ry set,     \ Y is the limit
+  rx      rc set,
+  ry      rc sub,     \ C is i-l
+  pop     rj set,     \ J is the delta
+  \ We want delta + index - limit
+  rj      ra set,
+  rc      ra add,     \ A is delta + index - limit
+  rc      ra xor,     \ A is d+i-l ^ i-l
+  0 #     rb set,
+  $8000 # ra ifc,     \ True when top bit is clear.
+    -1 # rb set,
+  rb      ra set,     \ Keep the first flag in A.
+
+  \ Then calculate delta XOR index - limit
+  rj      rc xor,
+  0 #     rb set,
+  $8000 # rc ifc,
+    -1 # rb set,
+
+  rb      ra bor,     \ OR those flags
+  -1 #    ra xor,     \ and invert the result
+  ra    push set,
+  rx      rj add,     \ New index is delta + index
+  rj     [z] set,     \ Write it back to the stack.
+end-code
+
+
+\ Wrappers for the fundamental DCPU-family hardware instructions.
+\ This allows the hardware interfaces to be written in high-level Forth.
+code #DEVICES ( -- n )
+  ra hwn,
+  ra push set,
+end-code
+
+code DEVINFO ( dev-num -- version d-MAKER d-ID )
+  pop ra set,
+  ra hwq,     \ B:A is ID_hi:lo; C is version; Y:X is manufacturer.
+  rc push set,
+  rx push set,
+  ry push set,
+  ra push set,
+  rb push set,
+end-code
+
+\ Sends a hardware interrupt in DCPU style.
+
+\ The stack before and after has the register values ordered
+\ ( a b c x y z i j mask dev-num -- a b c x y z i j ) but only the ones in the
+\ mask are included on either side.
+\ The mask is JIZYXCBAjizyxcba, with the low bits being inputs and high ones
+\ outputs.
+label >DEVICE-saved-i 0 asm,
+label >DEVICE-saved-z 0 asm,
+label >DEVICE-dev     0 asm,
+
+code >DEVICE
+  pop >DEVICE-dev       [#] set,
+  pop ex                    set, \ EX holds the mask
+
+  \ Save the meaningful registers.
+  rz  >DEVICE-saved-z [#] set,
+  ri  >DEVICE-saved-i [#] set,
+
+  \ Now get them off the stack.
+  $80 # ex ifb,    pop rj set,
+  $40 # ex ifb,    pop ri set,
+  $20 # ex ifb,    pop rz set,
+  $10 # ex ifb,    pop ry set,
+  $08 # ex ifb,    pop rx set,
+  $04 # ex ifb,    pop rc set,
+  $02 # ex ifb,    pop rb set,
+  $01 # ex ifb,    pop ra set,
+
+  \ Do the interrupt!
+  ex push set,
+  >DEVICE-dev [#] hwi,
+  pop  ex set,
+
+  $0100 # ex ifb,    ra push set,
+  $0200 # ex ifb,    rb push set,
+  $0400 # ex ifb,    rc push set,
+  $0800 # ex ifb,    rx push set,
+  $1000 # ex ifb,    ry push set,
+  $2000 # ex ifb,    rz push set,
+  $4000 # ex ifb,    ri push set,
+  $8000 # ex ifb,    rj push set,
+
+  \ Now restore our registers.
+  >DEVICE-saved-i [#]  ri  set,
+  >DEVICE-saved-z [#]  rz  set,
+end-code
+
+
+\ The above >DEVICE is pretty expensive, which is fine for occasional HWIs
+\ like setting up the LEM1802 memory maps, but is really bad for reading the
+\ keyboard. Thus (KEY) is separately coded to get the next key typed.
+code (KEY) ( dev-num -- key )
+label (key)-loop
+  1 # ra set, \ Read next key
+  peek hwi,
+  0 # rc ife,
+    (key)-loop # pc set,
+  rc log,
+  rc peek set, \ Overwrite the device number on top.
+end-code
+
+
+\ Interrupts ==================================
+\ interrupt_handler is what actually gets IAS'd.
+\ It's a machine code routine that sets up a Forth thread with the high-level
+\ interrupt routine and its own tail routine.
+\ The interrupt message is in A and the old A was pushed onto the stack. Since
+\ we might be mid-routine elsewhere, we need to preserve that A!
+\ The stack effect of the user handler is ( msg -- )
+
+\ This is the tail-end routine that finishes the interrupt. It restores the old
+\ registers off the stack and then does RFI.
+label int-EXIT
+  \ Restoring JIYXCB - A is already saved, and we're using Z.
+  pop rj set,   pop ri set,   pop ry set,
+  pop rx set,   pop rc set,   pop rb set,
+  0 # rfi,
+
+label interrupt-thread 0 asm, int-EXIT asm,
+
+code (>INTERRUPT) ( xt -- )
+  pop   interrupt-thread [#]  set,  \ The first word of the thread.
+end-code
+
+label interrupt_handler
+  \ First a special case - if the interrupt word is 0, just bail since no one is
+  \ listening.
+  0 #   interrupt-thread [#] ife,
+    0 # rfi,
+
+  \ Gotta save ~all the registers, since Forth words might clobber nearly any
+  \ of them. Don't need to save Z or A (A is already saved; Z is handled safely)
+  rb push set,   rc push set,   rx push set,
+  ry push set,   ri push set,   rj push set,
+  \ Make the interrupt-thread the new I
+  interrupt-thread # ri set,
+  \ And NEXT into it!
+  next,
+
+
+\ Machine code entry point, jumped to by the first instruction at $0000-1
+label main
+  1 # iaq,                 \ Queueing on for safety.
+  interrupt_handler # ias, \ Set up interrupt handler
+  rp0 # rz set,            \ Initial RSP
+  sp0 # sp set,            \ Initial SP
+  0 # iaq,                 \ Enable interrupts again
+  entry-point [#] pc set,  \ Jump to the code field of the starter word QUIT.
+
+
+\ Overwrite the jump target of the entry code to be main.
+\ The instruction is at $0000 and its target argument at $0001.
+main 1 t!
 

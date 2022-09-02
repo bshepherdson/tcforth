@@ -1,234 +1,187 @@
 \ The fundamental stack is:
-\ INTERPRET interprets or compiles the line of Forth code in that buffer.
-\ QUIT clears return stack (only) and does BEGIN refill WHILE interpret REPEAT
-\ COLD clears data stack and calls QUIT
-
-\ REFILL is clever and does the Right Thing for each source type:
-\ Keyboard: ACCEPT
-\ EVALUATE: just return 0
-\ File:     read the next line; return 0 if no more
-\ Block:    chain to the next block, I guess. (: -> refill drop ;)
+\ INTERPRET does the fundamental loop: BEGIN interpret... REFILL not UNTIL
+\ QUIT clears return stack (only), sets up keyboard input, and calls INTERPRET.
+\ COLD clears data stack and calls QUIT.
 
 \ The return stack is used as the input source stack as needed.
 \ - EVALUATE pushes the old 'SOURCE and >IN to the return stack and puts the
 \   string in their place, then calls INTERPRET. It restores when done.
 \   - S" QUIT" EVALUATE works correctly - the old inputs are thrown away!
 \ - REQUIRED and friends also work: they stack the current source, set up the
-\   file as the new source, and QUIT
+\   file as the new source, and INTERPRET it.
+\ 'SOURCE 'SOURCE-ID TIB >IN are already defined in the kernel.
+target : SOURCE    'SOURCE    2@ ;
+target : SOURCE-ID 'SOURCE-ID  @ ;
 
-\ \ Input system
-\ \ ============
-\ \ 'SOURCE is a 2VARIABLE with ( c-addr len ) for the input buffer.
-\ \ >IN is a VARIABLE holding the offset into that buffer.
-\ \ Most of that system is written in hand-rolled Forth threads in a shared lib.
-\ \ Here we just defined the variables.
-\ label var_SOURCE    0 asm, 0 asm,
-\ label var_SOURCE-ID 0 asm,
-\ label var_TIB       256 there +!
-\ label var_>IN       0 asm,
-\ 
-\ tcode 'SOURCE      var_SOURCE    # push set,  ;tcode
-\ tcode 'SOURCE-ID   var_SOURCE-ID # push set,  ;tcode
-\ tcode TIB          var_TIB       # push set,  ;tcode
-\ tcode >IN          var_>IN       # push set,  ;tcode
-\ 
-\ 
-\ : TSTR= ( c-addr u t-addr u -- ? )
-\   rot over <> ( c-addr t-addr u len-diff? ) IF 2drop drop 0 EXIT THEN
-\   0 DO ( c-addr t-addr )
-\     over i + c@
-\     over i + w@
-\     <> IF 2drop UNLOOP EXIT THEN \ Different, so bail.
-\   LOOP 2drop ;
-\ 
-\ : TFIND ( c-addr u -- nt|0 )
-\   last-word @ BEGIN dup WHILE
-\     >R 2dup R@ 1+   dup 1+ swap w@ mask_len and ( a u a u  ta len   R: nt )
-\     TSTR= ( a u match?   R: nt ) IF 2drop R> EXIT THEN
-\     R> w@ ( a u nt' )
-\   REPEAT >R 2drop R> ;
-\ 
-\ : NT>CFA ( nt -- xt ) 1+ dup w@ mask_len and   + 1+ ;
-\ 
-\ 
-\ \ Wrappers for the fundamental DCPU-family hardware instructions.
-\ \ This allows the hardware interfaces to be written in high-level Forth.
-\ tcode #DEVICES ( -- n )
-\   ra hwn,
-\   ra push set,
-\ ;tcode
-\ 
-\ tcode DEVINFO ( dev-num -- version d-MAKER d-ID )
-\   pop ra set,
-\   ra hwq,     \ B:A is ID_hi:lo; C is version; Y:X is manufacturer.
-\   rc push set,
-\   rx push set,
-\   ry push set,
-\   ra push set,
-\   rb push set,
-\ ;tcode
-\ 
-\ \ Sends a hardware interrupt in DCPU style.
-\ 
-\ \ The stack before and after has the register values ordered
-\ \ ( a b c x y z i j mask dev-num -- a b c x y z i j ) but only the ones in the
-\ \ mask are included on either side.
-\ \ The mask is JIZYXCBAjizyxcba, with the low bits being inputs and high ones
-\ \ outputs.
-\ label >DEVICE-saved-i 0 ,,
-\ label >DEVICE-saved-z 0 ,,
-\ label >DEVICE-dev     0 ,,
-\ 
-\ tcode >DEVICE
-\   pop >DEVICE-dev       [#] set,
-\   pop ex                    set, \ EX holds the mask
-\ 
-\   \ Save the meaningful registers.
-\   rz  >DEVICE-saved-z [#] set,
-\   ri  >DEVICE-stash-i [#] set,
-\ 
-\   \ Now get them off the stack.
-\   $80 # ex ifb,    pop rj set,
-\   $40 # ex ifb,    pop ri set,
-\   $20 # ex ifb,    pop rz set,
-\   $10 # ex ifb,    pop ry set,
-\   $08 # ex ifb,    pop rx set,
-\   $04 # ex ifb,    pop rc set,
-\   $02 # ex ifb,    pop rb set,
-\   $01 # ex ifb,    pop ra set,
-\ 
-\   \ Do the interrupt!
-\   ex push set,
-\   >DEVICE-dev [#] hwi,
-\   pop  ex set,
-\ 
-\   $0100 # ex ifb,    ra push set,
-\   $0200 # ex ifb,    rb push set,
-\   $0400 # ex ifb,    rc push set,
-\   $0800 # ex ifb,    rx push set,
-\   $1000 # ex ifb,    ry push set,
-\   $2000 # ex ifb,    rz push set,
-\   $4000 # ex ifb,    ri push set,
-\   $8000 # ex ifb,    rj push set,
-\ 
-\   \ Now restore our registers.
-\   >DEVICE-saved-i [#]  ri  set,
-\   >DEVICE-saved-z [#]  rz  set,
-\ ;tcode
-\ 
-\ 
-\ \ The above >DEVICE is pretty expensive, which is fine for occasional HWIs
-\ \ like setting up the LEM1802 memory maps, but is really bad for reading the
-\ \ keyboard. Thus (KEY) is separately coded to get the next key typed.
-\ tcode (KEY) ( dev-num -- key )
-\   1 # a set, \ Read next key
-\   peek hwi,
-\   0 # rc ife,
-\     cf_(KEY) # pc set,
-\   rc peek set, \ Overwrite the device number on top.
-\ ;tcode
-\ 
-\ 
-\ tcode DEBUG
-\   0 # brk,
-\ ;tcode
-\ 
-\ tcode (LOG)
-\   pop log,
-\ ;tcode
-\ 
-\ 
-\ tcode (LOOP-END)
-\   [z]     rx set,     \ X is the index
-\   [z+1]   ry set,     \ Y is the limit
-\   rx      rc set,
-\   ry      rc sub,     \ C is i-l
-\   pop     rj set,     \ J is the delta
-\   \ We want delta + index - limit
-\   rj      ra set,
-\   rc      ra add,     \ A is delta + index - limit
-\   rc      ra xor,     \ A is d+i-l ^ i-l
-\   0 #     rb set,
-\   $8000 # ra ifc,     \ True when top bit is clear.
-\     -1 # rb set,
-\   rb      ra set,     \ Keep the first flag in A.
-\ 
-\   \ Then calculate delta XOR index - limit
-\   rj      rc xor,
-\   0 #     rb set,
-\   $8000 # rc ifc,
-\     -1 # rb set,
-\ 
-\   rb      ra bor,     \ OR those flags
-\   -1 #    ra xor,     \ and invert the result
-\   ra    push set,
-\   rx      rj add,     \ New index is delta + index
-\   rj     [z] set,     \ Write it back to the stack.
-\ ;tcode
-\ 
-\ 
-\ tcode STATE
-\   var_state # push set,
-\ ;tcode
-\ 
-\ label var_latest 0 ,,
-\ tcode LATEST
-\   var_latest # push set,
-\ ;tcode
-\ 
-\ tcode BASE
-\   var_base # push set,
-\ ;tcode
-\ 
-\ 
-\ \ Interrupts ==================================
-\ \ interrupt_handler is what actually gets IAS'd.
-\ \ It's a machine code routine that sets up a Forth thread with the high-level
-\ \ interrupt routine and its own tail routine.
-\ \ The interrupt message is in A and the old A was pushed onto the stack. Since
-\ \ we might be mid-routine elsewhere, we need to preserve that A!
-\ \ The stack effect of the user handler is ( msg -- )
-\ 
-\ \ This is the tail-end routine that finishes the interrupt. It restores the old
-\ \ registers off the stack and then does RFI.
-\ label int-EXIT
-\   \ Restoring JIYXCB - A is already saved, and we're using Z.
-\   pop rj set,   pop ri set,   pop ry set,
-\   pop rx set,   pop rc set,   pop rb set,
-\   0 # rfi,
-\ 
-\ label interrupt-thread 0 ,, int-EXIT ,,
-\ 
-\ tcode (>INTERRUPT) ( xt -- )
-\   pop   interrupt-thread [#]  set,  \ The first word of the thread.
-\ ;tcode
-\ 
-\ label interrupt_handler
-\   \ First a special case - if the interrupt word is 0, just bail since no one is
-\   \ listening.
-\   0 #   interrupt-thread [#] ife,
-\     0 # rfi,
-\ 
-\   \ Gotta save ~all the registers, since Forth words might clobber nearly any
-\   \ of them. Don't need to save Z or A (A is already saved; Z is handled safely)
-\   rj push set,   ri push set,   ry push set,
-\   rx push set,   rc push set,   rb push set,
-\   \ Make the interrupt-thread the new I
-\   interrupt-thread # ri set,
-\   \ And NEXT into it!
-\   next,
-\ 
-\ 
-\ \ The high-level code will put the xt of COLD here for the startup code.
-\ label 'COLD 0 ,,
-\ 
-\ \ Machine code entry point, jumped to by the first word at the top.
-\ \ Mostly this sets up the code to call
-\ label main
-\   1 # iaq,                  \ Queueing on for safety.
-\   interrupt_handler #  ias, \ Set up interrupts.
-\   'COLD [#]         ri set,
-\   0 # iaq,                  \ Queueing off, interrupts on.
-\   next, \ Never returns to here.
-\ 
-\ 
+target : (TYPE) ( c-addr u -- )
+  BEGIN dup WHILE
+    >R dup c@ log 1+ R> 1-
+  REPEAT 2drop ;
+
+target : str= ( ca1 u1 ca2 u2 -- ? )
+  rot over <> IF drop 2drop 0 EXIT THEN \ Length mismatch
+  ( ca1 ca2 u ) BEGIN ?dup WHILE
+    >R
+    over c@ over c@ <> IF 2drop R> drop 0 EXIT THEN \ Character mismatch
+    1+ >R 1+ R> R> 1- ( ca1' ca2' u' )
+  REPEAT 2drop -1 ;
+
+\ Internal formulation of FIND with a stacked string, not a counted string.
+\ Returns 1 for IMMEDIATE words, -1 for regular words, 0 for not found.
+target : (FIND) ( c-addr u -- 0 | xt 1 | xt -1 )
+  latest >R BEGIN R@ WHILE ( c-addr u   R: nt )
+    R@ cell+ dup char+ swap c@
+    [ host mask_len_hidden tliteral target ] and ( ta tu wa wu )
+    2over str= ( ta tu eq? ) IF \ Found the match!
+      2drop R@ >cfa   R> cell+ c@
+      [ host f_immed tliteral target ] and IF 1 ELSE -1 THEN EXIT
+    ELSE \ No match, so continue
+      R> @ >R
+    THEN
+  REPEAT 2drop R> drop 0 ;
+
+
+target : /STRING ( c-addr u n -- c-addr2 u2 ) tuck - >R   + R> ;
+
+\ Basic, unsigned number parsing.
+\ Tries to parse as many digits according to BASE as possible.
+target : >NUMBER ( ud1 c-addr1 u1 -- ud2 c-addr2 u2 )
+  BEGIN
+    >R dup >R c@ ( ud1 ch )
+    dup [ host '0' tliteral '9' 1+ tliteral target ] WITHIN IF
+      [ host '0' tliteral target ] -
+    ELSE
+      dup [ host 'A' tliteral 'Z' 1+ tliteral target ] WITHIN IF
+        [ host 'A' tliteral target ] -
+      ELSE
+        dup [ host 'a' tliteral 'z' 1+ tliteral target ] WITHIN IF
+          [ host 'a' tliteral target ] -
+        ELSE ( Bad digit! )
+          drop 10000
+        THEN
+      THEN
+      10 + \ A=10, not 0
+    THEN ( ud1 digit )
+    dup base @ U< IF \ Legal digit, merge it in.
+      >R base @ UDM* ( ud*base ) R> S>D D+ ( ud*base+digit )
+      R> R> 1 /string dup 0= IF ( ud1 c-addr u ) EXIT THEN
+      \ If we're still here, we're set up to loop back.
+    ELSE
+      \ That digit was illegal. Return the un-advanced string.
+      drop R> R> EXIT
+    THEN ( ud c-addr u )
+  AGAIN ;
+
+
+\ Tries to parse a number, fully fancy, with - and $ prefixes.
+target : ?NUMBER ( c-addr u -- n true | false )
+  base @ >R   0 >R ( c-addr u    R: old-base neg? )
+  over c@ [ host '-' tliteral target ] = IF R> drop -1 >R   1 /string THEN
+  over c@ [ host '$' tliteral target ] = IF 16 base !       1 /string THEN
+  0 0 2swap >number ( ud c-addr u ) 0= IF \ Parsed successfully!
+    drop D>S   R> IF negate THEN   R> base !   -1
+  ELSE \ Failed to parse
+    drop 2drop R> drop R> base ! 0
+  THEN ;
+
+\ Interprets a single parsed word or number.
+target : INTERP1   ( c-addr u -- )
+  2dup (type)
+  2dup (find) ?dup IF ( c-addr u xt 1|-1 )
+    2swap 2drop ( xt 1|-1 )
+    state @ IF
+      0> IF execute ELSE compile, THEN
+    ELSE
+      drop execute
+    THEN
+  ELSE ( c-addr u )
+    ?number ( n true | false ) IF ( n )
+      state @ IF [ host t' literal tcompile, target ] THEN
+    ELSE ( )
+      \ Really undefined. Emit an error message.
+      err-undefined abort
+    THEN
+  THEN ;
+
+target : PARSE ( delim "...<delim>" -- c-addr u )
+  source >IN @ /string   over >R   rot >R ( c-addr u   R: start delim )
+  BEGIN dup WHILE
+    over c@ R@ = IF \ End of string
+      R> 2drop ( end   R: start ) R> tuck - ( start len )
+      \ Advance >IN by len+1 since len excludes the delimiter.
+      dup 1+ >IN +!
+      EXIT THEN
+    1 /string
+  REPEAT ( c-addr 0   R: start delim )
+  1000 >IN +! R> R> 2drop ;
+
+target : SKIP-SPACES ( -- )
+  BEGIN source >in @ /string WHILE \ Not empty  ( c-addr )
+    c@ bl <> IF EXIT THEN
+    1 >IN +!
+  REPEAT drop ;
+
+target : SKIP-NON-SPACES ( -- )
+  BEGIN source >in @ /string WHILE \ Not empty  ( c-addr )
+    c@ bl = IF EXIT THEN
+    1 >IN +!
+  REPEAT drop ;
+
+target : PARSE-NAME ( "<spaces>name<space>" -- c-addr u )
+  skip-spaces
+  source drop     >IN @ ( src start )
+  skip-non-spaces >IN @ ( src start end )
+  over -                ( src start len )
+  >R + R> ;
+
+
+\ Fundamental single-line interpreter loop.
+target : INTERPRET ( -- ) BEGIN parse-name dup WHILE interp1 REPEAT ;
+
+target : ABORTED ( -- )
+  R> [ rp0 tliteral ] rp! >R \ Drops everything but ABORTED's own return
+  [ host T' [ tcompile, target ]
+  0 'source-id !             \ Force a keyboard source.
+  [ sp0 tliteral ] sp! ;
+
+target : ACCEPT ( c-addr max -- len )
+  drop dup >R  \ TODO Ignores the max length!
+  BEGIN 0 (key) dup $11 <> WHILE \ ( c-addr key ) Not a newline - DCPU-specific!
+    over c!   char+   ( c-addr' )
+  REPEAT ( end newline   R: start ) drop R> - ( len ) ;
+
+\ REFILL is clever and does the Right Thing for each source type:
+\ Keyboard: ACCEPT
+\ EVALUATE: just return 0
+\ File:     read the next line; return 0 if no more
+\ Block:    chain to the next block, I guess. (: -> refill drop ;)
+target : REFILL ( -- ? )
+  SOURCE-ID -1 = IF 0 EXIT THEN \ EVALUATE - just return 0
+  \ Keyboard - ACCEPT a complete line
+  tib 128 accept ( u )
+  0 >IN !   tib swap 'SOURCE 2! \ Set it up as the new input
+  -1 ;                          \ And return true
+
+\ Fundamental multi-line interpreter loop.
+\ Separate from QUIT because it gets called by file readers as well.
+target : (QUIT) ( -- )
+  BEGIN refill WHILE
+    [ host T' INTERPRET tliteral target ] catch
+    CASE
+    0   OF state @ 0= IF ."  ok" THEN cr ENDOF
+    -1  OF aborted ENDOF
+    \ TODO More
+    ENDCASE
+  REPEAT ( TODO: BYE ) ;
+
+\ Empties the return stack, selects keyboard input, forces interpreter state,
+\ and (QUIT)s to keep interpreting.
+target : QUIT ( -- )
+  [ host rp0 tliteral target ] rp!
+  [ host T' [ tcompile, target ]
+  10 base !
+  0  'source-id !
+  (QUIT) ;
+
+host   T' QUIT   entry-point t!
+

@@ -4,42 +4,47 @@
 target definitions
 
 \ LATEST gives the name token. Skip over the link pointer and check the length.
-: IMMEDIATE 'latest @ cell+   dup @   $8000 or   swap ! ;
-host acts: drop latest tcell+ dup t@   f_immed or   swap t! ;
+target : LATEST 'latest @ ;
+  host acts: drop latest ;
+target : IMMEDIATE latest cell+   dup @   $8000 or   swap ! ;
+  host acts: drop latest tcell+ dup t@   f_immed or   swap t! ;
+
 
 target : [ 0 state ! ; IMMEDIATE
-host acts: 0 state ! ; IMPERATIVE
+  host acts: drop   0 state ! ; IMPERATIVE
 
 target : ] 1 state ! ;
-host acts: ] ;
+  host acts: drop   postpone target ] ;
 
 target
+: BL   32  ;
 : 0<   0 < ;
 : 0=   0 = ;
+: 0>   0 swap < ;
 : NOT  0= ;
 : >    swap < ;
 : <=   > not ;
 : >=   < not ;
 : U>   swap U< ;
+: <>   = not ;
 
 : /MOD ( a b -- r q ) 2dup mod   -rot / ;
 
 \ Memory operations
 : COUNT dup c@ >R char+ R> ;
 
-: ALLOT ( n -- ) dp +! ;
-host acts: drop dp +! ;
-target
+target : ALLOT ( n -- ) dp +! ;
+  host acts: drop dp +! ;
 
-: HERE dp @ ;
-host acts: dp @ ;
-target
+target : HERE dp @ ;
+  host acts: drop   dp @ ;
 
+target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , ; IMMEDIATE
+  host acts: drop ." (tliteral): " dup . tliteral ; IMPERATIVE
+
+target : WITHIN ( x lo hi -- ? ) over - >R   - R> U< ;
 
 \ Control structures
-\ TODO Okay, I keep tripping over forward references. I should just defined a
-\ scheme for those. I should look into the screens too - how do they bootstrap?
-\ Maybe there's a better order or clever technique.
 target : [0BRANCH]   [ T0BRANCH tliteral ] compile, ;
 target : [BRANCH]    [ TBRANCH  tliteral ] compile, ;
 target : ,DEST       , ;
@@ -56,15 +61,36 @@ target : ELSE ( ? --     C: if-slot -- else-slot )
 target : BEGIN  ( --       C: -- top-loc ) here ; IMMEDIATE
   host acts: drop here ; IMPERATIVE
 target : AGAIN  ( --       C: top-loc -- ) [BRANCH] ,dest ; IMMEDIATE
-  host acts: drop TBRANCH t, ,dest ; IMPERATIVE
+  host acts: drop TBRANCH tcompile, ,dest ; IMPERATIVE
 target : WHILE  ( ? --     C: -- while-slot ) [0BRANCH] here 0 ,dest ; IMMEDIATE
-  host acts: drop T0BRANCH t,   here 0 ,dest ; IMPERATIVE
+  host acts: drop T0BRANCH tcompile,   here 0 ,dest ; IMPERATIVE
 target : REPEAT ( --       C: top-loc while-slot )
     [BRANCH] swap ,dest   ( while-slot ) here swap !dest ; IMMEDIATE
-  host acts: drop TBRANCH t,   swap ,dest   here swap !dest ; IMPERATIVE
+  host acts: drop TBRANCH tcompile,   swap ,dest   here swap !dest ; IMPERATIVE
 
-target : FOO IF + ELSE - THEN ;
+target : POSTPONE ( "name" -- ) ' compile, ; IMMEDIATE
+  host acts: drop T' tcompile, ; IMPERATIVE
 
+target : CASE ( --   C: -- marker ) 0 ; IMMEDIATE
+  host acts: drop 0 ; IMPERATIVE
+target : OF   ( x1 x2 -- | x1    C: -- of-sys )
+    postpone over postpone = postpone IF postpone drop ; IMMEDIATE
+  host acts: drop   TOVER tcompile, T= tcompile,
+    target IF host TDROP tcompile, ; IMPERATIVE
+target : ENDOF ( --   C: of-sys -- ) postpone ELSE ; IMMEDIATE
+  host acts: drop target ELSE host ; IMPERATIVE
+target : ENDCASE ( x --   C: jump-loc1 ... jump-locN -- )
+    postpone drop BEGIN ?dup WHILE postpone THEN REPEAT ; IMMEDIATE
+  host acts: drop TDROP tcompile,
+    BEGIN ?dup WHILE target THEN host REPEAT ; IMPERATIVE
+
+\ target : FOO 7 bl dup log <> log break ;
+\ host T' FOO entry-point t!
+
+host REQUIRE exceptions.ft
+host REQUIRE input.ft
+
+host latest var_latest t!
 
 \ Input handling
 \ 'SOURCE >IN and TIB are defined in the kernel, to avoid circular refs.

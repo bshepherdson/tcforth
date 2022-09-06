@@ -205,10 +205,12 @@ IMMEDIATE
   ['] interpX-imperative   R> ! ;
 
 
+
 : T' ( "name" -- target-xt )
   parse-name target-wl search-wordlist IF >body @ ELSE 1 ABORT" Bad T'" THEN ;
 
 
+host definitions
 T' (0BRANCH) CONSTANT T0BRANCH
 T' (BRANCH)  CONSTANT TBRANCH
 T' DROP      CONSTANT TDROP
@@ -225,6 +227,7 @@ code : end-code 0 t, 0 t, 0 t, 0 t,
 
 code ; end-code 0 t, 0 t, 0 t, 0 t,
 host acts: drop   0 state !   'EXIT @ tcompile, ; IMPERATIVE
+
 
 host here ." Metacompilation starts at " dup hex.  ." (" 2* hex. ." )" cr
 

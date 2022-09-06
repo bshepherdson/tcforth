@@ -1,15 +1,12 @@
-label var_hw_keyboard -1 ,,
-label var_hw_disk     -1 ,,
-label var_hw_lem      -1 ,,
+\ Metacompiled code for the DCPU-family hardware devices and instructions.
+\ The kernel provides:
+\ - #DEVICES ( -- n ) to get the number of devices
+\ - DEVINFO  ( dev-num -- version d-MAKER d-ID ) Giving the stats as lo-hi d-words.
+\ - >DEVICE  ( regs... mask dev-num -- regs... ) for doing hardware interrupts
 
-label hw_table
-$30c1 ,, $7406 ,, var_hw_keyboard
-$4fd5 ,, $24c5 ,, var_hw_disk
-$734d ,, $f615 ,, var_hw_lem
-label hw_table_top
-
-\ Block until reading a single key. No echoing.
-tcode KEY
-  1 # ra set, \ Message for reading next key.
+\ The devices we care about here are the keyboard, disk and LEM1802:
+\ Keyboard: 1       $8b36 $1c6c   $7406 $30c1
+\ LEM1802:  $1802   $8b36 $1c6c   $f615 $734d
+\ M35FD:    $b      $7e91 $1eb3   $24c5 $4fd5
 
 

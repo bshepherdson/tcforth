@@ -328,6 +328,52 @@ code >CFA ( nt -- xt )
   ra         push set,
 end-code
 
+\ Copies src to dst from lower addresses to higher.
+code MOVE< ( src dst u -- )
+  ri ra set, \ Save IP to A for now.
+
+  pop rc set, \ Length in C
+  pop rj set, \ Dest in J
+  pop ri set, \ Src  in I
+
+  fwd pc set, \ Jump ahead to the loop tail.
+
+  label MOVE<-loop
+    [j] [i] sti, \ Copy a word.
+    1 # rc  sub, \ Decrement the counter.
+    resolve      \ Resolve the above fwd reference.
+    0 # rc  ifn,
+      MOVE<-loop # pc set, \ Loop if nonzero
+
+  \ Ran out of copy.
+  ra ri set, \ Restore IP before NEXT.
+end-code
+
+\ Copies src to dst from higher addresses to lower.
+code MOVE> ( src dst u -- )
+  ri ra set, \ Save IP to A for now.
+
+  pop rc set, \ Length in C
+  pop rj set, \ dst in J
+  rc  rj add,
+  1 # rj sub, \ dst + len - 1 in J
+  pop ri set, \ src  in I
+  rc  ri add,
+  1 # ri sub, \ src + len - 1 in I
+
+  fwd pc set, \ Jump ahead to the loop tail.
+
+  label MOVE>-loop
+    [j] [i] std, \ Copy a word.
+    1 # rc  sub, \ Decrement the counter.
+    resolve      \ Resolve the above fwd reference.
+    0 # rc  ifn,
+      MOVE>-loop # pc set, \ Loop if nonzero
+
+  \ Ran out of copy.
+  ra ri set, \ Restore IP before NEXT.
+end-code
+
 \ A jsr docol for reference.
 label jsr_docol   docol # jsr,
 

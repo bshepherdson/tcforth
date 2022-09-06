@@ -45,8 +45,8 @@ target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , 
 target : WITHIN ( x lo hi -- ? ) over - >R   - R> U< ;
 
 \ Control structures
-target : [0BRANCH]   [ T0BRANCH tliteral ] compile, ;
-target : [BRANCH]    [ TBRANCH  tliteral ] compile, ;
+target : [0BRANCH]   [ host T0BRANCH tliteral target ] compile, ;
+target : [BRANCH]    [ host TBRANCH  tliteral target ] compile, ;
 target : ,DEST       , ;
 target : !DEST ( dest slot -- ) here swap ! ;
 
@@ -90,7 +90,51 @@ target : ENDCASE ( x --   C: jump-loc1 ... jump-locN -- )
 host REQUIRE exceptions.ft
 host REQUIRE input.ft
 
+target : MOVE ( src dst u -- ) >R 2dup U< IF R> MOVE> ELSE R> MOVE< THEN ;
+
+
+\ (CREATE) builds a blank header, no code field.
+\ link | len | name... |
+target : (CREATE) ( "name" -- ) here latest ,   'latest !
+    parse-name dup c,
+    here swap ( src dst u ) dup >R cmove R> ( len ) allot ;
+
+target : CREATE ( "name" --     X: -- addr )
+    (CREATE) [ host dovar tliteral target ] !cf ;
+  \ 0 t@ is the "set pc, lit" at $0000 in the assembly.  DCPU-specific!
+  host acts: drop (tcreate)   0 t@ t,   dovar t, ;
+
+\ (DOES>) is the inner word for defining words. That is, it runs in CONSTANT to
+\ properly compile a particular constant.
+\ Inside target (DOES>), TORS points at the EXIT. Just after it is the
+\ dodoes-code that should become the new codeword's jump location.
+\ $7c20 is JSR lit on DCPU. DCPU-specific!
+target : (DOES>) latest >cfa   $7c20 over !    cell+ R@ cell+ swap ! ;
+\ No host side here; this is only executed on the target.
+
+host T' (DOES>) '(DOES>) !
+host T' EXIT    'EXIT !
+
+\ Target side: Compiles (DOES>) | EXIT | dodoes-code into the definition.
+\ Host side: Compiles the same into the target, but also does NATIVE DOES> to
+\ define the host-side action for the defined word, eg. a particular CONSTANT.
+\ Its incoming pointer is (I think) the mirror word's three cells. It should
+\ look up the xt, advance it two target cells to the target parameter field,
+\ then do whatever it needs to do, eg. t@ for a CONSTANT.
+target : DOES> ( -- )
+    [ host T' (DOES>)   tliteral target ] tcompile,
+    [ host T' EXIT      tliteral target ] tcompile,
+    [ host jsr_docol t@ tliteral target ] t,               \ DCPU-specific?
+    ; IMMEDIATE
+  host acts: drop does, native postpone DOES> host ; IMPERATIVE
+
+target : VARIABLE ( "name" --     X: -- addr ) CREATE 0 , ;
+  host acts: drop create 0 t,   native DOES> host @ 2 tcells + ;
+
 host latest var_latest t!
+
+\ START HERE - Munge the target vocabulary to not overlay the host and Forth
+\ ones. It leads to too many obscure bugs if a word is missing.
 
 \ Input handling
 \ 'SOURCE >IN and TIB are defined in the kernel, to avoid circular refs.

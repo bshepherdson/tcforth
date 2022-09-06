@@ -16,16 +16,26 @@
 \ NATIVE, HOST and TARGET.
 
 \ First the native-side words.
-: NATIVE   only forth   definitions ; immediate
+: NATIVE   only forth ; immediate
 
 wordlist CONSTANT host-wl
 wordlist CONSTANT target-wl
 
-: wordlist! ( wid -- ) >R get-order nip R> swap set-order ;
-: HOST     postpone native also host-wl   wordlist! ; immediate
+: HOST     postpone native   host-wl >order ; immediate
 HOST DEFINITIONS
 
-: TARGET   postpone host   also target-wl wordlist! ; immediate
+: TARGET   only target-wl >order ; immediate
+
+
+\ Copy things into the target wordlist from native and host.
+target-wl set-current
+: TARGET ; immediate
+: HOST   postpone host ; immediate
+: NATIVE postpone native ; immediate
+: DEFINITIONS native definitions host ;
+: \  native postpone \ host ;
+
+host definitions
 
 \ Some DCPU-specific constants
 $0000 CONSTANT rp0

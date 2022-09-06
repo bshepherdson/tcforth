@@ -139,10 +139,10 @@ target : PARSE-NAME ( "<spaces>name<space>" -- c-addr u )
 target : INTERPRET ( -- ) BEGIN parse-name dup WHILE interp1 REPEAT ;
 
 target : ABORTED ( -- )
-  R> [ rp0 tliteral ] rp! >R \ Drops everything but ABORTED's own return
+  R> [ host rp0 tliteral target ] rp! >R \ Drops everything but ABORTED's own return
   [ host T' [ tcompile, target ]
   0 'source-id !             \ Force a keyboard source.
-  [ sp0 tliteral ] sp! ;
+  [ host sp0 tliteral target ] sp! ;
 
 target : ACCEPT ( c-addr max -- len )
   drop dup >R  \ TODO Ignores the max length!

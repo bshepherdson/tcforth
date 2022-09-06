@@ -67,7 +67,9 @@ label DOVAR
 \ This HOST word is invoked by Host-side DOES> to compile the necessary pieces.
 VARIABLE '(DOES>)
 VARIABLE 'EXIT   \ These get populated later.
+
 : DOES, ( -- ) '(DOES>) @ t,   'EXIT @ t,   DOCOL # jsr, ;
+
 
 
 \ Old TC-Forth DODOES, which has been obsoleted.

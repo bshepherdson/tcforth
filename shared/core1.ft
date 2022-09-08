@@ -297,3 +297,25 @@ target : LEAVE ( --    R: loop-sys --   C: -- )
     [T'] (loop-top) t>body t@ 1 tcells -
     0 tliteral TBRANCH tcompile, ,dest ; IMPERATIVE
 
+\ Miscellany =================================================================
+target : FILL ( c-addr u ch -- )
+  -rot ( ch c-addr u ) dup 0 <= IF drop 2drop EXIT THEN
+  over + swap ( ch top bottom ) DO dup i c! LOOP drop ;
+
+target : ERASE ( c-addr u -- ) 0 fill ;
+
+target : MIN ( x y -- max ) 2dup > IF swap THEN drop ;
+target : MAX ( x y -- max ) 2dup < IF swap THEN drop ;
+
+\ Recurse is tricky. It's an immediate word that uses latest at runtime.
+\ On the host, it's similar, since HOST LATEST exists.
+target : RECURSE ( -- ) latest >cfa compile, ; IMMEDIATE
+  host acts: latest t>cfa tcompile, ; IMPERATIVE
+
+target : PICK ( ... n -- ... nth ) 1+ cells sp@ + @ ;
+
+target : ABS ( n -- u ) dup 0< IF negate THEN ;
+
+target : FALSE ( -- false? )  0 ;
+target : TRUE  ( -- true? )  -1 ;
+

@@ -32,6 +32,8 @@ code XOR      pop peek xor,   end-code
 code LSHIFT   pop peek shl,   end-code
 code RSHIFT   pop peek shr,   end-code
 code ARSHIFT  pop peek asr,   end-code
+code 2*       1 # peek shl,   end-code
+code 2/       1 # peek asr,   end-code
 
 code INVERT   $ffff # peek xor, end-code
 code NEGATE

@@ -51,6 +51,8 @@ REQUIRE model.ft
 
 HOST DEFINITIONS
 
+: t>cfa ( target-nt -- target-xt ) tcell+ dup t@ mask_len and + tcell+ ;
+
 
 \ =========================== MIRROR WORDS ===================================
 \ The mirror words go in the TARGET vocabulary, the one that's active while

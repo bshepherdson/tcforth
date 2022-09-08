@@ -103,7 +103,7 @@ target : INTERP1   ( c-addr u -- )
       state @ IF [ host t' literal tcompile, target ] THEN
     ELSE ( )
       \ Really undefined. Emit an error message.
-      err-undefined abort
+      err-undefined throw
     THEN
   THEN ;
 
@@ -186,6 +186,4 @@ target : QUIT ( -- )
   10 base !
   0  'source-id !
   (QUIT) ;
-
-host   T' QUIT   entry-point t!
 

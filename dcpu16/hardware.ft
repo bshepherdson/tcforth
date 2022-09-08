@@ -9,4 +9,55 @@
 \ LEM1802:  $1802   $8b36 $1c6c   $f615 $734d
 \ M35FD:    $b      $7e91 $1eb3   $24c5 $4fd5
 
+target definitions
+
+VARIABLE dev-lem1802
+VARIABLE dev-keyboard
+VARIABLE dev-m35fd
+
+: lem? ( dev-num -- lem? )
+  devinfo ( version d-maker d-ID )
+       $734d =
+  swap $f615 = and
+  swap $1c6c = and
+  swap $8b36 = and
+  swap $1802 = and ;
+
+: m35fd? ( dev-num -- lem? )
+\ M35FD:    $b      $7e91 $1eb3   $24c5 $4fd5
+  devinfo ( version d-maker d-ID )
+       $4fd5 =
+  swap $24c5 = and
+  swap $1eb3 = and
+  swap $7e91 = and
+  swap $b    = and ;
+
+: keyboard? ( dev-num -- keyboard? )
+  devinfo ( version d-maker d-ID )
+       $30c1 =
+  swap $7406 = and
+  >R 2drop drop R> ; \ Skip the maker and version for a generic device.
+
+
+: identify ( dev-num -- )
+  dup log
+  dup lem?      IF dev-lem1802  ! EXIT THEN
+  dup m35fd?    IF dev-m35fd    ! EXIT THEN
+  dup keyboard? IF dev-keyboard ! EXIT THEN
+  drop ;
+
+: init-devices ( -- )
+  -1 dup dev-lem1802 !   dup dev-keyboard !   dev-m35fd !
+  #devices BEGIN ?dup WHILE 1- dup identify REPEAT ;
+
+
+host REQUIRE screen.ft
+target definitions
+
+
+\ Initiates a cold start - locate and init the hardware, then QUIT.
+: cold ( -- ) init-devices init-lem QUIT ;
+
+host   T' COLD   entry-point t!
+
 

@@ -34,8 +34,7 @@ target-wl set-current
 : NATIVE postpone native ; immediate
 : DEFINITIONS native definitions host ;
 : \  native postpone \ host ;
-: (  native postpone ( host ;
-
+: (  native postpone ( host ;     \ Fixing the busted highlighting )
 host definitions
 
 \ Some DCPU-specific constants
@@ -47,11 +46,17 @@ $4000 CONSTANT f_hidden
 $2fff CONSTANT mask_len
 $7fff CONSTANT mask_len_hidden
 
-REQUIRE assembler.ft      \ DCPU-16 assembler
-REQUIRE metacompiler.ft   \ Kernel code and code words
-\ Note that HOST CODE constructs two words:
-\ - The actual header and definition in the Target image
-\ - A mirror word in the TARGET vocabulary that compiles itself for the target.
+host definitions REQUIRE assembler.ft      \ DCPU-16 assembler
+host definitions REQUIRE metacompiler.ft   \ Kernel code and code words
+
+\ More DCPU-specific files
+host definitions REQUIRE hardware.ft
+
+host definitions
+
+\ This needs to be the last line in the target compilation.
+host latest var_latest t!
+
 
 \ At this point the assembler's output region should be complete. Dump the
 \ resulting binary.

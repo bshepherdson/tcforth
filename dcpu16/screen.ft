@@ -1,0 +1,98 @@
+\ LEM1802 screen implementation for DCPU-16 and similar.
+\ Uses the default palette and font, and maps the memory to $fd00.
+target definitions
+
+\ Variable dev-lem1802 holds the device number.
+$fc00 CONSTANT vram
+
+VARIABLE (colours)
+
+$0 CONSTANT black
+$1 CONSTANT red
+$2 CONSTANT green
+$3 CONSTANT gold
+$4 CONSTANT blue
+$5 CONSTANT purple
+$6 CONSTANT brown
+$7 CONSTANT light-grey
+$8 CONSTANT dark-grey
+$9 CONSTANT bright-red
+$a CONSTANT bright-green
+$b CONSTANT yellow
+$c CONSTANT cyan
+$d CONSTANT magenta
+$e CONSTANT ochre
+$f CONSTANT white
+
+\ Character values ===========================================================
+\ These words manipulate screen character words on the stack, not in memory.
+: fg  ( ch colour -- ch' ) 12 lshift   swap $0fff and or ;
+: bg  ( ch colour -- ch' )  8 lshift   swap $f0ff and or ;
+
+\ Reverses the colours of the given screen character.
+: reversed ( ch -- ch' )
+  dup  $0f00 and 4 lshift   over $f000 and 4 rshift   or
+  swap $00ff and or ;
+
+: blink+ ( ch -- ch' ) $0080 or ;
+: blink- ( ch -- ch' ) $ff7f and ;
+
+\ Mixes in the current colour settings.
+: coloured ( ch -- ch' ) $00ff and   (colours) @   or ;
+
+
+\ Terminal state =============================================================
+
+: fg@ ( -- colour ) (colours) @ 12 rshift ;
+: bg@ ( -- colour ) (colours) @  8 rshift $f and ;
+: fg! ( colour -- ) (colours) @ swap fg (colours) ! ;
+: bg! ( colour -- ) (colours) @ swap bg (colours) ! ;
+
+\ Defaults to white-on-black.
+: default-colours ( -- ) white fg!   black bg! ;
+
+\ Reverses the current colour settings (but doesn't change anything on screen.
+: reverse ( -- ) (colours) @ reversed (colours) ! ;
+
+\ Sets the whole screen to spaces in the current colour.
+: clear ( -- ) 384 BEGIN ?dup WHILE
+  1-    bl coloured   over vram + !   REPEAT ;
+
+
+\ Cursor handling ============================================================
+VARIABLE cursor \ Index into the VRAM
+
+12 CONSTANT #rows
+32 CONSTANT /row
+
+\ Returns the pointer into VRAM of the current cursor.
+: >cursor ( -- addr ) cursor @ vram + ;
+
+: vacate ( -- ) >cursor dup @ blink- swap ! ;
+: arrive ( -- ) >cursor dup @ blink+ swap ! ;
+
+: at-xy ( col row -- ) vacate   /row * + cursor !   arrive ;
+
+: +cursor ( n -- ) vacate   cursor @   0 max 383 min   cursor !   arrive ;
+
+
+\ Printing ===================================================================
+
+\ Emites the given *screen* character word (colours etc. added) at the current
+\ cursor. See also EMIT.
+: DISPLAY ( screen-ch -- ) >cursor !   1 +cursor ;
+
+\ Emits the given ASCII character at the current cursor.
+: EMIT ( ch -- ) coloured display ;
+
+
+\ Initialization =============================================================
+
+: init-lem ( -- )
+  dev-lem1802 @ -1 = IF EXIT THEN \ No such device, just bail.
+
+  \ Send an HWI with A=0, B=vram; no response regs. So that's a mask of 3.
+  vram log
+  0 vram 3   dev-lem1802 @ >device
+  default-colours   clear   0 0 at-xy ;
+

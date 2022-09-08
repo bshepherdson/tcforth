@@ -134,7 +134,7 @@ label DOSTRING
 \ cell [LIT|x] pattern.
 : tliteral ( x --    X: -- x ) lit tcompile,   t, ;
 
-: ,dest ( x -- ) t, ;
+: ,dest ( dest -- ) t, ;
 : !dest ( dest slot -- ) t! ;
 
 : t>body ( target-xt -- target-body ) 2 tcells + ;

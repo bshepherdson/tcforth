@@ -384,7 +384,13 @@ code ,DOCOL ( -- )
   1 #   var_dp  [#] add, \ Update the DP
 end-code
 
-code (LOOP-END)
+code (DO) ( limit index --   R: -- limit index )
+  pop ra set,
+  pop pushrsp,
+  ra  pushrsp,
+end-code
+
+code (LOOP-END)  ( delta -- done?    R: limit index1 -- limit index2 )
   [z]     rx set,     \ X is the index
   1 [z+]  ry set,     \ Y is the limit
   rx      rc set,
@@ -407,9 +413,21 @@ code (LOOP-END)
 
   rb      ra bor,     \ OR those flags
   -1 #    ra xor,     \ and invert the result
-  ra    push set,
+  ra    push set,     \ Push done flag to data stack
   rx      rj add,     \ New index is delta + index
   rj     [z] set,     \ Write it back to the stack.
+end-code
+
+code UNLOOP ( --    R: limit index -- )
+  2 # rz add,
+end-code
+
+code I ( -- index    R: index -- index )
+  [z] push set,
+end-code
+
+code J ( -- index1   R: index1 limit2 index2 -- index1 limit2 index2 )
+  2 [z+] push set,
 end-code
 
 
@@ -442,10 +460,11 @@ label >DEVICE-saved-z 0 asm,
 label >DEVICE-dev     0 asm,
 
 code >DEVICE
-  pop >DEVICE-dev       [#] set,
-  pop ex                    set, \ EX holds the mask
+  pop   >DEVICE-dev [#] set,
+  pop   ex              set, \ EX holds the mask
 
   \ Save the meaningful registers.
+  1 # iaq, \ Queue incoming interrupts - they'll break our saving!
   rz  >DEVICE-saved-z [#] set,
   ri  >DEVICE-saved-i [#] set,
 
@@ -476,6 +495,7 @@ code >DEVICE
   \ Now restore our registers.
   >DEVICE-saved-i [#]  ri  set,
   >DEVICE-saved-z [#]  rz  set,
+  0 # iaq,
 end-code
 
 
@@ -538,7 +558,7 @@ label main
   rp0 # rz set,            \ Initial RSP
   sp0 # sp set,            \ Initial SP
   0 # iaq,                 \ Enable interrupts again
-  entry-point [#] pc set,  \ Jump to the code field of the starter word QUIT.
+  entry-point [#] pc set,  \ Jump to the code field of the starter word COLD.
 
 
 \ Overwrite the jump target of the entry code to be main.

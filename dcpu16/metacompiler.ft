@@ -195,6 +195,7 @@ main 1 t!
 : (T') ( "name" -- mirror-body )
   parse-name target-wl search-wordlist IF >body ELSE 1 ABORT" Bad T'" THEN ;
 : T' ( "name" -- target-xt ) (T') mirror>txt @ ;
+: [T'] ( C: "name" --    X: -- target-xt ) T' postpone literal ; IMMEDIATE
 
 
 \ Bootstrapping the : for use by the target. It needs to (TCREATE) and compile

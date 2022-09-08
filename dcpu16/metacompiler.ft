@@ -253,10 +253,10 @@ T' =         CONSTANT T=
 \ Hand-roll the target+mirror definitions for : and ;
 \ They don't work on the target yet, just making space.
 target definitions host
-code : end-code 0 t, 0 t, 0 t, 0 t,
+code : end-code 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, \ 7 cells since overwriting NEXT
   host acts: ." host :" cr (TCREATE)   ,docol   meta] ;
 
-code ; end-code 0 t, 0 t, 0 t, 0 t,
+code ; end-code 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, \ Likewise, 7 cells.
   host acts: 0 state !   'EXIT @ tcompile, ; IMPERATIVE
 
 

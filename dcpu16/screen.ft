@@ -80,10 +80,19 @@ VARIABLE cursor \ Index into the VRAM
 
 \ Emites the given *screen* character word (colours etc. added) at the current
 \ cursor. See also EMIT.
-: DISPLAY ( screen-ch -- ) >cursor !   1 +cursor ;
+: (DISPLAY) ( screen-ch -- ) >cursor ! ;
+: DISPLAY   ( screen-ch -- ) (DISPLAY)   1 +cursor ;
 
 \ Emits the given ASCII character at the current cursor.
-: EMIT ( ch -- ) coloured display ;
+: EMIT ( ascii-ch -- ) coloured display ;
+
+: CR ( -- )
+  vacate   cursor @   /row 1- invert and   /row +   cursor !   arrive ;
+
+: SPACE  ( -- ) bl emit ;
+: SPACES ( u -- ) ?dup IF 0 DO space LOOP THEN ;
+
+: TYPE   ( c-addr u -- ) ?dup IF 0 DO ( c-addr ) dup c@ emit 1+ LOOP THEN drop ;
 
 
 \ Initialization =============================================================

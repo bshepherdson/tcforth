@@ -203,6 +203,7 @@ label (compile)
   1 #       [b] add,
 end-code
 
+code C,         (compile) # pc set, end-code-bare
 code COMPILE,   (compile) # pc set, end-code-bare
 
 code HANDLER      var_handler # push set, end-code
@@ -341,7 +342,7 @@ code MOVE< ( src dst u -- )
   fwd pc set, \ Jump ahead to the loop tail.
 
   label MOVE<-loop
-    [j] [i] sti, \ Copy a word.
+    [i] [j] sti, \ Copy a word.
     1 # rc  sub, \ Decrement the counter.
     resolve      \ Resolve the above fwd reference.
     0 # rc  ifn,
@@ -353,6 +354,7 @@ end-code
 
 \ Copies src to dst from higher addresses to lower.
 code MOVE> ( src dst u -- )
+  0 # brk,
   ri ra set, \ Save IP to A for now.
 
   pop rc set, \ Length in C
@@ -366,7 +368,7 @@ code MOVE> ( src dst u -- )
   fwd pc set, \ Jump ahead to the loop tail.
 
   label MOVE>-loop
-    [j] [i] std, \ Copy a word.
+    [i] [j] std, \ Copy a word.
     1 # rc  sub, \ Decrement the counter.
     resolve      \ Resolve the above fwd reference.
     0 # rc  ifn,

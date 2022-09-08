@@ -56,6 +56,7 @@ host definitions
 
 \ This needs to be the last line in the target compilation.
 host latest var_latest t!
+host here   var_dp     t!
 
 
 \ At this point the assembler's output region should be complete. Dump the

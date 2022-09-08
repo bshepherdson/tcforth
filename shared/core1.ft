@@ -33,7 +33,6 @@ target
 : COUNT dup c@ >R char+ R> ;
 
 target : ALLOT ( n -- ) dp +! ;
-  host acts: dp +! ;
 
 target : HERE dp @ ;
   host acts: dp @ ;
@@ -95,7 +94,7 @@ target : MOVE ( src dst u -- ) >R 2dup U< IF R> MOVE> ELSE R> MOVE< THEN ;
 \ link | len | name... |
 target : (CREATE) ( "name" -- ) here latest ,   'latest !
     parse-name dup c,
-    here swap ( src dst u ) dup >R cmove R> ( len ) allot ;
+    here swap ( src dst u ) dup >R move> R> ( len ) allot ;
 
 host definitions
 \ Host-side CREATE, used by eg. : CONSTANT ... HOST ACTS: CREATE ... ;
@@ -318,4 +317,44 @@ target : ABS ( n -- u ) dup 0< IF negate THEN ;
 
 target : FALSE ( -- false? )  0 ;
 target : TRUE  ( -- true? )  -1 ;
+
+
+\ Colon definitions ==========================================================
+\ Target : and ; are empty placeholders right now. These need to be filled in
+\ properly now that all the necessary words are defined.
+\ : is   (CREATE) ,docol smudge ] EXIT
+\ ; is   LIT EXIT   COMPILE,   smudge   postpone [   EXIT
+
+target : SMUDGE ( -- )
+  latest cell+ dup @
+  [ host f_hidden tliteral target ] xor
+  swap ! ;
+
+
+host dp @ \ Save the old dp
+T' :
+( old-dp t-xt ) dp ! \ Pretend we're compiling there.
+,docol
+T' (CREATE) tcompile,
+T' ,docol   tcompile,
+T' smudge   tcompile,
+T' ]        tcompile,
+T' EXIT     tcompile,
+\ That's 6 cells with a 1-cell DOCOL.
+
+
+T' ;
+( old-dp t-xt )
+\ First make it immediate; the length is 2 cells back. DCPU-specific!
+dup 2 tcells -   dup t@ f_immed or swap t!
+( old-dp t-xt ) dp !    \ Pretend we're compiling at semicolon
+,docol
+T' EXIT tliteral \ NB That's two cells wide
+T' compile, tcompile,
+T' smudge   tcompile,
+T' [        tcompile,
+T' EXIT     tcompile,
+\ That's 7 cells with a 1-cell DOCOL.
+
+( old-dp ) dp !
 

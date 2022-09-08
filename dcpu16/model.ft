@@ -15,8 +15,8 @@ HOST definitions
 : pushrsp, ( rhs -- ) 1 # rsp sub,   ( rhs ) [rsp] set, ;
 : poprsp,  ( lhs -- ) [rsp] 2swap ( rhs lhs ) set,   1 # rsp add, ;
 
-: tcells    ( n -- n2 ) 2* ;
-: tcell+    ( n -- n2 ) 2 + ;
+: tcells    ( n -- n2 ) ;
+: tcell+    ( n -- n2 ) 1+ ;
 : tcompile, t, ;
 
 
@@ -37,7 +37,7 @@ label DOCOL
 \ See the DOES> design below.
 
 label DOVAR
-  1 # peek add,
+  \ 1 # peek add,
   next,
 
 \ DOES> design for DTC =======================================================
@@ -68,7 +68,7 @@ label DOVAR
 VARIABLE '(DOES>)
 VARIABLE 'EXIT   \ These get populated later.
 
-: DOES, ( -- ) '(DOES>) @ t,   'EXIT @ t,   DOCOL # jsr, ;
+: DOES, ( -- xt-does ) '(DOES>) @ t,   'EXIT @ t,   here   DOCOL # jsr, ;
 
 
 
@@ -119,12 +119,25 @@ label DOSTRING
 \ For DTC that means assembling a JSR docol.
 : ,docol ( -- ) docol # jsr, ;
 
+\ Compiles the JSR DOVAR. This deliberately uses the long form JSR lit + DOVAR
+\ So that the pushed PC is exactly the data region.
+\ The code for DODOES can't use the inline literal, so it needs this space for
+\ a long JSR lit.
+: ,dovar ( -- ) $7c20 t, dovar t, ;
+
+\ Overwrites the code field (address) of the word at word-xt to point to the
+\ ;CODE or DOES> at does-xt.
+\ On DTC DCPU-16, this compiles JSR does-xt as two words: $7c20 does-xt
+: !dodoes ( does-xt word-xt -- ) $7c20 over t!   tcell+ t! ;
+
 \ Compile a literal. This is in the model because eg. STC doesn't use the two-
 \ cell [LIT|x] pattern.
 : tliteral ( x --    X: -- x ) lit tcompile,   t, ;
 
 : ,dest ( x -- ) t, ;
 : !dest ( dest slot -- ) t! ;
+
+: t>body ( target-xt -- target-body ) 2 tcells + ;
 
 
 \ Some dictionary header pieces.

@@ -34,6 +34,7 @@ target-wl set-current
 : NATIVE postpone native ; immediate
 : DEFINITIONS native definitions host ;
 : \  native postpone \ host ;
+: (  native postpone ( host ;
 
 host definitions
 

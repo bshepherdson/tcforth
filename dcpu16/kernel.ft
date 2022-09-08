@@ -488,7 +488,7 @@ label (key)-loop
   peek hwi,
   0 # rc ife,
     (key)-loop # pc set,
-  rc log,
+  \ rc log,
   rc peek set, \ Overwrite the device number on top.
 end-code
 

@@ -88,26 +88,41 @@ HOST DEFINITIONS
 HOST
 VARIABLE STATE
 VARIABLE 'mirror \ Holds the body address of the last mirror word defined.
+VARIABLE >mirror \ Holds the body address of the mirror currently executing.
+                 \ This is used by mirror-compile, and mostly ignored otherwise.
 
 : interpX ( addr -- )
   drop 1 ABORT" Can't interpret TARGET word without HOST ACTS:" ;
 : interpX-imperative ( addr -- )
   drop 1 ABORT" Can't interpret IMPERATIVE mirror word" ;
+: doesX-blank ( addr -- )
+  drop 1 ABORT" No DOES> action defined for this mirror word" ;
 
-: mirror-compile ( addr -- ) @ dup ." compiling " hex. cr T, ;
+: mirror-compile ( -- ) >mirror @ @ dup ." compiling " hex. cr T, ;
+
+: mirror>txt       ( mirror-body -- 'target-xt )       ;
+: mirror>interp    ( mirror-body -- 'interp-xt )       cell+ ;
+: mirror>compile   ( mirror-body -- 'compile-xt )      2 cells + ;
+: mirror>h-does    ( mirror-body -- 'host-does-xt  )   3 cells + ;
+: mirror>t-does    ( mirror-body -- 'target-does-xt )  4 cells + ;
+: mirror>mirror-nt ( mirror-body -- 'mirror-nt )       5 cells + ;
 
 \ The parameter field of a mirror word contains:
-\ Target xt, metainterpreting xt, metacompiling xt
+\ Target xt, metainterpreting xt, metacompiling xt, Host DOES> xt, Target DOES> xt
 : mirror ( target-xt "name" -- )
     CREATE
     native   dup hex. latest name>string type cr   here   host 'mirror !
     ( target-xt ) ,   ['] interpX ,   ['] mirror-compile ,
+    ['] doesX-blank ,   0 ,
     native latest host ,
   DOES>
-    dup 3 cells + @ id.
-    dup STATE @ IF 2 cells + ELSE cell+ THEN
-    \ ." mirror about to run" cr dup xt-see
-    @ execute ;
+    dup mirror>mirror-nt @ id.
+    dup >mirror !
+    STATE @ ( mirror-body meta-state ) IF
+      mirror>compile
+    ELSE
+      mirror>interp
+    THEN @ execute ;
 
 \ Creates a new, bare dictionary entry on the Target, and its mirror word in the
 \ TARGET vocabulary! They both have the same name.
@@ -157,14 +172,14 @@ main 1 t!
 \ Replacement parser for the target "compiler", runs during colon definitions.
 \ This is a normal compiler. The regular one would have worked except for two
 \ things: (1) HOST STATE is not NATIVE STATE; (2) capturing numbers.
-: ] ( -- )
-  \ ." top of ] " .s cr
+: meta] ( -- )
+  \ ." top of meta] " .s cr
   1 state ! \ Start off in the metacompiling state.
   BEGIN state @ WHILE
     parse-name ?dup IF ( c-addr u )
       2dup find-name ( ca u nt|0 ) ?dup IF
         \ Found it. Execute the target word.
-        >R 2drop R> name>int execute \ ." Before: " .s execute ."    after: " .s cr
+        >R 2drop R> name>int ( ." Before: " .s ) execute ( ."    after: " .s cr)
       ELSE ( ca u )
         2dup s>number? IF ( ca u d )
           D>S >R 2drop R> ( n ) LIT T, T,
@@ -173,8 +188,13 @@ main 1 t!
         THEN ( )
       THEN ( )
     ELSE ( c-addr ) refill 2drop THEN ( )
-  REPEAT \ ." end of ]" .s cr
+  REPEAT \ ." end of meta]" .s cr
   ;
+
+
+: (T') ( "name" -- mirror-body )
+  parse-name target-wl search-wordlist IF >body ELSE 1 ABORT" Bad T'" THEN ;
+: T' ( "name" -- target-xt ) (T') mirror>txt @ ;
 
 
 \ Bootstrapping the : for use by the target. It needs to (TCREATE) and compile
@@ -189,25 +209,28 @@ main 1 t!
 \ Runs in the HOST. Replaces the metainterpretation action for the most-recent
 \ mirror word.
 \ Use IMPERATIVE to make this the metacompilation action instead.
-VARIABLE acting?
-: ACTS: ( "name" --    X: target-addr-body -- ) acting? on   :noname ;
+VARIABLE acting?   VARIABLE doing?
+: ACTS: ( --    X: -- ) acting? on   :noname ;
+\ Makes the interp action of the latest mirror word exactly a host word.
+: ACT   ( "name" -- )
+  parse-name find-name name?int   'mirror @ mirror>interp ! ;
 
-\ Regular semicolon, plus check acting? and update the 'mirror word.
-: ;   postpone ;   acting? @ IF acting? off   ( xt ) 'mirror @ cell+ ! THEN ;
-IMMEDIATE
 
 \ Like IMMEDIATE for metacompilation - copies the metainterpretation action to
 \ be the metacompilation action instead, and makes the metainterpretation action
 \ an error.
 : IMPERATIVE ( -- )
-  'mirror @ cell+ dup >R  ( 'interp    R: 'interp )
-  @   R@ cell+ !
-  ['] interpX-imperative   R> ! ;
+  'mirror @ dup >R  ( mirror     R: mirror )
+  mirror>interp @   R@ mirror>compile !
+  ['] interpX-imperative   R> mirror>interp !   ;
 
 
-
-: T' ( "name" -- target-xt )
-  parse-name target-wl search-wordlist IF >body @ ELSE 1 ABORT" Bad T'" THEN ;
+\ Regular semicolon, plus check acting? and doing? and update the 'mirror word.
+: ;
+  native postpone ; host
+  acting? @ IF acting? off   ( xt ) 'mirror @ mirror>interp ! EXIT THEN
+  doing?  @ IF doing?  off   ( xt ) 'mirror @ mirror>h-does ." doing? " over hex. dup hex. cr ! EXIT THEN
+; IMMEDIATE
 
 
 host definitions
@@ -218,15 +241,20 @@ T' OVER      CONSTANT TOVER
 T' =         CONSTANT T=
 
 
+\ Some host-side actions for CODE words, like @ and !
+'mirror @
+(T') @ 'mirror !   act t@
+(T') ! 'mirror !   act t!
+'mirror !
+
 \ Hand-roll the target+mirror definitions for : and ;
 \ They don't work on the target yet, just making space.
 target definitions host
-
 code : end-code 0 t, 0 t, 0 t, 0 t,
-  host acts: drop   ." host :" cr (TCREATE)   ,docol   ] ;
+  host acts: ." host :" cr (TCREATE)   ,docol   meta] ;
 
 code ; end-code 0 t, 0 t, 0 t, 0 t,
-host acts: drop   0 state !   'EXIT @ tcompile, ; IMPERATIVE
+  host acts: 0 state !   'EXIT @ tcompile, ; IMPERATIVE
 
 
 host here ." Metacompilation starts at " dup hex.  ." (" 2* hex. ." )" cr

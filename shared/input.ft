@@ -18,11 +18,15 @@ target : (TYPE) ( c-addr u -- )
     >R dup c@ log 1+ R> 1-
   REPEAT 2drop ;
 
-target : str= ( ca1 u1 ca2 u2 -- ? )
+target : >UPPER ( ch1 -- ch2 )
+  dup [ host 'a' tliteral 'z' 1+ tliteral target ] within IF 32 - THEN ;
+
+target : istr= ( ca1 u1 ca2 u2 -- ? )
   rot over <> IF drop 2drop 0 EXIT THEN \ Length mismatch
   ( ca1 ca2 u ) BEGIN ?dup WHILE
     >R
-    over c@ over c@ <> IF 2drop R> drop 0 EXIT THEN \ Character mismatch
+    over c@ >upper over c@ >upper <> IF
+      2drop R> drop 0 EXIT THEN \ Character mismatch
     1+ >R 1+ R> R> 1- ( ca1' ca2' u' )
   REPEAT 2drop -1 ;
 
@@ -32,7 +36,7 @@ target : (FIND) ( c-addr u -- 0 | xt 1 | xt -1 )
   latest >R BEGIN R@ WHILE ( c-addr u   R: nt )
     R@ cell+ dup char+ swap c@
     [ host mask_len_hidden tliteral target ] and ( ta tu wa wu )
-    2over str= ( ta tu eq? ) IF \ Found the match!
+    2over istr= ( ta tu eq? ) IF \ Found the match!
       2drop R@ >cfa   R> cell+ c@
       [ host f_immed tliteral target ] and IF 1 ELSE -1 THEN EXIT
     ELSE \ No match, so continue

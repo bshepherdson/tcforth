@@ -17,8 +17,39 @@ target : THROW ( ...1 n -- ...1 | ...2 n )
     \ This returns to CATCH's caller with exc# on top.
   THEN ;
 
+\ Here's a table of the ANS standard error messages, many of which are not
+\ checked or not applicable.
+\ -1  ABORT
+\ -2  ABORT"
+\ -3  stack overflow
+\ -4  stack underflow
+\ -5  return stack overflow
+\ -6  return stack underflow
+\ -7  do-loops nested too deep
+\ -8  dictionary overflow   TODO Worth catching?
+\ -9  invalid memory address
+\ -10 division by 0         TODO Catch this one
+\ -11 result out of range
+\ -12 argument type mismatch
 target : ERR-UNDEFINED ( -- exc# ) -13 ;
 target : ERR-?COMP     ( -- exc# ) -14 ;
+\ -15 invalid FORGET        TODO Add MARK/FORGET
+\ -16 attempting to CREATE with 0 length
+\ -17 pictured numeric output overflow
+\ -18 parsed string overflow
+\ -19 definition name too long
+\ -20 write to read-only location
+\ -21 unsupported operation (eg. AT-XY with dumb terminal)
+\ -22 control structure mismatch TODO control structure matching
+\ -23 address alignment exception
+\ -24 invalid numeric argument
+\ -33 block read exception
+\ -34 block write exception
+\ -35 invalid block number
+\ -36 invalid file position
+\ -37 file I/O exception
+\ -38 non-existent file
+\ -39 unexpected EOF
 
 target : ABORT ( -- ) -1 throw ;
 

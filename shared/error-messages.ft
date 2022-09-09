@@ -1,0 +1,9 @@
+\ Error message strings for the various errors.
+target definitions
+
+: .ERROR ( exc# -- )
+  CASE
+  err-undefined OF ." Undefined word" ENDOF
+  err-?comp     OF ." Comp word outside colon defn" ENDOF
+  ( exc# ) ." Exception " .
+  0 ENDCASE ;

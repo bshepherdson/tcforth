@@ -160,11 +160,11 @@ target : INTERPRET ( -- ) BEGIN parse-name dup WHILE interp1 REPEAT 2drop ;
 
 target : ABORTED ( -- )
   R> [ host rp0 tliteral target ] rp! >R \ Drops everything but ABORTED's own return
-  [ host [TCOMPILE] [ target ]
+  [ host T' [ tcompile, target ]
   0 'source-id !             \ Force a keyboard source.
   [ host sp0 tliteral target ] sp! ;
 
-host presume ACCEPT
+host presume ACCEPT presume EMIT presume REVERSE
 target
 
 \ REFILL is clever and does the Right Thing for each source type:
@@ -177,5 +177,6 @@ target : REFILL ( -- ? )
   \ Keyboard - ACCEPT a complete line
   tib 128 accept ( u )
   0 >IN !   tib swap 'SOURCE 2! \ Set it up as the new input
+  state @ 0= IF bl emit THEN    \ If interpreting, append a space separator.
   -1 ;                          \ And return true
 

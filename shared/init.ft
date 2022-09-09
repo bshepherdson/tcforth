@@ -9,8 +9,8 @@ target : (QUIT) ( -- )
     CASE
     0   OF state @ 0= IF ."  ok" cr THEN ENDOF
     -1  OF aborted ENDOF
-    log $dead log break
-    ENDCASE
+    ( exc# ) .ERROR cr aborted \ Print error message, clear stacks, and continue
+    0 ENDCASE
   REPEAT ( TODO: BYE ) ;
 
 \ Empties the return stack, selects keyboard input, forces interpreter state,
@@ -22,9 +22,13 @@ target : QUIT ( -- )
   0  'source-id !
   (QUIT) ;
 
+: .intro ( -- ) white fg! light blue bg!
+  \  01234567890123456789012345678901
+  ."        TC-FORTH version 7       "
+  default-colours cr ;
 
 \ Initiates a cold start - locate and init the hardware, then QUIT.
-: cold ( -- ) init-devices init-lem QUIT ;
+: cold ( -- ) init-devices init-lem .intro QUIT ;
 
 host   T' COLD   entry-point t!
 

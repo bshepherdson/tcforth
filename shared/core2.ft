@@ -1,6 +1,9 @@
 \ Advanced core words, loaded post-input.
 target definitions
 
+: HEX 16 base ! ;
+: DECIMAL 10 base ! ;
+
 \ (CREATE) builds a blank header, no code field.
 \ link | len | name... |
 target : (CREATE) ( "name" -- ) here latest ,   'latest !

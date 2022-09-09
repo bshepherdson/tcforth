@@ -174,8 +174,8 @@ code LOG ( x -- )
   pop log,
 end-code
 \ Likewise, DCPU BRK
-code BREAK ( -- )
-  0 # brk,
+code BREAK ( n -- )
+  pop brk,
 end-code
 
 
@@ -409,6 +409,7 @@ label (MOVE>)
   fwd pc set, \ Jump ahead to the loop tail.
 
   label MOVE>-loop
+    rc log,
     [i] [j] std, \ Copy a word.
     1 # rc  sub, \ Decrement the counter.
     resolve      \ Resolve the above fwd reference.

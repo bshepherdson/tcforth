@@ -7,22 +7,22 @@ $fc00 CONSTANT vram
 
 VARIABLE (colours)
 
-$0 CONSTANT black
-$1 CONSTANT red
-$2 CONSTANT green
-$3 CONSTANT gold
-$4 CONSTANT blue
-$5 CONSTANT purple
-$6 CONSTANT brown
-$7 CONSTANT light-grey
-$8 CONSTANT dark-grey
-$9 CONSTANT bright-red
-$a CONSTANT bright-green
-$b CONSTANT yellow
-$c CONSTANT cyan
-$d CONSTANT magenta
-$e CONSTANT ochre
-$f CONSTANT white
+VARIABLE (light)
+: LIGHT   8 (light) ! ;
+: COLOUR ( c "name" --   X: -- c ) create , DOES> @ (light) @ +   0 (light) ! ;
+  host acts: create t, DOES> t@ ;
+target
+
+$0 COLOUR black
+$1 COLOUR blue
+$2 COLOUR green
+$3 COLOUR cyan
+$4 COLOUR red
+$5 COLOUR pink
+$6 COLOUR yellow
+$7 COLOUR grey
+
+: white ( -- colour ) light grey ;
 
 \ Character values ===========================================================
 \ These words manipulate screen character words on the stack, not in memory.
@@ -54,16 +54,18 @@ $f CONSTANT white
 \ Reverses the current colour settings (but doesn't change anything on screen.
 : reverse ( -- ) (colours) @ reversed (colours) ! ;
 
-\ Sets the whole screen to spaces in the current colour.
-: clear ( -- ) 384 BEGIN ?dup WHILE
-  1-    bl coloured   over vram + !   REPEAT ;
-
+\ Wipes u cells from start index (not an address!) with blank spaces.
+: wipe ( start u -- ) >R vram + R> over + swap DO bl coloured i ! LOOP ;
 
 \ Cursor handling ============================================================
 VARIABLE cursor \ Index into the VRAM
 
 12 CONSTANT #rows
 32 CONSTANT /row
+
+\ Sets the whole screen to spaces in the current colour.
+\ Moves the cursor to 0 as well.
+: clear ( -- ) 0   #rows /row *   wipe   0 cursor ! ;
 
 \ Returns the pointer into VRAM of the current cursor.
 : >cursor ( -- addr ) cursor @ vram + ;
@@ -74,6 +76,30 @@ VARIABLE cursor \ Index into the VRAM
 : at-xy ( col row -- ) vacate   /row * + cursor !   arrive ;
 
 : +cursor ( n -- ) vacate   cursor @ +   0 max 383 min   cursor !   arrive ;
+
+
+\ Scrolling ==================================================================
+\ Scrolls by lines. Positive scrolls down, negative scrolls up. Blanks are
+\ always scrolled in. VRAM doesn't move.
+: (-scroll) ( +chars -- )
+  \ Move vram to vram+len for vram-size - length words.
+  >R   vram dup R@ +   384 R@ - cmove \ START HERE downward move busted?
+  \ Then wipe the top part.
+  0 R@ wipe
+  \ And adjust the cursor so it follows the scroll.
+  R> cursor +! ;
+
+: (+scroll) ( +chars -- )
+  \ We want to move vram+len to vram for vram-size - length words.
+  dup >R   vram +   vram   384 R@ - cmove
+  \ Then wipe the bottom part.
+  384 R@ - R@ wipe
+  \ And adjust the cursor so its relative position stays.
+  R> negate cursor +! ;
+
+
+: scroll ( lines -- )
+  /row * chars dup 0< IF negate (-scroll) ELSE (+scroll) THEN ;
 
 
 \ Printing ===================================================================
@@ -149,6 +175,11 @@ VARIABLE (picout)
 
 : .   (#HOLD) type space ;
 
+: HEX. ( u -- )
+  base @ >R hex
+  [ host '$' tliteral target ] emit   U.
+  R> base ! ;
+
 
 \ Initialization =============================================================
 
@@ -158,5 +189,5 @@ VARIABLE (picout)
   \ Send an HWI with A=0, B=vram; no response regs. So that's a mask of 3.
   vram log
   0 vram 3   dev-lem1802 @ >device
-  default-colours   clear   0 0 at-xy ;
+  default-colours   clear ;
 

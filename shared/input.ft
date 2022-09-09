@@ -138,7 +138,7 @@ target : ?NUMBER ( c-addr u -- n true | false )
 
 \ Interprets a single parsed word or number.
 target : INTERP1   ( c-addr u -- )
-  2dup (type)
+  \ 2dup (type)
   2dup (find) ?dup IF ( c-addr u xt 1|-1 )
     2swap 2drop ( xt 1|-1 )
     state @ IF
@@ -153,7 +153,7 @@ target : INTERP1   ( c-addr u -- )
       \ Really undefined. Emit an error message.
       err-undefined throw
     THEN
-  THEN depth log ;
+  THEN ( depth log ) ;
 
 \ Fundamental single-line interpreter loop.
 target : INTERPRET ( -- ) BEGIN parse-name dup WHILE interp1 REPEAT 2drop ;

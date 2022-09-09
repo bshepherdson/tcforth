@@ -292,8 +292,48 @@ code UDM* ( l1 h1 n2 -- l3 h3 )
   rb   push set, \ Push hi
 end-code
 
+code UM/MOD ( ulo uhi udiv -- ur uq )
+  \ Dividing a 32-bit unsigned dividend by an unsigned 16-bit divisor to get
+  \ an unsigned 16-bit quotient and unsigned 16-bit remainder.
+  \ This works by successive bit-shifting until we run out of divisor bits.
+  \ The dividend goes into Y:X where Y becomes the remainder and X the quotient.
+  \ Each steps shifts this pair left, moving the top bit of the low/quotient
+  \ into the high/remainder.
+  \ We shift in a 0 there, but if the remainder is >= the divisor, we subtract
+  \ the divisor from the remainder and make bit 0 of the quotient 1.
+  \ After cycling for as many bits as the divisor is wide (16), all the dividend
+  \ bits have been shifted out of the quotient, and the remainder holds exactly
+  \ the remainder we want!
+  pop   ra set, \ A=divisor
+  pop   ry set, \ Y=high dividend and remainder.
+  pop   rx set, \ X=low dividend and quotient.
+  16 #  rc set, \ C=bit counter
 
-\ TODO More double-cell arithmetic
+  label UM/MOD-loop
+    \ Shift Y:X left as a 32-bit value.
+    1 # ry shl, \ Shift the high side first.
+    1 # rx shl, \ Then the low side. EX holds the shifted-out bit from low!
+    ex  ry bor, \ OR that 1 from ex into high.
+
+    \ Now check if the divisor (A) is unsigned-greater than the remainder in Y.
+    ry ra ifg,
+      fwd pc set, \ If it is, we can skip ahead.
+    \ Here the divisor in A is <= the remainder in Y.
+    ra  ry sub,   \ Subtract the divisor A from the remainder Y.
+    1 # rx bor,   \ And make the low quotient X bit a 1.
+
+    resolve
+    1 # rc sub,   \ Reduce our counter C
+    0 # rc ifn,
+      UM/MOD-loop # pc set, \ Jump back to the top if C isn't 0 yet.
+
+  \ C=0 so we're done shifting. Y is the remainder, X the quotient.
+  ry push set,
+  rx push set, ( rem quot )
+end-code
+
+
+\ TODO More double-cell arithmetic?
 
 
 \ Branches are abstracted, because they differ signficantly on STC systems,

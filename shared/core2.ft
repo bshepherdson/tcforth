@@ -269,3 +269,35 @@ T' EXIT     tcompile,
 
 ( old-dp ) dp !
 
+
+\ Signed long division =======================================================
+target definitions
+VARIABLE -dvd?
+VARIABLE -dvs?
+
+\ 2's complement negation: bitwise invert, then add 1.
+: DNEGATE ( d -- -d ) invert >R invert R>   1 S>D D+ ;
+
+: (div-diff) -dvd? @ -dvs? @ xor ;
+: (DIV-CORE) ( d n -- ur uq )
+     dup 0< dup -dvs? ! IF negate THEN  ( d u )
+  >R dup 0< dup -dvd? ! IF dnegate THEN ( ud    R: u )
+  R> um/mod ;
+
+\ Symmetric division is simpler: the remainder has the same sign of the
+\ dividend, or is zero. Quotient carries the main sign.
+: SM/REM ( d n -- r q )
+  (div-core) ( ur uq )
+  -dvd? @ IF >R negate R> THEN ( r uq )
+  (div-diff) IF negate THEN ( r q ) ;
+
+\ Floored division is somewhat odder. The remainder has the sign of the divisor
+\ (or is 0), while the quotient has the combined sign. When the signs do differ,
+\ add 1 to the unsigned results before doing the negation.
+: FM/MOD ( d n -- r q )
+  (div-core) ( ur uq )
+  over (div-diff) and IF 1+ swap 1+ swap THEN ( ur' uq' )
+  (div-diff) IF negate THEN    \ Negate quotient when signs differ.
+  -dvs? @ IF >R negate R> THEN \ Negate the remainder if divisor is negative.
+;
+

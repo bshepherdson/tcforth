@@ -56,6 +56,7 @@ $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
 
 : t>cfa ( target-nt -- target-xt ) tcell+ dup t@ mask_len and + tcell+ ;
 
+16 CONSTANT twidth  \ 16 bits per cell!
 
 VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
 : LATEST ( -- nt ) 'latest @ ;

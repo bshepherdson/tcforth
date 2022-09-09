@@ -103,16 +103,51 @@ VARIABLE cursor \ Index into the VRAM
 \ c-addr-min
 : BACKSPACE ( c-addr-current c-addr-min -- c-addr' )
   over = IF EXIT THEN \ At left edge, do nothing.
-  break -1 +cursor   bl emit   -1 +cursor
+  -1 +cursor   bl emit   -1 +cursor
   1- ( c-addr' ) ;
 
 : ACCEPT-CHAR ( c-addr ch -- c-addr' ) dup emit   over c! 1+ ;
 
 : ACCEPT ( c-addr max -- len )
   drop dup >R  \ TODO Ignores the max length!
-  BEGIN dup log dev-keyboard @ (key) dup $11 <> WHILE \ ( c-addr key ) Not a newline - DCPU-specific!
+  BEGIN dev-keyboard @ (key) dup $11 <> WHILE \ ( c-addr key ) Not a newline - DCPU-specific!
     dup $10 = IF drop R@ backspace ELSE accept-char THEN
   REPEAT ( end newline   R: start ) drop R> - ( len ) ;
+
+
+\ Pictured numeric ouput =====================================================
+VARIABLE (picout)
+: (picout-top) here 64 chars + ;
+: <#   ( -- )    (picout-top) (picout) ! ;
+: HOLD ( c -- )  (picout) @ 1- dup >R c!   R> (picout) ! ;
+: SIGN ( n -- )  0< IF [ host '-' tliteral target ] hold THEN ;
+: #    ( ud1 -- ud2 )
+  dup 0 base @ um/mod >R drop ( ud1   R: hi-q )
+  base @ um/mod               ( r lo-q   R: hi-q )
+  swap dup 10 < IF
+    [ host '0' tliteral target ]
+  ELSE
+    10 - [ host 'A' tliteral target ]
+  THEN
+  + HOLD ( lo-q   R: hi-q )
+  R> ;
+
+: #S   ( ud1 -- ud2 )
+  2dup or 0= IF [ host '0' tliteral target ] hold EXIT THEN \ Special case 0
+  BEGIN 2dup or WHILE # REPEAT ;
+
+: #>   ( ud -- c-addr u ) 2drop   (picout) @ (picout-top) over - ;
+
+: (#UHOLD) ( u -- c-addr u ) <# 0 #S #> ;
+: U. ( u -- ) (#UHOLD) type space ;
+
+: (#HOLD) ( n -- c-addr u )
+  \ The smallest integer is a special case - it has no positive counterpart!
+  [ host 1 twidth 1- lshift tliteral target ] over = IF
+    <# 0 #S [ host '-' tliteral target ] hold #>
+  ELSE <# dup abs S>D #S rot sign #> THEN ;
+
+: .   (#HOLD) type space ;
 
 
 \ Initialization =============================================================

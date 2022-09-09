@@ -95,6 +95,26 @@ VARIABLE cursor \ Index into the VRAM
 : TYPE   ( c-addr u -- ) ?dup IF 0 DO ( c-addr ) dup c@ emit 1+ LOOP THEN drop ;
 
 
+\ Keyboard input =============================================================
+\ Keyboard input needs local echo, with basic line editing for eg. backspace.
+
+\ Steps back one, displays a blank at the current slot, and leaves the cursor
+\ pointed at the blank. Does nothing if already at the left edge, given by
+\ c-addr-min
+: BACKSPACE ( c-addr-current c-addr-min -- c-addr' )
+  over = IF EXIT THEN \ At left edge, do nothing.
+  break -1 +cursor   bl emit   -1 +cursor
+  1- ( c-addr' ) ;
+
+: ACCEPT-CHAR ( c-addr ch -- c-addr' ) dup emit   over c! 1+ ;
+
+: ACCEPT ( c-addr max -- len )
+  drop dup >R  \ TODO Ignores the max length!
+  BEGIN dup log dev-keyboard @ (key) dup $11 <> WHILE \ ( c-addr key ) Not a newline - DCPU-specific!
+    dup $10 = IF drop R@ backspace ELSE accept-char THEN
+  REPEAT ( end newline   R: start ) drop R> - ( len ) ;
+
+
 \ Initialization =============================================================
 
 : init-lem ( -- )

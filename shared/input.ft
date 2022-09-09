@@ -164,11 +164,8 @@ target : ABORTED ( -- )
   0 'source-id !             \ Force a keyboard source.
   [ host sp0 tliteral target ] sp! ;
 
-target : ACCEPT ( c-addr max -- len )
-  drop dup >R  \ TODO Ignores the max length!
-  BEGIN 0 (key) dup $11 <> WHILE \ ( c-addr key ) Not a newline - DCPU-specific!
-    over c!   char+   ( c-addr' )
-  REPEAT ( end newline   R: start ) drop R> - ( len ) ;
+host presume ACCEPT
+target
 
 \ REFILL is clever and does the Right Thing for each source type:
 \ Keyboard: ACCEPT

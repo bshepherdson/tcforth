@@ -23,7 +23,6 @@ target : S" ( "ccc"" --     X: -- c-addr u )
   host acts: (S") ; IMPERATIVE
 
 \ Forward reference to TYPE, resolved later.
-host cr cr cr
 presume type
 
 \ Indirection so this word can be compiled directly and its contents are the

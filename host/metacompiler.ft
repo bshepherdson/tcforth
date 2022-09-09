@@ -1,148 +1,152 @@
-\ Herein are host-side Forth words building up to a metacompiler.
-\ The objective is to redefine, eventually, : ; VARIABLE CONSTANT and others,
-\ so that the library files are fully in target-side code, but running on the
-\ host.
+\ Metacompiling Forth words ==================================================
+\ In the TARGET vocab, : creates a new definition with codeword, in both HOST
+\ and TARGET, just like HOST CODE.
 
-\ Mostly this is the compiler and : but also any IMMEDIATE words eg. IF, need
-\ three versions:
-\ 1. the target code they actually compile
-\ 2. host code that compiles #1
-\ 3. target code that compiles #1 as well
+\ It switches the *metacompiler* to compiling state, but not the Host's own
+\ compiler. Therefore the words in the definition will be executed by the host,
+\ rather than compiled. These are the mirror words, and executing them compiles
+\ themselves into the Target.
 
-\ This is handled by having a "special words" list on the host side, that is
-\ searched first by the compiler. It contains the #2s above, the host-side code
-\ for all the IMMEDIATE words.
-VARIABLE tstate
-2VARIABLE 'tsource
-VARIABLE  tfile
-VARIABLE  T>IN
-
-
-wordlist CONSTANT immediates \ The ones that must run as immediates.
-
-\ Those words that have interpretation semantics and can be run during
-\ metacompilation:  :  ,  compile,  CREATE  VARIABLE  CONSTANT  etc.
-wordlist CONSTANT host-words
-
-
-\ Differently-named : for the target.
-\ Starts a new target-side colon definition, including the code field.
-\ Semicolon is handled above by the immediate words.
-
-\ Duplicated internals of a Forth compiler on the host.
-: tsource ( -- c-addr u ) 'tsource 2@ ;
-
-: isspace?    ( ch -- ? ) bl 1+ u< ;
-: isnotspace? ( ch -- ? ) isspace? 0= ;
-
-: xt-skip ( c-addr1 u1 xt -- c-addr2 u2 )
-  >R BEGIN dup WHILE
-    over c@ R@ execute
-  WHILE
-    1 /string
-  REPEAT THEN
-  R> drop ;
-
-: tparse-name ( "<spaces>name<space>" -- c-addr u )
-  tsource T>IN @ /string
-  ['] isspace?    xt-skip over >R
-  ['] isnotspace? xt-skip ( end-word restlen R: start-word )
-  2dup 1 min + tsource drop - T>IN !
-  drop R> tuck - ;
-
-: tparse ( term "<chars>term" -- c-addr u )
-  tsource T>IN @ /string ( start restlen ) over >R >R ( ca u   R: start term )
-  BEGIN dup WHILE
-    over c@ R@ = IF \ Found the terminator - it's consumed but excluded.
-      1 /string   'source 1+ w!   dup 'source w! ( end   R: start term )
-      R> drop R> tuck - ( start u ) EXIT THEN
-    1 /string
-  REPEAT ( c-addr 0   R: start term ) ABORT" Parsing off end of line" ;
-
-VARIABLE negative?
-: ?negative ( c-addr u -- c-addr' u' )
-  over c@ '-' =   dup negative !   IF 1 /string THEN ;
-
-: parse-number ( c-addr u -- n valid? )
-  base @ >R
-  ?negative   over c@ '$' = IF 16 base !   1 /string THEN
-  0 0 2swap >NUMBER ( ud c-addr u )
-  IF drop 2drop   0 false ELSE
-    drop D>S true   negative? @ IF negate THEN THEN
-  R> base ! ;
-
-: tinterpret1 ( -- )
-  tparse-name ( c-addr u )
-  dup 0= IF 2drop exit then \ Empty, so bail.
-  \ Try the overlay wordlist first, in case of host-words.
-  2dup immediates search-wordlist IF ( ca u xt )
-    >R 2drop R> execute \ Run an immediate (host) word
-    EXIT THEN
-
-  \ Otherwise try to do a regular compile.
-  \ Target-side word. First try to TFIND it.
-  2dup TFIND ( ca u nt|0 ) ?dup IF \ Found the word
-    NT>CFA   tstate @ IF ,, 2drop ELSE
-      drop ( ca u )
-      \ We can't interpret a target-side word. It has to be in host-words.
-      2dup host-words search-wordlist IF ( ca u xt )
-        >R 2drop R> execute
-      ELSE
-        ." Can't run " drop type ."  in target state" cr
-      THEN
-    THEN
-  ELSE ( ca u ) \ Not found, try as a number.
-    2dup parse-number ( ca u n ? ) IF \ Parsed it.
-      >R 2drop R> tstate @ IF lit ,, ,, THEN ( n )
-    ELSE ( ca u )
-      ." *** Unknown target word: " type cr abort
-    THEN
-  THEN
-;
-
-CREATE TTIB 256 allot
-
-\ Parses a Forth file into the target binary, with the metacompiler.
-: TINCLUDED ( c-addr u -- )
-  R/O OPEN-FILE ABORT" Failed to open target include" tfile ! ( )
-  BEGIN
-    ttib 256 tfile @ read-line ABORT" Failed to read line of input"
-  WHILE ( u-read )
-    ttib swap 'source 2!
-    tinterpret1
-  REPEAT
-;
+\ Replacement parser for the target "compiler", runs during colon definitions.
+\ This is a normal compiler. The regular one would have worked except for two
+\ things: (1) HOST STATE is not NATIVE STATE; (2) capturing numbers.
+: meta] ( -- )
+  \ ." top of meta] " .s cr
+  1 state ! \ Start off in the metacompiling state.
+  BEGIN state @ WHILE
+    parse-name ?dup IF ( c-addr u )
+      2dup find-name ( ca u nt|0 ) ?dup IF
+        \ Found it. Execute the target word.
+        >R 2drop R> name>int ( ." Before: " .s ) execute ( ."    after: " .s cr)
+      ELSE ( ca u )
+        2dup s>number? IF ( ca u d )
+          D>S >R 2drop R> ( n ) LIT T, T,
+        ELSE \ Unknown word!
+          2drop ." *** Undefined Target word: " type cr bye
+        THEN ( )
+      THEN ( )
+    ELSE ( c-addr ) refill 2drop THEN ( )
+  REPEAT \ ." end of meta]" .s cr
+  ;
 
 
-immediates set-current
-: IF   ( C: -- if-slot ) cf_(0BRANCH) ,, there @ 0 ,, ;
-: ELSE ( C: if-slot -- else-slot )
-  cf_(BRANCH) ,, there @ 0 ,, ( if-slot else-slot )
-  swap there @ swap w! ( else-slot ) ;
-: THEN ( C: if-slot -- ) there @ swap w! ;
+: <T'> ( "name" -- mirror-xt|0 )
+  parse-name target-wl search-wordlist   0= IF 0 THEN ;
+: (T') ( "name" -- mirror-body ) <T'> ?dup 0= IF 1 ABORT" Bad T'" THEN   >body ;
+: T'   ( "name" -- target-xt )   (T') mirror>txt @ ;
+: [T'] ( C: "name" --    X: -- target-xt ) T' postpone literal ; IMMEDIATE
 
-: BEGIN  ( C: -- top-loc )     there @ ;
-: AGAIN  ( C: top-loc -- )     cf_(BRANCH)  ,, ,, ;
-: WHILE  ( C: -- while-slot )  cf_(0BRANCH) ,, there @ 0 ,, ;
-: REPEAT ( C: top-loc while-slot -- )
-  cf_(BRANCH) ,, swap ,, there @ swap w! ;
-
-\ New semicolon that compiles EXIT on the target.
-: ; ( -- ) cf_EXIT ,,   0 tstate ! ;
-: ( 
-
-\ Back to the regular wordlist
-host-words set-current
-
-\ Defining words
-: CREATE    T(CREATE)   dodoes # jsr,   0 ,, ;
-: :         T(CREATE)   docol  # jsr,   1 tstate ! ;
-: VARIABLE  T(CREATE)   dodoes # jsr,   0 ,, 0 ,, ;
-: 2VARIABLE T(CREATE)   dodoes # jsr,   0 ,, 0 ,, 0 ,, ;
-: CONSTANT  T(CREATE)   dodoes # jsr,   0 ,, 0 ,, 0 ,, ;
-: ,         ,, ;
-: compile,  ,, ; \ TODO machine-specific
-
-forth-wordlist set-current
+\ Parses a target name (immediately, like [']) and then does the mirror compile
+\ action for that word. This means [tcompile] works properly with forward refs.
+: [tcompile] ( "name" -- )
+  \ Save the HOST STATE, then force it to 1 to pretend we're compiling.
+  state @ >R   1 state !
+  <T'>   ?dup 0= IF 1 ABORT" Bad [TCOMPILE]" THEN
+  execute
+  R> state !
+; IMMEDIATE
 
 
+
+\ Runs in the HOST. Replaces the metainterpretation action for the most-recent
+\ mirror word.
+\ Use IMPERATIVE to make this the metacompilation action instead.
+VARIABLE acting?   VARIABLE doing?
+: ACTS: ( --    X: -- ) acting? on   :noname ;
+\ Makes the interp action of the latest mirror word exactly a host word.
+: ACT   ( "name" -- )
+  parse-name find-name name?int   'mirror @ mirror>interp ! ;
+
+
+\ Like IMMEDIATE for metacompilation - copies the metainterpretation action to
+\ be the metacompilation action instead, and makes the metainterpretation action
+\ an error.
+: IMPERATIVE ( -- )
+  'mirror @ dup >R  ( mirror     R: mirror )
+  mirror>interp @   R@ mirror>compile !
+  ['] interpX-imperative   R> mirror>interp !   ;
+
+
+\ Regular semicolon, plus check acting? and doing? and update the 'mirror word.
+: ;
+  native postpone ; host
+  acting? @ IF acting? off   ( xt ) 'mirror @ mirror>interp ! EXIT THEN
+  doing?  @ IF doing?  off   ( xt ) 'mirror @ mirror>h-does ! EXIT THEN
+; IMMEDIATE
+
+
+host definitions
+T' (0BRANCH) CONSTANT T0BRANCH
+T' (BRANCH)  CONSTANT TBRANCH
+T' DROP      CONSTANT TDROP
+T' OVER      CONSTANT TOVER
+T' =         CONSTANT T=
+
+
+\ Forward references =========================================================
+\ These are implemented as a mirror word with an alternative compile action.
+\ The Target xt slot holds the most recent forward reference.
+\ When the code tries to compile the forward-referenced word, it compiles the
+\ most recent reference into the Target, then saves that location into the xt
+\ slot.
+\ When we come to resolve the ref, this chain is followed, replacing each with
+\ the real xt. When we get to the end (0), save the xt into the mirror word, and
+\ reset its compile-xt field to the standard mirror-compile.
+host definitions
+
+\ Runs when we're attempting to compile a forward reference. Grab the mirror
+\ body from >mirror, compile the value from its txt field into the target, and
+\ save this new compilation address to txt.
+: mirror-forward ( -- )
+  here
+  \ ." forward chaining to " dup hex. cr
+  mirror-compile   >mirror @ mirror>txt ! ;
+
+: presume ( "name" -- )
+  0 mirror
+  ['] mirror-forward   'mirror @ mirror>compile ! ;
+
+\ Resolves a forward reference when we come to define it.
+\ ?forward runs after (TCREATE), so the newest mirror word's txt is the one we
+\ want to use to resolve the forward references.
+\ This only runs if (a) the mirror word exists; and (b) its mirror>compile is
+\ mirror-forward (otherwise we're redefining).
+: resolve-forward ( fwd-mirror-body -- )
+  'mirror @ mirror>txt @ ( fwd-mirror-body real-target-xt )
+  swap mirror>txt @ BEGIN ?dup WHILE ( real-xt fwd-ref )
+    \ ." Resolving forward at " dup hex. ." with " over hex. cr
+    dup t@ >R   2dup t!   drop R> ( real-xt fwd-ref' )
+  REPEAT drop ;
+
+: ?!forward ( mirror-body|0 -- ) ?dup IF resolve-forward THEN ;
+
+\ Looks for an existing forward reference, before we create the new one.
+: ?forward ( -- mirror-body|0 )
+  >IN @   <T'> ( inptr mirror-xt|0 )   swap >IN ! ( mirror-xt|0 )
+  dup IF \ The mirror word actually exists.
+    >body dup mirror>compile @ ['] mirror-forward <> IF
+      drop 0 THEN ( mirror-body|0 )
+  THEN ( mirror-body|0 ) ;
+
+
+\ Some host-side actions for CODE words, like @ and !
+'mirror @
+(T') @ 'mirror !   act t@
+(T') ! 'mirror !   act t!
+'mirror !
+
+\ Hand-roll the target+mirror definitions for : and ;
+\ They don't work on the target yet, just making space.
+target definitions host
+code : end-code 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, \ 7 cells since overwriting NEXT
+  host acts: ?forward   (TCREATE)   ?!forward   ,docol   meta] ;
+
+code ; end-code 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, \ Likewise, 7 cells.
+  host acts: 0 state !   'EXIT @ tcompile, ; IMPERATIVE
+
+
+host here ." Metacompilation starts at " dup hex.  ." (" 2* hex. ." )" cr
+
+host .s cr
+
+\ entry-point should now be set properly for the :main routine.

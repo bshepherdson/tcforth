@@ -1,6 +1,41 @@
-\ These are constructed for DTC, RSP in Z, IP in I.
+\ ===================== MACHINE/MODEL DEPENDENT SECTION ======================
+\ Trying to keep the system as portable across both machines and Forth models
+\ as possible. model.ft implements a few key routines (eg. DOCOL) and assembler
+\ macros (eg. pushrsp,) to hide the details of the model as much as possible.
 
-HOST definitions
+\ Design:
+\ - Direct threading
+\ - Return stack: RSP in Z; top 128 cells of memory, $ff80 to $ffff.
+\ - Data stack: PSP is SP; TOS on stack (PUSH, PEEK etc. are super fast)
+\ - IP is I (so STI can be used in NEXT)
+\ - A B C X Y are free; J is reserved (it gets clobbered by STI)
+\   - (No STI, STD aside from that use.)
+
+\ Standard dictionary headers: link, length+immediate+hidden word, len words of
+\ name, code field.
+
+\ This is a little surprising, but it makes sense when you think deeper:
+\ NATIVE HERE pushes the Host's dictionary pointer.
+\ HOST   HERE pushes the Target's dictionary pointer
+\ TARGET HERE is the mirror word that compiles the Target xt for HERE (!)
+HOST DEFINITIONS
+
+\ The assembler defines a THERE pointer for the Target dictionary.
+\ We capture that address as the HOST DP as well.
+there CONSTANT DP
+: here dp @ ;
+0 dp !   \ DCPU execution starts at $0000 by default.
+
+: t,        ( w -- )  asm, ;
+: tc,       ( b -- )  asm, ;   \ Byte-width assemble. That's just t, here.
+: tc@ t@ ;
+: tc! t! ;
+: tallot dp +! ;
+
+
+\ First line of code, the entry point. It'll be a jump to COLD eventually.
+$8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
+
 
 \ These are pseudooperands that hide what registers are used for what.
 : rsp     ( -- op ) rz  ;
@@ -18,6 +53,13 @@ HOST definitions
 : tcells    ( n -- n2 ) ;
 : tcell+    ( n -- n2 ) 1+ ;
 : tcompile, t, ;
+
+: t>cfa ( target-nt -- target-xt ) tcell+ dup t@ mask_len and + tcell+ ;
+
+
+VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
+: LATEST ( -- nt ) 'latest @ ;
+0 'latest !
 
 
 \ DOCOL and DODOES right at the top so they can be JSR DOCOL'd with the inline
@@ -138,6 +180,8 @@ label DOSTRING
 : !dest ( dest slot -- ) t! ;
 
 : t>body ( target-xt -- target-body ) 2 tcells + ;
+
+: ,dostring   ( -- ) dostring tcompile, ;
 
 
 \ Some dictionary header pieces.

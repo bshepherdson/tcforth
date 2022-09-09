@@ -1,0 +1,12 @@
+\ Target words to get metacompiled, that hide the details of the machine and the
+\ Forth model (eg. ITC vs. DTC vs. STC)
+\ This file: DTC on the DCPU-16.
+
+\ >CFA is already defined, so is ,DOCOL.
+target definitions
+
+\ Add !CF, which expects the address to jump to on the stack.
+\ A code field here is set pc, lit, which happens to be at $0000.
+target : !CF ( addr -- ) [ host 0 t@ tliteral target ] , , ;
+
+

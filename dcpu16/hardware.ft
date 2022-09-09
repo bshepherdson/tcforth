@@ -52,12 +52,4 @@ VARIABLE dev-m35fd
 
 
 host REQUIRE screen.ft
-target definitions
-
-
-\ Initiates a cold start - locate and init the hardware, then QUIT.
-: cold ( -- ) init-devices init-lem QUIT ;
-
-host   T' COLD   entry-point t!
-
 

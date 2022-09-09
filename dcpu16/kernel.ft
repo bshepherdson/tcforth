@@ -333,6 +333,7 @@ end-code
 
 \ Copies src to dst from lower addresses to higher.
 code MOVE< ( src dst u -- )
+label (MOVE<)
   ri ra set, \ Save IP to A for now.
 
   pop rc set, \ Length in C
@@ -354,7 +355,7 @@ end-code
 
 \ Copies src to dst from higher addresses to lower.
 code MOVE> ( src dst u -- )
-  0 # brk,
+label (MOVE>)
   ri ra set, \ Save IP to A for now.
 
   pop rc set, \ Length in C
@@ -377,6 +378,9 @@ code MOVE> ( src dst u -- )
   \ Ran out of copy.
   ra ri set, \ Restore IP before NEXT.
 end-code
+
+code CMOVE>   (MOVE>) # pc set,  end-code-bare
+code CMOVE<   (MOVE<) # pc set,  end-code-bare
 
 \ A jsr docol for reference.
 label jsr_docol   docol # jsr,

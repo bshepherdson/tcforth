@@ -73,7 +73,7 @@ VARIABLE cursor \ Index into the VRAM
 
 : at-xy ( col row -- ) vacate   /row * + cursor !   arrive ;
 
-: +cursor ( n -- ) vacate   cursor @   0 max 383 min   cursor !   arrive ;
+: +cursor ( n -- ) vacate   cursor @ +   0 max 383 min   cursor !   arrive ;
 
 
 \ Printing ===================================================================

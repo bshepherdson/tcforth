@@ -1,0 +1,17 @@
+\ POSTPONE needs parsing, CASE needs postpone, and (QUIT) needs CASE.
+\ Hence this file is required from input.ft
+target definitions
+
+target : CASE ( --   C: -- marker ) 0 ; IMMEDIATE
+  host acts: 0 ; IMPERATIVE
+target : OF   ( x1 x2 -- | x1    C: -- of-sys )
+    postpone over postpone = postpone IF postpone drop ; IMMEDIATE
+  host acts: TOVER tcompile, T= tcompile,
+    target IF host TDROP tcompile, ; IMPERATIVE
+target : ENDOF ( --   C: of-sys -- ) postpone ELSE ; IMMEDIATE
+  host acts: target ELSE host ; IMPERATIVE
+target : ENDCASE ( x --   C: jump-loc1 ... jump-locN -- )
+    postpone drop BEGIN ?dup WHILE postpone THEN REPEAT ; IMMEDIATE
+  host acts: TDROP tcompile,
+    BEGIN ?dup WHILE target THEN host REPEAT ; IMPERATIVE
+

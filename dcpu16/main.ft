@@ -47,20 +47,48 @@ $2fff CONSTANT mask_len
 $7fff CONSTANT mask_len_hidden
 
 host definitions REQUIRE assembler.ft      \ DCPU-16 assembler
-host definitions REQUIRE metacompiler.ft   \ Kernel code and code words
+
+host REQUIRE model.ft                             \ Add the DCPU-16 model words
+host REQUIRE ../host/mirrors.ft
+
+\ Now we have what we need to metacompile the CODE definitions at the heart of
+\ the new kernel.
+host REQUIRE kernel.ft                             \ Add the DCPU-16 model words
+
+\ Overwrite the jump target of the entry code to be main.
+\ The instruction is at $0000 and its target argument at $0001.
+main 1 t!
+
+\ The main part of the metacompiler
+host REQUIRE ../host/metacompiler.ft
+
+\ Now the first chunk of Target Forth code!
+host REQUIRE ../shared/core1.ft
+host REQUIRE ../shared/exceptions.ft
+
+\ Load the target-side model words.
+host REQUIRE model-target.ft
+
+\ And back to the universal code.
+host REQUIRE ../shared/input.ft
+host REQUIRE ../shared/core2.ft
 
 \ More DCPU-specific files
 host definitions REQUIRE hardware.ft
 
+\ And finally the startup code!
+host definitions REQUIRE ../shared/init.ft
+
 host definitions
 
-\ This needs to be the last line in the target compilation.
+\ This needs to be the last lines in the target compilation.
 host latest var_latest t!
 host here   var_dp     t!
 
-
 \ At this point the assembler's output region should be complete. Dump the
 \ resulting binary.
-
 S" forth.bin" dump
 bye
+
+\ START HERE   S" looks like it mostly works, but there's junk on the stack.
+\ Check that out.

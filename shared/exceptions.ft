@@ -1,5 +1,6 @@
 \ Exception word set was added to the core, and it's not hard to include and
 \ use for eg. undefined word.
+target definitions
 
 target : CATCH ( ...1 xt -- ...2  ex# | 0 )
   SP@ >R   handler @ >R   rp@ handler ! \ ( R: ret old-sp old-handler )
@@ -17,6 +18,9 @@ target : THROW ( ...1 n -- ...1 | ...2 n )
   THEN ;
 
 target : ERR-UNDEFINED ( -- exc# ) -13 ;
+target : ERR-?COMP     ( -- exc# ) -14 ;
 
 target : ABORT ( -- ) -1 throw ;
+
+target : ?COMP ( -- )   state @ 0= IF err-?comp throw THEN ;
 

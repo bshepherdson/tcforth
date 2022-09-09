@@ -10,6 +10,7 @@
 \ - REQUIRED and friends also work: they stack the current source, set up the
 \   file as the new source, and INTERPRET it.
 \ 'SOURCE 'SOURCE-ID TIB >IN are already defined in the kernel.
+target definitions
 target : SOURCE    'SOURCE    2@ ;
 target : SOURCE-ID 'SOURCE-ID  @ ;
 
@@ -46,6 +47,53 @@ target : (FIND) ( c-addr u -- 0 | xt 1 | xt -1 )
 
 
 target : /STRING ( c-addr u n -- c-addr2 u2 ) tuck - >R   + R> ;
+
+target : PARSE ( delim "...<delim>" -- c-addr u )
+  source >IN @ /string   over >R   rot >R ( c-addr u   R: start delim )
+  BEGIN dup WHILE
+    over c@ R@ = IF \ End of string
+      R> 2drop ( end   R: start ) R> tuck - ( start len )
+      \ Advance >IN by len+1 since len excludes the delimiter.
+      dup 1+ >IN +!
+      EXIT THEN
+    1 /string
+  REPEAT ( c-addr 0   R: start delim )
+  1000 >IN +! R> R> 2drop ;
+
+target : SKIP-SPACES ( -- )
+  BEGIN source >in @ /string WHILE \ Not empty  ( c-addr )
+    c@ bl <> IF EXIT THEN
+    1 >IN +!
+  REPEAT drop ;
+
+target : SKIP-NON-SPACES ( -- )
+  BEGIN source >in @ /string WHILE \ Not empty  ( c-addr )
+    c@ bl = IF EXIT THEN
+    1 >IN +!
+  REPEAT drop ;
+
+target : PARSE-NAME ( "<spaces>name<space>" -- c-addr u )
+  skip-spaces
+  source drop     >IN @ ( src start )
+  skip-non-spaces >IN @ ( src start end )
+  over -                ( src start len )
+  >R + R> ;
+
+
+target : ' ( "name" -- xt ) parse-name (find) 0= IF err-undefined throw THEN ;
+  host acts: T' ;
+
+target : ['] ( "name" --    X: -- xt ) ' compile, ; IMMEDIATE
+  host acts: T' tliteral ; IMPERATIVE
+
+target : POSTPONE ( "name" -- ) ' compile, ; IMMEDIATE
+  host acts: T' tcompile, ; IMPERATIVE
+
+
+host REQUIRE case.ft
+host REQUIRE strings.ft
+target definitions
+
 
 \ Basic, unsigned number parsing.
 \ Tries to parse as many digits according to BASE as possible.
@@ -105,46 +153,14 @@ target : INTERP1   ( c-addr u -- )
       \ Really undefined. Emit an error message.
       err-undefined throw
     THEN
-  THEN ;
-
-target : PARSE ( delim "...<delim>" -- c-addr u )
-  source >IN @ /string   over >R   rot >R ( c-addr u   R: start delim )
-  BEGIN dup WHILE
-    over c@ R@ = IF \ End of string
-      R> 2drop ( end   R: start ) R> tuck - ( start len )
-      \ Advance >IN by len+1 since len excludes the delimiter.
-      dup 1+ >IN +!
-      EXIT THEN
-    1 /string
-  REPEAT ( c-addr 0   R: start delim )
-  1000 >IN +! R> R> 2drop ;
-
-target : SKIP-SPACES ( -- )
-  BEGIN source >in @ /string WHILE \ Not empty  ( c-addr )
-    c@ bl <> IF EXIT THEN
-    1 >IN +!
-  REPEAT drop ;
-
-target : SKIP-NON-SPACES ( -- )
-  BEGIN source >in @ /string WHILE \ Not empty  ( c-addr )
-    c@ bl = IF EXIT THEN
-    1 >IN +!
-  REPEAT drop ;
-
-target : PARSE-NAME ( "<spaces>name<space>" -- c-addr u )
-  skip-spaces
-  source drop     >IN @ ( src start )
-  skip-non-spaces >IN @ ( src start end )
-  over -                ( src start len )
-  >R + R> ;
-
+  THEN depth log ;
 
 \ Fundamental single-line interpreter loop.
-target : INTERPRET ( -- ) BEGIN parse-name dup WHILE interp1 REPEAT ;
+target : INTERPRET ( -- ) BEGIN parse-name dup WHILE interp1 REPEAT 2drop ;
 
 target : ABORTED ( -- )
   R> [ host rp0 tliteral target ] rp! >R \ Drops everything but ABORTED's own return
-  [ host T' [ tcompile, target ]
+  [ host [TCOMPILE] [ target ]
   0 'source-id !             \ Force a keyboard source.
   [ host sp0 tliteral target ] sp! ;
 
@@ -165,25 +181,4 @@ target : REFILL ( -- ? )
   tib 128 accept ( u )
   0 >IN !   tib swap 'SOURCE 2! \ Set it up as the new input
   -1 ;                          \ And return true
-
-\ Fundamental multi-line interpreter loop.
-\ Separate from QUIT because it gets called by file readers as well.
-target : (QUIT) ( -- )
-  BEGIN refill WHILE
-    [ host T' INTERPRET tliteral target ] catch
-    CASE
-    0   OF state @ 0= IF ."  ok" THEN cr ENDOF
-    -1  OF aborted ENDOF
-    \ TODO More
-    ENDCASE
-  REPEAT ( TODO: BYE ) ;
-
-\ Empties the return stack, selects keyboard input, forces interpreter state,
-\ and (QUIT)s to keep interpreting.
-target : QUIT ( -- )
-  [ host rp0 tliteral target ] rp!
-  [ host T' [ tcompile, target ]
-  10 base !
-  0  'source-id !
-  (QUIT) ;
 

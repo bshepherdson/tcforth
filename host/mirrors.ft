@@ -1,0 +1,100 @@
+\ =========================== MIRROR WORDS ===================================
+\ The mirror words go in the TARGET vocabulary, the one that's active while
+\ metacompiling the target application.
+\ There are several points to note that drive the design:
+
+\ First, there are *four* actions for each word, some of which have defaults:
+\ - When executed by the target.
+\ - When compiled by the target.
+\ - When executed by the metacompiler
+\ - When compiled by the metacompiler
+
+\ Note that the metacompiler leaves the hosting Forth in "interpreting" STATE
+\ (ie. NATIVE STATE) throughout. However, the metacompiler has a separate STATE,
+\ controlling whether it is "metacompiling" or "metainterpreting". This is
+\ HOST STATE.
+
+\ Regular words (eg. DUP) can have defaults fill in three of the actions:
+\ - Target exec: TARGET DEFINITIONS HOST CODE DUP some asm code, END-CODE
+\ - Target compile: compile the xt, the default for non-IMMEDIATE words.
+\ - Host exec: Throw an error - can't execute regular Target words.
+\ - Host compile: compile the Target xt into the image
+\   - This is the default action of mirror words; their raison d'etre.
+
+\ IMMEDIATE words (eg. IF) work like this:
+\ - Target exec: (undefined, probably throw an error via ?comp)
+\ - Target compile: run immediately, compile 0branch and a target.
+\ - Host exec: Throw an error also.
+\ - Host compile: Run a Host-side action, compiling TARGET 0BRANCH and the dest
+\     just like Target compiling.
+\ This is achieved with HOST ACTS: ... ; IMPERATIVE
+
+\ Defining words (eg. CONSTANT) that use DOES> are yet more complex.
+\ See DESIGN.md for the details.
+HOST
+VARIABLE STATE
+VARIABLE 'mirror \ Holds the body address of the last mirror word defined.
+VARIABLE >mirror \ Holds the body address of the mirror currently executing.
+                 \ This is used by mirror-compile, and mostly ignored otherwise.
+
+: interpX ( addr -- )
+  drop 1 ABORT" Can't interpret TARGET word without HOST ACTS:" ;
+: interpX-imperative ( addr -- )
+  drop 1 ABORT" Can't interpret IMPERATIVE mirror word" ;
+: doesX-blank ( addr -- )
+  drop 1 ABORT" No DOES> action defined for this mirror word" ;
+
+: mirror>txt       ( mirror-body -- 'target-xt )       ;
+: mirror>interp    ( mirror-body -- 'interp-xt )       cell+ ;
+: mirror>compile   ( mirror-body -- 'compile-xt )      2 cells + ;
+: mirror>h-does    ( mirror-body -- 'host-does-xt  )   3 cells + ;
+: mirror>t-does    ( mirror-body -- 'target-does-xt )  4 cells + ;
+: mirror>mirror-nt ( mirror-body -- 'mirror-nt )       5 cells + ;
+
+: mirror-compile ( -- )
+  >mirror @ mirror>txt @ ( dup ." compiling " hex. cr ) T, ;
+
+\ The parameter field of a mirror word contains:
+\ Target xt, metainterpreting xt, metacompiling xt, Host DOES> xt, Target DOES> xt
+: mirror ( target-xt "name" -- )
+    CREATE
+    \ native   dup hex. latest name>string type cr
+    native here   host 'mirror !
+    ( target-xt ) ,   ['] interpX ,   ['] mirror-compile ,
+    ['] doesX-blank ,   0 ,
+    native latest host ,
+  DOES>
+    \ dup mirror>mirror-nt @ id.
+    dup >mirror !
+    STATE @ ( mirror-body meta-state ) IF
+      mirror>compile
+    ELSE
+      mirror>interp
+    THEN @ execute ;
+
+\ Creates a new, bare dictionary entry on the Target, and its mirror word in the
+\ TARGET vocabulary! They both have the same name.
+\ Leaves the vocabulary set to HOST.
+: (TCREATE) ( "name" -- )
+  \ Create the Target header first, so we have its xt.
+  \ But save the input pointer so we can hoik the name again.
+  >IN @ >R
+  parse-name ( c-addr u ) (mk-header)  ( xt )
+  R> >IN !   \ Input pointer is aimed at the name again.
+  \ Set up compilation into the TARGET vocabulary, but without switching to
+  \ looking words up in it.
+  get-current >R   target-wl set-current
+  mirror
+  R> set-current \ And back.
+;
+
+host definitions
+
+\ These are HOST vocab words that define assembler words on the Target - their
+\ mirror words are regular.
+: code      ( "name" -- ) (TCREATE) ;
+: end-code  ( -- )        next, ;
+\ End marker, but no NEXT.
+: end-code-bare ( -- ) ;
+
+

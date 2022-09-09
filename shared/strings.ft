@@ -1,0 +1,39 @@
+\ String handling, S" in interp and compile states, and ."
+target definitions
+
+\ DCPU-specific I think? Need to find a better way to abstract DOSTRING logic.
+\ It'll be easier to do once I've got a STC one underway.
+target : ,DOSTRING ( -- ) [ host dostring tliteral target ] compile, ;
+
+\ Following the standard, S" ." and .( are only supported in definitions.
+host definitions
+: (S")
+  '"' parse
+  ,dostring   dup tc,
+  ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tc,   1+ R> REPEAT drop ;
+target definitions
+
+target : S" ( "ccc"" --     X: -- c-addr u )
+    [ host '"' tliteral target ]
+    parse ( c-addr u )
+    ,dostring   dup >R c, \ Compile the length
+    here R@ cmove         \ And the text
+    R> chars allot        \ And make room for it.
+  ; IMMEDIATE
+  host acts: (S") ; IMPERATIVE
+
+\ Forward reference to TYPE, resolved later.
+host cr cr cr
+presume type
+
+\ Indirection so this word can be compiled directly and its contents are the
+\ forward reference.
+\ TODO This kinda sucks - it's a metacompiler weakness with target-side impact.
+\ Fix it so that forward references can work for values pushed as literals.
+\ Doing that portably between ITC/DTC and STC is hard, though, since literals
+\ are not just in the thread in that case.
+target : <type> type ;
+
+target : ." ( "ccc"" --   X: -- ) postpone S"  ['] <type> compile, ; IMMEDIATE
+  host acts: (S")   [T'] <type> tcompile, ; IMPERATIVE
+

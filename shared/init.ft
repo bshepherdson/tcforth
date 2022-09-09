@@ -1,0 +1,30 @@
+\ Last file for the topmost words like QUIT
+target definitions
+
+\ Fundamental multi-line interpreter loop.
+\ Separate from QUIT because it gets called by file readers as well.
+target : (QUIT) ( -- )
+  BEGIN refill WHILE
+    [ host T' INTERPRET tliteral target ] catch
+    CASE
+    0   OF state @ 0= IF ."  ok" cr THEN ENDOF
+    -1  OF aborted ENDOF
+    log $dead log break
+    ENDCASE
+  REPEAT ( TODO: BYE ) ;
+
+\ Empties the return stack, selects keyboard input, forces interpreter state,
+\ and (QUIT)s to keep interpreting.
+target : QUIT ( -- )
+  [ host rp0 tliteral target ] rp!
+  [ host T' [ tcompile, target ]
+  10 base !
+  0  'source-id !
+  (QUIT) ;
+
+
+\ Initiates a cold start - locate and init the hardware, then QUIT.
+: cold ( -- ) init-devices init-lem QUIT ;
+
+host   T' COLD   entry-point t!
+

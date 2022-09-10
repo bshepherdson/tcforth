@@ -2,6 +2,14 @@
 \ Uses the default palette and font, and maps the memory to $fd00.
 target definitions
 
+\ Interface ==================================================================
+\ Due to the complexities of the colour and cursor handling, the user is
+\ recommended only to use words without (parens) around them:
+\ FG BG FG@ BG@ FG! BG!   BLINK+ BLINK-   REVERSED   COLOURED and the colours.
+\ CLEAR AT-XY   DISPLAY EMIT CR TYPE SPACE SPACES   ACCEPT
+\ <# # #S sign #>   U. . HEX.
+\ Don't touch the cursor directly!
+
 \ Variable dev-lem1802 holds the device number.
 $fc00 CONSTANT vram
 
@@ -70,12 +78,19 @@ VARIABLE cursor \ Index into the VRAM
 \ Returns the pointer into VRAM of the current cursor.
 : >cursor ( -- addr ) cursor @ vram + ;
 
-: vacate ( -- ) >cursor dup @ blink- swap ! ;
-: arrive ( -- ) >cursor dup @ blink+ swap ! ;
+VARIABLE (cur-ch)
+: vacate ( -- ) (cur-ch) @ >cursor ! ;
+: arrive ( -- ) >cursor @  dup (cur-ch) !   reversed >cursor ! ;
 
 : at-xy ( col row -- ) vacate   /row * + cursor !   arrive ;
 
-: +cursor ( n -- ) vacate   cursor @ +   0 max 383 min   cursor !   arrive ;
+host presume scroll target
+
+: +cursor ( n -- )
+  cursor @ +
+  dup 0< IF /row / 1-   scroll   0 ELSE
+    dup 384 >= IF 384 -   /row / 1+   scroll   $160 THEN THEN
+  cursor ! ;
 
 
 \ Scrolling ==================================================================
@@ -107,13 +122,12 @@ VARIABLE cursor \ Index into the VRAM
 \ Emites the given *screen* character word (colours etc. added) at the current
 \ cursor. See also EMIT.
 : (DISPLAY) ( screen-ch -- ) >cursor ! ;
-: DISPLAY   ( screen-ch -- ) (DISPLAY)   1 +cursor ;
+: DISPLAY   ( screen-ch -- ) vacate   (DISPLAY)   1 +cursor   arrive ;
 
 \ Emits the given ASCII character at the current cursor.
 : EMIT ( ascii-ch -- ) coloured display ;
 
-: CR ( -- )
-  vacate   cursor @   /row 1- invert and   /row +   cursor !   arrive ;
+: CR ( -- ) vacate   cursor @ /row 1- and   /row swap -   +cursor   arrive ;
 
 : SPACE  ( -- ) bl emit ;
 : SPACES ( u -- ) ?dup IF 0 DO space LOOP THEN ;
@@ -129,7 +143,8 @@ VARIABLE cursor \ Index into the VRAM
 \ c-addr-min
 : BACKSPACE ( c-addr-current c-addr-min -- c-addr' )
   over = IF EXIT THEN \ At left edge, do nothing.
-  -1 +cursor   bl emit   -1 +cursor
+  \ Can't use EMIT directly here, it also juggles the cursor.
+  vacate   -1 +cursor   bl coloured (display)   arrive
   1- ( c-addr' ) ;
 
 : ACCEPT-CHAR ( c-addr ch -- c-addr' ) dup emit   over c! 1+ ;

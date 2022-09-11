@@ -304,3 +304,9 @@ VARIABLE -dvs?
   -dvs? @ IF >R negate R> THEN \ Negate the remainder if divisor is negative.
 ;
 
+target : M*    ( n1 n2 -- n3 )    >R S>D R> UDM* D>S ;
+target : */MOD ( n1 n2 n3 -- n4 ) >R M* R> sm/rem ;
+target : */    ( n1 n2 n3 -- n4 ) */MOD nip ;
+
+target : :noname ( C: -- xt ) here !docol postpone ] ;
+

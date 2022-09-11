@@ -75,6 +75,8 @@ host REQUIRE ../shared/core2.ft
 
 \ More DCPU-specific files
 host definitions REQUIRE hardware.ft
+host definitions REQUIRE screen.ft
+
 
 \ More shared files
 host definitions REQUIRE ../shared/error-messages.ft
@@ -91,3 +93,6 @@ host here   var_dp     t!
 \ resulting binary.
 S" forth.bin" dump
 bye
+
+\ Known-missing words ========================================================
+\ Core: ENVIRONMENT? WORD

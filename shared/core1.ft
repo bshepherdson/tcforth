@@ -46,7 +46,7 @@ target : WITHIN ( x lo hi -- ? ) over - >R   - R> U< ;
 target : [0BRANCH]   [ host T0BRANCH tliteral target ] compile, ;
 target : [BRANCH]    [ host TBRANCH  tliteral target ] compile, ;
 target : ,DEST       , ;
-target : !DEST ( dest slot -- ) here swap ! ;
+target : !DEST ( dest slot -- ) ! ;
 
 target : IF   ( ? --     C: -- if-slot ) [0BRANCH]   here 0 ,dest ; IMMEDIATE
   host acts: T0BRANCH t,   here 0 ,dest ; IMPERATIVE
@@ -65,6 +65,8 @@ target : WHILE  ( ? --     C: -- while-slot ) [0BRANCH] here 0 ,dest ; IMMEDIATE
 target : REPEAT ( --       C: top-loc while-slot )
     [BRANCH] swap ,dest   ( while-slot ) here swap !dest ; IMMEDIATE
   host acts: TBRANCH tcompile,   swap ,dest   here swap !dest ; IMPERATIVE
+target : UNTIL  ( ? --     C: top-loc -- ) [0BRANCH] ,dest ; IMMEDIATE
+  host acts: T0BRANCH tcompile,   ,dest ; IMPERATIVE
 
 
 target : MOVE  ( src dst u -- ) >R 2dup U< IF R> MOVE> ELSE R> MOVE< THEN ;

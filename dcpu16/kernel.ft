@@ -35,6 +35,18 @@ code ARSHIFT  pop peek asr,   end-code
 code 2*       1 # peek shl,   end-code
 code 2/       1 # peek asr,   end-code
 
+\ Defining this in CODE because some chips can do it as one operation, with
+\ MOD and / as derivatives, and some have to do it this way.
+code /MOD
+  pop  ra   set, \ divisor
+  peek rb   set, \ dividend
+  ra   peek mdi, \ remainder underneath
+  ra   rb   dvi, \ quotient
+  rb   push set, \ on top
+end-code
+
+
+
 code INVERT   $ffff # peek xor, end-code
 code NEGATE
   0 # ra set,

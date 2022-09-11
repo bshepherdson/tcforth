@@ -133,6 +133,7 @@ host definitions
 'mirror @
 (T') @ 'mirror !   act t@
 (T') ! 'mirror !   act t!
+(T') , 'mirror !   act t,
 'mirror !
 
 \ Hand-roll the target+mirror definitions for : and ;

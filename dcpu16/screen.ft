@@ -155,6 +155,8 @@ host presume scroll target
     dup $10 = IF drop R@ backspace ELSE accept-char THEN
   REPEAT ( end newline   R: start ) drop R> - ( len ) ;
 
+: KEY ( -- char ) dev-keyboard @ (key) ;
+
 
 \ Pictured numeric ouput =====================================================
 VARIABLE (picout)
@@ -202,7 +204,6 @@ VARIABLE (picout)
   dev-lem1802 @ -1 = IF EXIT THEN \ No such device, just bail.
 
   \ Send an HWI with A=0, B=vram; no response regs. So that's a mask of 3.
-  vram log
   0 vram 3   dev-lem1802 @ >device
   default-colours   clear ;
 

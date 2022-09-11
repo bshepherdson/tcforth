@@ -40,7 +40,6 @@ VARIABLE dev-m35fd
 
 
 : identify ( dev-num -- )
-  dup log
   dup lem?      IF dev-lem1802  ! EXIT THEN
   dup m35fd?    IF dev-m35fd    ! EXIT THEN
   dup keyboard? IF dev-keyboard ! EXIT THEN
@@ -49,7 +48,4 @@ VARIABLE dev-m35fd
 : init-devices ( -- )
   -1 dup dev-lem1802 !   dup dev-keyboard !   dev-m35fd !
   #devices BEGIN ?dup WHILE 1- dup identify REPEAT ;
-
-
-host REQUIRE screen.ft
 

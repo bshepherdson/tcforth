@@ -1,8 +1,21 @@
 \ Error message strings for the various errors.
 target definitions
 
-: .ERROR ( exc# -- )
+CREATE (abortmsg) 0 , 0 ,
+
+: ABORT"
+    postpone IF
+      postpone S"   ['] (abortmsg) compile,   ['] 2! compile,
+      -2 postpone literal   ['] throw compile,
+    postpone THEN ; IMMEDIATE
+  \ host acts: postpone IF
+  \     [T'] S" tcompile,   [T'] (abortmsg) tcompile,
+  \     [T'] 2! tcompile,   -2 tliteral   [T'] throw tcompile,
+  \   postpone THEN ; IMPERATIVE
+
+target : .ERROR ( exc# -- )
   CASE
+  -2            OF ." *** " (abortmsg) 2@ type ENDOF
   err-undefined OF ." Undefined word" ENDOF
   err-?comp     OF ." Comp word outside colon defn" ENDOF
   ( exc# ) ." Exception " .

@@ -45,6 +45,9 @@ target : (FIND) ( c-addr u -- 0 | xt 1 | xt -1 )
     THEN
   REPEAT 2drop R> drop 0 ;
 
+target : FIND ( c-addr -- c-addr 0 | xt 1 | xt -1 )
+  dup >R   count (find)   dup IF R> drop ELSE drop R> 0 THEN ;
+
 
 target : /STRING ( c-addr u n -- c-addr2 u2 ) tuck - >R   + R> ;
 
@@ -76,6 +79,9 @@ target : PARSE-NAME ( "<spaces>name<space>" -- c-addr u )
   skip-spaces
   source drop     >IN @ ( src start )
   skip-non-spaces >IN @ ( src start end )
+
+  \ Bump the input pointer to after the space, unless at end-of-line.
+  source >in @ /string IF 1 >IN +! THEN drop
   over -                ( src start len )
   >R + R> ;
 
@@ -179,4 +185,10 @@ target : REFILL ( -- ? )
   0 >IN !   tib swap 'SOURCE 2! \ Set it up as the new input
   state @ 0= IF bl emit THEN    \ If interpreting, append a space separator.
   -1 ;                          \ And return true
+
+target : EVALUATE ( ... c-addr u -- ... )
+  'source 2@ >R >R >IN @ >R
+  0 >IN !   'source 2!
+  interpret
+  R> >IN !   R> R> 'source 2! ;
 

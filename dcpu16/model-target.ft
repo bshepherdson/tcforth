@@ -9,4 +9,10 @@ target definitions
 \ A code field here is set pc, lit, which happens to be at $0000.
 target : !CF ( addr -- ) [ host 0 t@ tliteral target ] , , ;
 
+target : !DOCOL ( -- ) [ host jsr_docol t@ tliteral target ] , ;
+
+target : ALIGNED ;
+target : ALIGN ;
+
+target : PAD ( -- addr ) $fb00 ;
 

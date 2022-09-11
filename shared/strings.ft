@@ -1,6 +1,11 @@
 \ String handling, S" in interp and compile states, and ."
 target definitions
 
+target : CHAR   ( "<spaces>name" -- char ) parse-name drop c@ ;
+target : [CHAR] ( "<spaces>name" --    X: -- char )
+    parse-name drop c@   postpone literal ; IMMEDIATE
+  host acts: char tliteral ; IMPERATIVE
+
 \ DCPU-specific I think? Need to find a better way to abstract DOSTRING logic.
 \ It'll be easier to do once I've got a STC one underway.
 target : ,DOSTRING ( -- ) [ host dostring tliteral target ] compile, ;
@@ -35,4 +40,8 @@ target : <type> type ;
 
 target : ." ( "ccc"" --   X: -- ) postpone S"  ['] <type> compile, ; IMMEDIATE
   host acts: (S")   [T'] <type> tcompile, ; IMPERATIVE
+
+\ Compile-time print
+target : .( ( "ccc<paren>" -- ) [char] ) parse type ; IMMEDIATE
+  host acts: [char] ) parse type ; IMPERATIVE
 

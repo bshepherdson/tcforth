@@ -38,11 +38,11 @@ VARIABLE >mirror \ Holds the body address of the mirror currently executing.
                  \ This is used by mirror-compile, and mostly ignored otherwise.
 
 : interpX ( addr -- )
-  drop 1 ABORT" Can't interpret TARGET word without HOST ACTS:" ;
+  1 ABORT" Can't interpret TARGET word without HOST ACTS:" ;
 : interpX-imperative ( addr -- )
-  drop 1 ABORT" Can't interpret IMPERATIVE mirror word" ;
+  1 ABORT" Can't interpret IMPERATIVE mirror word" ;
 : doesX-blank ( addr -- )
-  drop 1 ABORT" No DOES> action defined for this mirror word" ;
+  1 ABORT" No DOES> action defined for this mirror word" ;
 
 : mirror>txt       ( mirror-body -- 'target-xt )       ;
 : mirror>interp    ( mirror-body -- 'interp-xt )       cell+ ;

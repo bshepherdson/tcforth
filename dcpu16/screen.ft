@@ -149,14 +149,28 @@ host presume scroll target
 
 : ACCEPT-CHAR ( c-addr ch -- c-addr' ) dup emit   over c! 1+ ;
 
+: (KEY-SERIAL) ( -- key )
+  dev-serial   @ (key-ssi)
+  dup 10 = IF drop $11 THEN   \ Newline
+  dup  8 = IF drop $10 THEN ; \ Backspace
+
+: (KEY-KB)     ( -- key ) dev-keyboard @ (key) ;
+
+VARIABLE key-xt
+
 : ACCEPT ( c-addr max -- len )
   drop dup >R  \ TODO Ignores the max length!
-  BEGIN dev-keyboard @ (key) dup $11 <> WHILE \ ( c-addr key ) Not a newline - DCPU-specific!
+  BEGIN key-xt @ execute   dup $11 <> WHILE \ ( c-addr key ) Not a newline - DCPU-specific!
     dup $10 = IF drop R@ backspace ELSE accept-char THEN
   REPEAT ( end newline   R: start ) drop R> - ( len ) ;
 
-: KEY ( -- char ) dev-keyboard @ (key) ;
+: KEY ( -- char ) key-xt @ execute ;
 
+
+\ Input sources ==============================================================
+: SERIAL   ( -- ) ['] (key-serial) key-xt ! ;
+: KEYBOARD ( -- ) ['] (key-kb)     key-xt ! ;
+host T' (key-kb) T' key-xt t>body t! target
 
 \ Pictured numeric ouput =====================================================
 VARIABLE (picout)
@@ -206,4 +220,9 @@ VARIABLE (picout)
   \ Send an HWI with A=0, B=vram; no response regs. So that's a mask of 3.
   0 vram 3   dev-lem1802 @ >device
   default-colours   clear ;
+
+: init-serial ( -- )
+  dev-serial @ -1 = IF EXIT THEN \ No such device, just bail.
+  \ Send an HWI with A=1, B=0, C=20 (64Kbps)
+  1 0 20   7   dev-serial @ >device ;
 

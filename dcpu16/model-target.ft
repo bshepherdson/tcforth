@@ -6,8 +6,8 @@
 target definitions
 
 \ Add !CF, which expects the address to jump to on the stack.
-\ A code field here is set pc, lit, which happens to be at $0000.
-target : !CF ( addr -- ) [ host 0 t@ tliteral target ] , , ;
+\ A code field here is jsr lit, $7c20 + the literal.
+target : !CF ( addr -- ) $7c20 , , ;
 
 target : !DOCOL ( -- ) [ host jsr_docol t@ tliteral target ] , ;
 

@@ -14,6 +14,7 @@ target definitions
 VARIABLE dev-lem1802
 VARIABLE dev-keyboard
 VARIABLE dev-m35fd
+VARIABLE dev-serial
 
 : lem? ( dev-num -- lem? )
   devinfo ( version d-maker d-ID )
@@ -32,6 +33,14 @@ VARIABLE dev-m35fd
   swap $7e91 = and
   swap $b    = and ;
 
+: serial? ( dev-num -- serial? )
+  devinfo ( version d-maker d-ID )
+       $e57d =
+  swap $9027 = and
+  swap $a87c = and
+  swap $900e = and
+  swap $0103 = and ;
+
 : keyboard? ( dev-num -- keyboard? )
   devinfo ( version d-maker d-ID )
        $30c1 =
@@ -43,9 +52,10 @@ VARIABLE dev-m35fd
   dup lem?      IF dev-lem1802  ! EXIT THEN
   dup m35fd?    IF dev-m35fd    ! EXIT THEN
   dup keyboard? IF dev-keyboard ! EXIT THEN
+  dup serial?   IF dev-serial   ! EXIT THEN
   drop ;
 
 : init-devices ( -- )
-  -1 dup dev-lem1802 !   dup dev-keyboard !   dev-m35fd !
+  -1 dup dev-lem1802 !   dup dev-keyboard !   dup dev-m35fd !   dev-serial !
   #devices BEGIN ?dup WHILE 1- dup identify REPEAT ;
 

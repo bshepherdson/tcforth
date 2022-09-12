@@ -198,6 +198,7 @@ label var_base        0 asm,
 label var_state       0 asm,
 label var_handler     0 asm,
 
+label var_last_parse  0 asm, 0 asm,
 label var_source      0 asm, 0 asm,
 label var_in_ptr      0 asm,
 label var_source_id   0 asm,
@@ -218,14 +219,15 @@ end-code
 code C,         (compile) # pc set, end-code-bare
 code COMPILE,   (compile) # pc set, end-code-bare
 
-code HANDLER      var_handler # push set, end-code
-code 'LATEST      var_latest  # push set, end-code
-code STATE        var_state   # push set, end-code
-code BASE         var_base    # push set, end-code
-code 'SOURCE      var_source  # push set, end-code
-code 'SOURCE-ID   var_source  # push set, end-code
-code >IN          var_in_ptr  # push set, end-code
-code TIB          input-buf   # push set, end-code
+code HANDLER      var_handler    # push set, end-code
+code 'LATEST      var_latest     # push set, end-code
+code STATE        var_state      # push set, end-code
+code BASE         var_base       # push set, end-code
+code 'SOURCE      var_source     # push set, end-code
+code 'SOURCE-ID   var_source_id  # push set, end-code
+code >IN          var_in_ptr     # push set, end-code
+code TIB          input-buf      # push set, end-code
+code LAST-PARSE   var_last_parse # push set, end-code
 
 
 code 2DUP
@@ -570,6 +572,16 @@ label (key)-loop
     (key)-loop # pc set,
   \ rc log,
   rc peek set, \ Overwrite the device number on top.
+end-code
+
+code (KEY-SSI) ( dev-num -- key )
+label (key-ssi)-loop
+  6 # brk,
+  2 # ra set,
+  peek hwi,
+  0 # rc ifn,
+    (key-ssi)-loop # pc set,
+  ra peek set,
 end-code
 
 

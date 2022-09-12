@@ -1,0 +1,42 @@
+\ Test harness for running directly on the target.
+
+VARIABLE actual-depth
+CREATE actual-results 32 cells allot
+VARIABLE start-depth
+VARIABLE xcursor
+VARIABLE error-xt
+
+\ Error handlers
+: error error-xt @ execute ;
+
+: empty-stack
+  depth start-depth @ < IF
+    depth start-depth @ swap
+      DO 0 LOOP THEN
+    depth start-depth @ > IF
+      depth start-depth @
+    DO drop LOOP THEN ;
+
+: error1 type source type cr ;
+' error1 error-xt !
+
+\ Test words
+: T{ depth start-depth !   0 xcursor ! ;
+
+: -> depth dup actual-depth !
+  start-depth @ > IF
+    depth start-depth @ - 0 DO
+      actual-results i cells + ! LOOP
+  THEN ;
+
+: }T
+  depth actual-depth @ = IF
+    depth start-depth @ > IF
+      depth start-depth @ - 0 DO
+        actual-results i cells + @ <> IF
+          S" INCORRECT RESULT: "   error LEAVE THEN LOOP
+    THEN
+  ELSE
+    S" WRONG NUMBER OF RESULTS: " error
+  THEN ;
+

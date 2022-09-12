@@ -49,7 +49,7 @@ target : ERR-?COMP     ( -- exc# ) -14 ;
 \ -36 invalid file position
 \ -37 file I/O exception
 \ -38 non-existent file
-\ -39 unexpected EOF
+target : ERR-unexpected-EOF ( -- exc# ) -39 ;
 
 target : ABORT ( -- ) -1 throw ;
 

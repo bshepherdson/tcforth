@@ -1,0 +1,110 @@
+\ Direct target execution tests (not metacompiled).
+
+\ Assumptions: numbers
+T{ -> }T
+T{ : bitsset? IF 0 0 ELSE 0 THEN ; -> }T
+T{  0 bitsset? -> 0 }T
+T{  1 bitsset? -> 0 0 }T
+T{ -1 bitsset? -> 0 0 }T
+
+\ Helpers
+ 0 CONSTANT 0S
+-1 CONSTANT 1S
+
+\ Boolean AND
+hex
+T{ 0 0 and -> 0 }T
+T{ 0 1 and -> 0 }T
+T{ 1 0 and -> 0 }T
+T{ 1 1 and -> 1 }T
+
+T{ 0 invert 1 and -> 1 }T
+T{ 1 invert 1 and -> 0 }T
+
+T{ 0S 0S AND -> 0S }T
+T{ 0S 1S AND -> 0S }T
+T{ 1S 0S AND -> 0S }T
+T{ 1S 1S AND -> 1S }T
+
+\ Booleans: INVERT OR XOR
+T{ 0S invert -> 1S }T
+T{ 1S invert -> 0S }T
+
+T{ 0S 0S or -> 0S }T
+T{ 0S 1S or -> 1S }T
+T{ 1S 0S or -> 1S }T
+T{ 1S 1S or -> 1S }T
+
+T{ 0S 0S xor -> 0S }T
+T{ 0S 1S xor -> 1S }T
+T{ 1S 0S xor -> 1S }T
+T{ 1S 1S xor -> 0S }T
+
+\ Small shifts
+1S 1 rshift invert CONSTANT MSB
+
+T{ msb bitsset? -> 0 0 }T
+
+\ 2*
+T{   0S 2*       ->   0S }T
+T{    1 2*       ->    2 }T
+T{ 4000 2*       -> 8000 }T
+T{   1S 2* 1 xor ->   1S }T
+T{  MSB 2*       ->   0S }T
+
+\ 2/
+T{          0S 2/ ->   0S }T
+T{           1 2/ ->    0 }T
+T{        4000 2/ -> 2000 }T
+T{          1S 2/ ->   1S }T
+T{    1S 1 XOR 2/ ->   1S }T
+T{ MSB 2/ MSB AND ->  MSB }T
+
+\ Big shifts
+\ RSHIFT
+T{    1 0 rshift -> 1 }T
+T{    1 1 rshift -> 0 }T
+T{    2 1 rshift -> 1 }T
+T{    4 2 rshift -> 1 }T
+T{ 8000 F rshift -> 1 }T
+T{  MSB 1 rshift MSB and -> 0 }T
+T{  MSB 1 rshift   2*  -> MSB }T
+
+\ LSHIFT
+T{    1 0 lshift ->    1 }T
+T{    1 1 lshift ->    2 }T
+T{    1 2 lshift ->    4 }T
+T{    1 F lshift -> 8000 }T
+T{   1S 1 lshift 1 xor -> 1S }T
+T{  MSB 1 lshift ->    0 }T
+
+DECIMAL
+
+\ Stack ops
+T{ 1 2 drop -> 1 }T
+T{ 0   drop ->   }T
+T{ 1 dup -> 1 1 }T
+T{ 1 2 over -> 1 2 1 }T
+T{ 1 2 3  rot -> 2 3 1 }T
+T{ 1 2 3 -rot -> 3 1 2 }T
+T{ 1 2 swap -> 2 1 }T
+T{ 1 2 2drop -> }T
+T{ 1 2 2dup -> 1 2 1 2 }T
+T{ 1 2 3 4 2over -> 1 2 3 4 1 2 }T
+T{ 1 2 3 4 2swap -> 3 4 1 2 }T
+
+T{ -1 ?dup -> -1 -1 }T
+T{ 0  ?dup ->  0    }T
+T{ 1  ?dup ->  1  1 }T
+
+T{ 0 1 depth -> 0 1 2 }T
+T{   0 depth -> 0 1   }T
+T{     depth -> 0     }T
+
+\ Return stack
+T{ : GR1 >R R> ; -> }T
+T{ : GR2 >R R@ R> DROP ; -> }T
+T{ 123 GR1 -> 123 }T
+T{ 123 GR2 -> 123 }T
+T{  1S GR1 ->  1S }T
+

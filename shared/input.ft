@@ -144,7 +144,7 @@ target : ?NUMBER ( c-addr u -- n true | false )
 
 \ Interprets a single parsed word or number.
 target : INTERP1   ( c-addr u -- )
-  \ 2dup (type)
+  2dup last-parse 2!
   2dup (find) ?dup IF ( c-addr u xt 1|-1 )
     2swap 2drop ( xt 1|-1 )
     state @ IF

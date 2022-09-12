@@ -1,29 +1,21 @@
-.PHONY: bootstrap
-default: bootstrap
+.PHONY: dcpu16
+default: dcpu16
 
-ASSEMBLER ?= drasm
-EMULATOR ?= dcpu
+FORTH ?= gforth
+EMULATOR ?= tc-dcpu
 
-%.bin: %.asm kernel.asm
-	$(ASSEMBLER) $<
+forth-dcpu16.bin: host/*.ft dcpu16/*.ft shared/*.ft
+	$(FORTH) dcpu16/main.ft dcpu16/disks.ft dcpu16/tail.ft
 
-forth.rom: interactive.bin core.fs bootstrap_interactive.dcs
-	rm -f $@
-	touch $@
-	$(EMULATOR) -turbo -disk core.fs -script bootstrap_interactive.dcs $<
+dcpu16: forth-dcpu16.bin
 
-forth_boot.rom: boot.bin core.fs bootstrap_bootable.dcs
-	rm -f $@
-	touch $@
-	$(EMULATOR) -turbo -disk core.fs -script bootstrap_bootable.dcs $<
-
-bootstrap: forth.rom forth_boot.rom FORCE
-
-test: forth_boot.rom FORCE
-	$(EMULATOR) -turbo -disk test.fs -script test.dcs forth_boot.rom
+test: forth-dcpu16.bin test/*.ft
+	cat test/harness.ft test/basics.ft test/comparisons.ft test/arithmetic.ft \
+		test/rest.ft > test.disk
+	$(EMULATOR) -turbo -disk test.disk -script test.dcs forth-dcpu16.bin
 
 clean: FORCE
-	rm -f interactive.bin boot.bin forth.rom forth_boot.rom
+	rm -f *.bin test.disk
 
 FORCE:
 

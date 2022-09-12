@@ -61,10 +61,11 @@ VARIABLE acting?   VARIABLE doing?
 \ Like IMMEDIATE for metacompilation - copies the metainterpretation action to
 \ be the metacompilation action instead, and makes the metainterpretation action
 \ an error.
-: IMPERATIVE ( -- )
+: IMPERATIVE-BOTH ( -- )
   'mirror @ dup >R  ( mirror     R: mirror )
-  mirror>interp @   R@ mirror>compile !
-  ['] interpX-imperative   R> mirror>interp !   ;
+  mirror>interp @   R> mirror>compile ! ;
+: IMPERATIVE ( -- )
+  IMPERATIVE-BOTH   ['] interpX-imperative   'mirror @ mirror>interp ! ;
 
 
 \ Regular semicolon, plus check acting? and doing? and update the 'mirror word.
@@ -131,9 +132,10 @@ host definitions
 
 \ Some host-side actions for CODE words, like @ and !
 'mirror @
-(T') @ 'mirror !   act t@
-(T') ! 'mirror !   act t!
-(T') , 'mirror !   act t,
+(T') @     'mirror !   act t@
+(T') !     'mirror !   act t!
+(T') ,     'mirror !   act t,
+(T') cells 'mirror !   act chars
 'mirror !
 
 \ Hand-roll the target+mirror definitions for : and ;

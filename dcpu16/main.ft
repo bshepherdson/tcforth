@@ -83,16 +83,9 @@ host definitions REQUIRE ../shared/error-messages.ft
 
 \ And finally the startup code!
 host definitions REQUIRE ../shared/init.ft
-host definitions
 
-\ This needs to be the last lines in the target compilation.
-host latest var_latest t!
-host here   var_dp     t!
-
-\ At this point the assembler's output region should be complete. Dump the
-\ resulting binary.
-S" forth.bin" dump
-bye
+\ NB: You should always include tail.ft as the last stage of your build.
+\ It actually emits the assembled image.
 
 \ Known-missing words ========================================================
 \ Core: ENVIRONMENT? WORD

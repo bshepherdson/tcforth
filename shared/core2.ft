@@ -309,4 +309,5 @@ target : */MOD ( n1 n2 n3 -- n4 ) >R M* R> sm/rem ;
 target : */    ( n1 n2 n3 -- n4 ) */MOD nip ;
 
 target : :noname ( C: -- xt ) here !docol postpone ] ;
+  host acts: here ,docol   postpone target meta] ;
 

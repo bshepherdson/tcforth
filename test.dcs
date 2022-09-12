@@ -1,2 +1,3 @@
-run 30000000
+send run-disk
+run 100000000
 quit

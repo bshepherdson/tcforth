@@ -255,7 +255,11 @@ This is handled by replacing the Host's `native interpret` (or `]`) to handle
 numbers specially when metacompiling. This is handled with a `HOST ]` routine.
 
 
-## More on the Abstraction Layer
+## Abstraction via the "Model"
+
+The words in `$machine/model.ft` and `$machine/model-target.ft` hide some
+details specific to the target machine and the threading model. Then most of the
+metacompiled Forth code can be shared across all machines.
 
 | Word       | ITC                 | DTC               | STC |
 | :--        | :--                 | :--               | :-- |
@@ -265,4 +269,10 @@ numbers specially when metacompiling. This is handled with a `HOST ]` routine.
 | `!COLON`   | address of `DOCOL`  | `JSR DOCOL`       | nothing!      |
 | `,EXIT`    | address of `EXIT`   | address of `EXIT` | `RET` etc.    |
 
+In the ideal case, this reduces the porting effort to target a new machine to:
+
+- Write an assembler for that machine.
+- Port `kernel.ft` using that assembler.
+- Port `model.ft` and `model-target.ft` likewise.
+- Write a `main.ft` to capture the complete workflow, like `dcpu16/main.ft`.
 

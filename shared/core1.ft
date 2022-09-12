@@ -26,6 +26,7 @@ target
 : >=   < not ;
 : U>   swap U< ;
 : <>   = not ;
+: 0<>  0= not ;
 
 : /MOD ( a b -- r q ) 2dup mod   -rot / ;
 
@@ -33,6 +34,7 @@ target
 : COUNT dup c@ >R char+ R> ;
 
 target : ALLOT ( n -- ) dp +! ;
+  host acts: dp +! ;
 
 target : HERE dp @ ;
   host acts: dp @ ;

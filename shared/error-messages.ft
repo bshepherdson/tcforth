@@ -15,8 +15,9 @@ CREATE (abortmsg) 0 , 0 ,
 
 target : .ERROR ( exc# -- )
   CASE
-  -2            OF ." *** " (abortmsg) 2@ type ENDOF
-  err-undefined OF ." Undefined word" ENDOF
-  err-?comp     OF ." Comp word outside colon defn" ENDOF
+  -2                 OF ." *** " (abortmsg) 2@ type ENDOF
+  err-undefined      OF ." Undefined word: " last-parse 2@ type ENDOF
+  err-?comp          OF ." Comp word outside colon defn" ENDOF
+  err-unexpected-EOF OF ." Disk unexpectedly ended or ejected" ENDOF
   ( exc# ) ." Exception " .
   0 ENDCASE ;

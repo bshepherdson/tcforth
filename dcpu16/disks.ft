@@ -1,0 +1,89 @@
+\ Raw text disks (no filesystem) for DCPU-16.
+\ These use $fa00-fbff as the disk buffer.
+\ SOURCE-ID is 1 while reading a raw disk.
+\ This source does not interleave with keyboard input - the keyboard TIB is
+\ overwritten with data off the disk.
+
+\ NB: Because host system bytes are packed two to a DCPU word, this unpacks
+\ bytes from the disk into TIB as separate words, until a line ending is found.
+
+\ Target words intended for metacompilation.
+target definitions
+
+$fa00 CONSTANT rawbuf
+1     CONSTANT disk-source-id
+
+\ Polls once to get the state of the disk.
+\ A=0, sets B to the status and C to the last error; mask is $0601.
+: disk-status ( -- err status ) 0 $0601 dev-m35fd @ >device swap ;
+
+ 0 CONSTANT fd-state-no-media
+ 1 CONSTANT fd-state-ready
+ 2 CONSTANT fd-state-ready-wp
+ 3 CONSTANT fd-state-busy
+
+ 0 CONSTANT fd-err-none
+ 1 CONSTANT fd-err-busy
+ 2 CONSTANT fd-err-no-media
+ 3 CONSTANT fd-err-protected
+ 4 CONSTANT fd-err-eject
+ 5 CONSTANT fd-err-bad-sector
+-1 CONSTANT fd-err-broken
+
+\ Polls the disk until it shows ready.
+: await-disk ( -- ) BEGIN disk-status nip   1 3 within UNTIL ;
+
+\ Sends the HWI for a read to the disk: A=2, X=block, Y=buffer.
+\ Then polls until it's done reading.
+: read-disk ( blk# -- )
+  2 swap rawbuf   ( jizY XcbA = $19 ) $19   dev-m35fd @ >device   await-disk ;
+
+VARIABLE disk-offset  \ Offset in *bytes* from the start of the current block.
+VARIABLE loaded-block \ Block number currently loaded
+
+: load-block ( blk# -- ) dup read-disk   loaded-block !   0 disk-offset ! ;
+
+
+: ?next-block ( -- )
+  loaded-block @ -1 = IF \ Hasn't loaded at all yet.
+    0 load-block EXIT THEN
+  disk-offset @ 1024 >= IF \ Offset past the end.
+    loaded-block @ 1+ load-block THEN ;
+
+: disk@ ( -- ch )
+  ?next-block
+  disk-offset @ 2/ rawbuf + c@ ( word )
+  disk-offset @ 1 and IF $ff and ELSE 8 rshift THEN ( ch )
+  1 disk-offset +! ;
+
+\ Add a byte to the input buffer.
+: +byte ( ch -- ) tib >in @ + c!   1 >in +! ;
+
+\ Reads the next line of text from the disk into TIB.
+: refill-disk ( -- ? )
+  0 >IN !
+  BEGIN
+    disk@ dup 0= IF false EXIT THEN
+    dup 10 <>
+  WHILE +byte REPEAT drop
+  \ At end of line, set the source length. Then reset >IN to 0.
+  \ If >IN is already 0, we've run out of disk and return false.
+  tib >in @ 'source 2!   0 >in !   true
+  \ source 2dup log log (type)
+  ;
+
+\ Override the core REFILL with a wrapper.
+refill-xt @
+:noname ( -- ? ) source-id disk-source-id = IF refill-disk EXIT THEN
+  [ host ( old-refill new-refill ) swap tcompile, target ] ;
+refill-xt !
+
+: run-disk ( "[destroys keyboard input]" -- )
+  -1 loaded-block ! \ Signals we're at the start of the disk.
+  source-id >R
+  disk-source-id 'source-id !
+  (quit) \ Runs until the disk fails to refill.
+  R> 'source-id !
+  \ That trashed SOURCE, so write an empty source back in.
+  tib 0 'source 2!   0 >IN ! ;
+

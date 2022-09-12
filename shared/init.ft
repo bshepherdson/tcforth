@@ -1,13 +1,23 @@
 \ Last file for the topmost words like QUIT
 target definitions
 
+\ TODO Add DEFER, then use it for things like this refill-xt.
+target VARIABLE refill-xt
+host T' refill   T' refill-xt t>body t! target
+
+target : \   source >in ! drop ; IMMEDIATE
+  host acts: native postpone \ host ; IMPERATIVE-BOTH
+
+target : (   41 parse 2drop ; IMMEDIATE
+  host acts: native 41 parse 2drop host ; IMPERATIVE-BOTH
+
 \ Fundamental multi-line interpreter loop.
 \ Separate from QUIT because it gets called by file readers as well.
 target : (QUIT) ( -- )
-  BEGIN refill WHILE
+  BEGIN refill-xt @ execute WHILE
     [ host T' INTERPRET tliteral target ] catch
     CASE
-    0   OF state @ 0= IF ."  ok" cr THEN ENDOF
+    0   OF state @ 0=   source-id 0= and IF ."  ok" cr THEN ENDOF
     -1  OF aborted ENDOF
     ( exc# ) .ERROR cr aborted \ Print error message, clear stacks, and continue
     0 ENDCASE
@@ -28,7 +38,9 @@ target : QUIT ( -- )
   default-colours cr ;
 
 \ Initiates a cold start - locate and init the hardware, then QUIT.
-: cold ( -- ) init-devices init-lem .intro QUIT ;
+: cold ( -- )
+  init-devices init-lem init-serial
+  .intro QUIT ;
 
 host   T' COLD   entry-point t!
 

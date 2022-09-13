@@ -1,0 +1,143 @@
+VARIABLE start-depth
+
+VARIABLE error?
+error? off
+
+: error error? on   type source type cr ;
+
+: T{ 0 there !   depth start-depth ! ;
+
+: -> depth start-depth @ <> IF S" Stack not clean during assembly " error THEN ;
+
+: }T depth start-depth @ <= IF S" Empty expectation " error THEN
+  there @ BEGIN instr-width - dup 0>= WHILE ( ... exp tgt-addr )
+    tuck t@ <> IF S" Mismatch " error THEN ( ... tgt-addr )
+  REPEAT drop
+  depth start-depth @ swap - IF S" Expectation longer than actual " error THEN ;
+
+
+
+\ 3 reg: 100 oooo bbb aaa ddd
+\ add r3, r2, r1 = 100 0001 001 010 011 = 1000 0010 0101 0011 = $8253
+T{ r1 r2 r3 add, -> $8253 }T
+
+\ 2 reg: 100 0000 ooo aaa ddd
+\ ror r6, r2     = 100 0000 100 010 110 = 1000 0001 0001 0110 = $8116
+T{ r2 r6 ror,    -> $8116 }T
+\ mov r6, r2     = 100 0000 001 010 110 = 1000 0000 0101 0110 = $8056
+T{ r2 r6 mov,    -> $8056 }T
+
+\ 1 reg: 100 0000 000 ooo ddd
+\ BX  r4         = 100 0000 000 001 100 = 1000 0000 0000 1100 = $800c
+T{ r4 bx,        -> $800c }T
+\ SWI r4         = 100 0000 000 011 100 = 1000 0000 0001 1100 = $801c
+T{ r4 swi,       -> $801c }T
+
+\ 0 reg: 100 0000 000 000 ooo
+T{ rfi,   -> $8000 }T
+T{ ifs,   -> $8001 }T
+T{ ifc,   -> $8002 }T
+T{ ret,   -> $8003 }T
+T{ popsp, -> $8004 }T
+T{ brk,   -> $8005 }T
+
+
+\ reg+imm: 0 oooo ddd iiiiiiii
+\ MUL r2, #7   = 0 0110 010 00000111 = 0011 0010 0000 0111 = $3207
+T{ 7 # r2 mul, -> $3207 }T
+\ ADD r2, #7   = 0 0100 010 00000111 = 0010 0010 0000 0111 = $2207
+T{ 7 # r2 add, -> $2207 }T
+
+\ Special imm 0 0000 ooo iiiiiiii
+\ SWI 17       = 0 0000 010 00010001 = 0000 0010 0001 0001 = $0211
+T{ 17 # swi,   -> $0211 }T
+
+\ All five flavours of ADD!
+\ add r3, r2, r1   = 100 0001 001 010 011 = 1000 0010 0101 0011 = $8253
+T{ r1 r2 r3 add,   -> $8253 }T
+\ add r3, #13      = 0 0100 011 00001101  = 0010 0011 0000 1101 = $230d
+T{ 13 # r3 add,    -> $230d }T
+\ add r3, pc, #13  = 0 1101 011 00001101  = 0110 1011 0000 1101 = $6b0d
+T{ 13 # pc r3 add, -> $6b0d }T
+\ add r3, sp, #13  = 0 1110 011 00001101  = 0111 0011 0000 1101 = $730d
+T{ 13 # sp r3 add, -> $730d }T
+\ add sp, #13      = 0 0000 000 00001101  = 0000 0000 0000 1101 = $000d
+T{ 13 # sp add,    -> $000d }T
+
+\ All three flavours of SUB
+\ sub r3, r2, r1   = 100 0011 001 010 011 = 1000 0110 0101 0011 = $8653
+T{ r1 r2 r3 sub,   -> $8653 }T
+\ sub r3, #13      = 0 0101 011 00001101  = 0010 1011 0000 1101 = $2b0d
+T{ 13 # r3 sub,    -> $2b0d }T
+\ sub sp, #13      = 0 0000 001 00001101  = 0000 0001 0000 1101 = $010d
+T{ 13 # sp sub,    -> $010d }T
+
+
+
+\ Branches - 101 oooo bbbbbbbbb  (9-bit signed)
+\ As far back as possible
+\ b -255   (delta -256)     = 101 0000 100000000 = 1010 0001 0000 0000 = $a100
+T{ -255 b,   -> $a100 }T
+\ As far forward as possible
+\ b 256    (delta 255)      = 101 0000 011111111 = 1010 0000 1111 1111 = $a0ff
+T{ 256 b,   -> $a0ff }T
+\ Zero delta
+\ b 1      (delta 0)        = 101 0000 000000000 = 1010 0000 0000 0000 = $a000
+T{ 1 b,     -> $a000 }T
+\ Long form
+\ b $1945                   = 101 0000 111111111 = 1010 0001 1111 1111 = $a1ff
+T{ $1945 b, -> $a1ff $1945 }T
+
+
+\ LDR STR   110 ooo ddd bbb iiii/0aaa
+\ ldr r2, [r4, #0]          = 110 010 010 100 0000 = 1100 1001 0100 0000 = $c940
+T{ 0 # r4 [+] r2 ldr,  -> $c940 }T
+\ str r2, [r4, #0]          = 110 011 010 100 0000 = 1100 1101 0100 0000 = $cd40
+T{ 0 # r4 [+] r2 str,  -> $cd40 }T
+\ ldr r2, [r4]   (implied)  = 110 010 010 100 0000 = 1100 1001 0100 0000 = $c940
+T{ r4 [] r2 ldr,       -> $c940 }T
+\ str r2, [r4]   (implied)  = 110 011 010 100 0000 = 1100 1101 0100 0000 = $cd40
+T{ r4 [] r2 str,       -> $cd40 }T
+
+\ ldr r2, [r4, r3]          = 110 100 010 100 0011 = 1101 0001 0100 0011 = $d143
+T{ r3 r4 [+] r2 ldr,   -> $d143 }T
+\ str r2, [r4, r3]          = 110 101 010 100 0011 = 1101 0101 0100 0011 = $d543
+T{ r3 r4 [+] r2 str,   -> $d543 }T
+
+\ ldr r2, [sp, #2]          = 110 110 010 000 0010 = 1101 1001 0000 0010 = $d902
+T{ 2 # sp [+] r2 ldr,   -> $d902 }T
+\ str r2, [sp, #2]          = 110 111 010 000 0010 = 1101 1101 0000 0010 = $dd02
+T{ 2 # sp [+] r2 str,   -> $dd02 }T
+
+\ ldr r2, [r4], #15         = 110 000 010 100 1111 = 1100 0001 0100 1111 = $c14f
+T{ 15 # r4 []+ r2 ldr,  -> $c14f }T
+\ str r2, [r4], #15         = 110 001 010 100 1111 = 1100 0101 0100 1111 = $c54f
+T{ 15 # r4 []+ r2 str,  -> $c54f }T
+
+
+
+\ Push/pop   111 oo bbb rrrrrrrr
+\ push {{ r1 r4 r3 }}       = 111 01 000 00011010  = 1110 1000 0001 1010 = $e81a
+T{ {{ r1 r4 r3 }} push, -> $e81a }T
+\ pop  {{ r1 r4 r3 }}       = 111 00 000 00011010  = 1110 0000 0001 1010 = $e01a
+T{ {{ r1 r4 r3 }} pop,  -> $e01a }T
+\ push {{ r1 lr r4 r3 }}    = 111 01 001 00011010  = 1110 1001 0001 1010 = $e91a
+T{ {{ r1 lr r4 r3 }} push, -> $e91a }T
+\ pop  {{ r1 pc r4 r3 }}    = 111 00 001 00011010  = 1110 0001 0001 1010 = $e11a
+T{ {{ r1 pc r4 r3 }} pop,  -> $e11a }T
+
+\ pc and lr are treated identically TODO make that an error?
+\ push {{ pc }}            = 111 01 001 00000000  = 1110 1001 0000 0000 = $e900
+T{ {{ pc }} push, -> $e900 }T
+\ pop  {{ lr }}            = 111 00 001 00000000  = 1110 0001 0000 0000 = $e100
+T{ {{ lr }} pop,  -> $e100 }T
+
+\ ldmia/stmia 111 oo bbb rrrrrrrr
+\ ldmia r3, {r0-r7}         = 111 10 011 11111111  = 1111 0011 1111 1111 = $f3ff
+T{ {{ r0 r1 r2 r3 r4 r5 r6 r7 }} r3 ldmia, -> $f3ff }T
+\ stmia r3, {r6}            = 111 11 011 01000000  = 1111 1011 0100 0000 = $fb40
+T{ {{ r6 }} r3 stmia, -> $fb40 }T
+
+
+: tests-done cr error? @ IF ." Tests failed!" ELSE ." Tests complete" THEN cr ;
+tests-done bye

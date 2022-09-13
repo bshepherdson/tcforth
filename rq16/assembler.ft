@@ -1,0 +1,337 @@
+\ Forth-powered assembler for Risque-16.
+\ Syntax style is:
+\ Canonical DCPU-16: set [a], 12
+\ This assembler:    12 #   ra []   set,
+
+\ Output is big-endian, as is common for DCPU emulators.
+
+CREATE output 65536 2* allot
+VARIABLE there
+0 there !
+VARIABLE max-out
+0 max-out !
+
+: +max ( t-addr -- ) max-out @ max max-out ! ;
+
+: ta ( t-addr -- c-addr ) 2* output + ;
+: t@ ( t-addr -- w ) ta   dup c@ 8 lshift   swap 1+ c@ or ;
+: t! ( w t-addr -- )
+  dup +max ta >R
+  dup 8 rshift 255 and R@    c!
+               255 and R> 1+ c! ;
+
+1 CONSTANT instr-width
+
+: asm, ( w -- ) there @ t!   1 there +! ;
+
+: label ( "name" --    X: -- t-addr ) there @ CONSTANT ;
+
+
+\ - Registers are represented as  ( reg 0 )
+\ - Immediates are represented as ( imm 1 )
+\ - Labels are represented as immediates
+\ - SP is ( 0 2 ); PC is ( 1 2 ); LR is ( 2 2 )
+\ - Multiple load/store is written as {{ r0 r4 pc }} and stored as
+\   ( 0 4 8 3 ) with the 3 being the count.
+
+: reg CREATE , DOES> @ 0 ;
+0 reg r0   1 reg r1   2 reg r2   3 reg r3
+4 reg r4   5 reg r5   6 reg r6   7 reg r7
+
+: # ( imm -- imm 1 ) 1 ;
+: sp 0 2 ;
+: pc 1 2 ;
+: lr 2 2 ;
+
+\ Many instructions take a flexible number and type of arguments.
+\ For example, add r2, #imm vs. add r2, r3, r4.
+\ These can be written
+\ r4 r3 r2 add,    and    imm # r2 add,
+\ Note however that the "add r2, r1" == "add r2, r2, r1" shorthand is illegal.
+
+\ There is a size limit for immediates, but the mov, code is smart enough to
+\ use the most efficient combination of MOV, MVN and MVH to build the desired
+\ value.
+
+\ These throw if the range is exceeded.
+: ?u4 ( imm -- ) 0 16  within 0= ABORT" Out of U4 range" ;
+: ?u8 ( imm -- ) 0 256 within 0= ABORT" Out of U8 range" ;
+
+
+\ 100o ooob bbaa addd
+: (3reg) ( rb 0 ra 0 rd 0 opcode -- )
+  nip   9 lshift or >R ( rb 0 ra 0   R: opcode|rd )
+  drop nip 3 lshift swap 6 lshift or R> or    $8000 or asm, ;
+
+\ 1000 000o ooaa addd
+: (2reg) ( ra 0 rd 0 opcode -- )
+  nip 6 lshift or nip swap 3 lshift or   $8000 or asm, ;
+
+\ 1000 0000 00oo oddd
+: (1reg) ( rd 0 opcode -- ) nip 3 lshift or   $8000 or asm, ;
+
+\ 1000 0000 0000 0ooo
+: (0reg) ( opcode -- ) $8000 or asm, ;
+
+
+\ 0 oooo ddd iiiiiiii
+: (reg+imm) ( imm 1 rd 0 opcode -- )
+  11 lshift    nip swap ( imm 1 w rd )
+  8  lshift or nip swap ( w imm )
+  dup ?u8 or asm, ;
+
+\ A bunch of instructions have a 3-register form and a reg+imm form.
+\ This helper captures the two options based on what's on the stack.
+: (3reg/imm) ( [rb 0 ra 0 | imm 1] rd 0 op-reg op-imm -- w )
+  4 pick IF nip (reg+imm) ELSE drop (3reg) THEN ;
+
+\ ADD and SUB have a special "add sp, #imm" form. This checks for that, and
+\ falls back to (3reg/imm) otherwise.
+: (addsub) ( rb 0 ra 0 rd 0 sub? | imm 1 rd 0 sub? | imm 1 sp=0 2 sub? )
+  over 2 = IF \ SP special case: 00000 ooo iiiiiiii
+    IF 1 ELSE 0 THEN 8 lshift >R 2drop drop dup ?u8 R> or asm, EXIT THEN
+  \ Otherwise hand off to (3reg/imm)
+  ( sub? ) IF 3 5 ELSE 1 4 THEN (3reg/imm) ;
+
+\ Op      3R  2R  1R  0R  RI  R/s/I  s/I  Imm
+\ ADC     X
+\ ADD     X               X   X      X
+\ AND     X               X
+\ ASR     X               X
+\ BLX             X
+\ BRK                 X
+\ BX              X
+\ CMN         X
+\ CMP         X           X
+\ HWI             X
+\ HWN             X
+\ HWQ             X
+\ IFC                 X
+\ IFS                 X
+\ LSL     X               X
+\ LSR     X               X
+\ MOV         X
+\ MUL     X               X
+\ MVH                     X
+\ MVN         X
+\ NEG         X           X
+\ ORR     X               X
+\ POPSP               X
+\ RET                 X
+\ RFI                 X
+\ ROR         X
+\ SBC     X
+\ SUB     X               X          X
+\ SWI             X                       X
+\ TST         X
+\ XOR     X               X
+\ XSR             X
+
+\ Patterns:
+\ - ADD is special, and its ADD Rd, SP/PC, Imm are unique.
+\ - SUB is special, but everything it has is shared with ADD also.
+\ - 3R + RI: ADD SUB MUL LSL LSR ASR AND ORR XOR
+\ - 3R only: ADC SBC
+\ - 2R + RI: CMP NEG MOV
+\ - 2R only: CMN MVN TST
+\ - RI only: MVH
+\ - 1R only: BLX BX  HWI HWN HWQ XSR
+\ - 0Rs are all only that.
+\ - SWI is special, and while it looks like the only Imm-only operation, it's
+\   formed the same as ADD SP, Imm and SUB SP, Imm
+
+
+\ ADD ========================================================================
+\ ADD is very special! It checks several cascading cases:
+\ - ADD Rd, SP, #imm
+\ - ADD Rd, PC, #imm
+\ - ADD SP, #imm
+\ - ADD Rd, #imm
+\ - ADD Rd, Ra, Rb
+\ The latter two are standard (3reg/imm);
+\ the latter three are captured in (addsub).
+\ But the first two are unique to ADD.
+: add, ( ... -- )
+  \ Check for Rd and then special 2: ( imm 1 sp=0 2 rd 0 )
+  2 pick 2 =   over 0= and IF
+    2swap drop IF $d ELSE $e THEN ( imm 1 rd 0 opcode ) (reg+imm) EXIT THEN
+  false (addsub) ;
+
+
+\ SUB ========================================================================
+: sub, ( ... -- ) true (addsub) ;
+
+\ 3R or R,I ==================================================================
+\ Several operations support 3 reg form and reg+imm form:
+\ ADD SUB MUL LSL LSR ASR AND ORR XOR
+\ NB add, and sub, are already handled.
+: 3reg/imm ( op-reg op-imm --   X: [rb 0 ra 0 | imm 1] rd 0 -- )
+    CREATE   here 2!   2 cells allot
+  DOES> 2@ (3reg/imm) ;
+
+\ ADD and SUB are special and already handled.
+ 4  6 3reg/imm mul,
+ 6  7 3reg/imm lsl,
+ 7  8 3reg/imm lsr,
+ 8  9 3reg/imm asr,
+ 9 10 3reg/imm and,
+10 11 3reg/imm orr,
+11 12 3reg/imm xor,
+
+\ 3R only ====================================================================
+: adc, ( 3reg... -- ) 2 (3reg) ;
+: sbc, ( 3reg... -- ) 4 (3reg) ;
+
+
+\ 2R or R,I ==================================================================
+\ CMP NEG MOV
+: 2reg/imm ( op-reg op-imm --    X: [rs 0 | imm 1] rd 0 -- )
+    CREATE here 2!   2 cells allot
+  DOES> 2@   4 pick ( ... imm? ) IF nip (reg+imm) ELSE drop (2reg) THEN ;
+
+1 1 2reg/imm mov,
+2 3 2reg/imm cmp,
+5 2 2reg/imm neg,
+
+\ 2R only ====================================================================
+: cmn, 3 (2reg) ;
+: mvn, 7 (2reg) ;
+: ror, 4 (2reg) ;
+: tst, 6 (2reg) ;
+
+\ Reg+Imm only ===============================================================
+\ - RI only: MVH
+: mvh, $f (reg+imm) ;
+
+\ 1R only ====================================================================
+: 1reg ( op-reg --    X:  rd 0 -- ) CREATE , DOES> @ (1reg) ;
+2 1reg blx,
+1 1reg bx,
+6 1reg hwi,
+4 1reg hwn,
+5 1reg hwq,
+7 1reg xsr,
+
+\ 0R only ====================================================================
+: 0reg ( op-reg --    X: -- ) CREATE , DOES> @ (0reg) ;
+0 0reg rfi,
+1 0reg ifs,
+2 0reg ifc,
+3 0reg ret,
+4 0reg popsp,
+5 0reg brk,
+
+\ SWI ========================================================================
+\ SWI Imm is 00000 ooo iiiiiiii
+: swi, ( rd 0 | imm 1 ) IF dup ?u8 $200 or ELSE 7 and $8018 or THEN asm, ;
+
+
+\ Branches ===================================================================
+\ All the branches are formed the same way: 101 oooo bbbbbbbbb
+\ With a 9-byte signed offset. If the target is not in range, it can be encoded
+\ as -1 (all 1s) with the branch offset in the next word.
+: (branch) ( opcode --     X: absolute-target -- )
+  CREATE , DOES> @ ( abs-tgt opcode )
+    over   there @ 1+   - ( abs-tgt opcode delta )
+    dup -256 256 within IF ( abs-tgt opcode delta )
+      $1ff and swap 9 lshift or $a000 or asm, drop
+    ELSE ( abs-tgt opcode delta )
+      drop 9 lshift $a1ff or ( abs-tgt opcode ) asm, asm,
+    THEN ;
+
+$0 (branch) b,
+$1 (branch) bl,
+$2 (branch) beq,
+$3 (branch) bne,
+$4 (branch) bcs,
+$5 (branch) bcc,
+$6 (branch) bmi,
+$7 (branch) bpl,
+$8 (branch) bvs,
+$9 (branch) bvc,
+$a (branch) bhi,
+$b (branch) bls,
+$c (branch) bge,
+$d (branch) blt,
+$e (branch) bgt,
+$f (branch) ble,
+
+
+\ Memory access ==============================================================
+\ There are four forms. All have a dest reg on top, but what's underneath varies.
+\ based on a case number.
+\ Pre-index reg:  ra    rb [+]  rd ldr,  ( ra  0 rb 0 0 rd 0 )  case 0a
+\ Pre-index imm:  inc # rb [+]  rd ldr,  ( inc 1 rb 0 0 rd 0 )  case 0b
+\ SP indexed:     inc # sp [+]  rd ldr,  ( inc 1 0  2 0 rd 0 )  case 0c
+\ Post-increment: inc # rb []+  rd ldr,  ( inc 1 rb 0 1 rd 0 )  case 1
+\ Vanilla:              rb []   rd ldr,  assembled as pre-index imm #0
+
+: (ls-post) ( inc 1 rb 0 1 rd 0 opcode -- )
+  10 lshift $c000 or >R drop ( inc 1 rb 0 1 rd 0   R: w )
+  7 lshift R> or >R          ( inc 1 rb 0 1        R: w )
+  2drop 4 lshift R> or >R    ( inc 1               R: w )
+  drop   dup ?u4 R> or asm, ;
+
+: (ls-sp) ( inc 1 0 2 0 rd 0 opcode )
+  10 lshift $c000 or >R drop  ( inc 1 0 2 0 rd   R: w )
+  7 lshift R> or >R           ( inc 1 0 2 0      R: w )
+  2drop 2drop dup ?u4 R> or asm, ;
+
+: (ls-pre) ( inc|reg 1|0 rb 0 0 rd 0 opcode -- )
+  10 lshift $c000 or >R drop ( i|r 1|0 rb 0 0 rd  R: w )
+  7 lshift R> or >R          ( i|r 1|0 rb 0 0     R: w )
+  2drop 4 lshift R> or >R    ( i|r 1|0            R: w )
+  drop  dup ?u4 R> or asm, ; \ This works for either a register or immediate.
+
+: (ldr/str) ( see cases ... str=1 )
+  3 pick 1 = IF ( 0 + ) (ls-post) EXIT THEN
+  4 pick 2 = IF ( SP indexed )  6 + (ls-sp)  EXIT THEN
+  6 pick     IF 2 ELSE 4 THEN + (ls-pre) ;
+
+: [+] 0 ;
+: []+ 1 ;
+
+\ Vanilla indexing is assembled as pre-index by immediate 0.
+: [] ( rb 0 -- imm=0 1 rb 0 0 ) 0 # 2swap [+] ;
+
+: ldr, ( ... -- ) 0 (ldr/str) ;
+: str, ( ... -- ) 1 (ldr/str) ;
+
+\ Multiple stores ============================================================
+\ Register map in {{ r0 r4 r6 pc }}, in any order. This lands on the stack as
+\ -1   0 0   4 0   6 0   1 2
+\ and then }} compresses that to ( %01010001 true ), ie. ( gp-reg-mask pc/lr? )
+: {{   -1 ; \ Bottom marker
+
+: +reg ( reg 0 mask pc? | 0/1 2 mask pc? -- mask' pc?' )
+  >R swap 2 = IF ( 0/1 mask   R: pc? ) R> drop nip true EXIT THEN
+  ( r mask    R: pc? )
+  swap 1 swap lshift or R> ;
+
+: }}   0 0 2>R BEGIN dup -1 <> WHILE 2R> +reg 2>R REPEAT drop 2R> ;
+
+: (ldm/stm) ( mask rb op -- )
+  11 lshift >R         ( mask rb   R: w )
+  8  lshift R> or or $e000 or asm, ;
+
+: (push/pop) ( mask pc? op -- )
+  >R IF 1 ELSE 0 THEN R> (ldm/stm) ;
+  \ 11 lshift >R      ( mask pc?   R: w )
+  \ IF $100 ELSE 0 THEN ( mask pc-mask  R: w )
+  \ R> or or $e000 or asm, ;
+
+: pop,  0 (push/pop) ;
+: push, 1 (push/pop) ;
+
+: ldmia, ( mask pc? rb 0 -- ) drop nip 2 (ldm/stm) ;
+: stmia, ( mask pc? rb 0 -- ) drop nip 3 (ldm/stm) ;
+
+
+: dump ( c-addr u -- )
+  cr cr ." Assembling to " 2dup type cr
+  W/O BIN create-file ABORT" Failed to open output file" >R
+  output   max-out @ 1+ 2*   R@ write-file ABORT" Failed to write"
+  R@ flush-file ABORT" Failed to flush"
+  R> close-file ABORT" Failed to close" ;
+
+

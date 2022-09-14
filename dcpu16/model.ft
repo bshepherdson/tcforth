@@ -30,7 +30,6 @@ there CONSTANT DP
 : tc,       ( b -- )  asm, ;   \ Byte-width assemble. That's just t, here.
 : tc@ t@ ;
 : tc! t! ;
-: tallot dp +! ;
 
 
 \ First line of code, the entry point. It'll be a jump to COLD eventually.
@@ -114,7 +113,6 @@ VARIABLE 'EXIT   \ These get populated later.
 : DOES, ( -- xt-does ) '(DOES>) @ t,   'EXIT @ t,   here   DOCOL # jsr, ;
 
 
-
 \ Old TC-Forth DODOES, which has been obsoleted.
 \ label DODOES
 \   pop  ra   set, \ DOES> slot address now in A.
@@ -149,9 +147,6 @@ label DOSTRING
 
 
 \ Compiles a fresh Target header with an empty code field.
-\ Converts the name text to upper-case.
-: >upper ( ch -- ch' ) dup 'a' 'z' 1+ within IF 'a' 'A' - - THEN ;
-
 : (mk-header) ( c-addr u -- target-xt )
   here   latest t,   'latest !
   dup tc, \ Length byte
@@ -168,6 +163,13 @@ label DOSTRING
 \ a long JSR lit.
 : ,dovar ( -- ) $7c20 t, dovar t, ;
 
+\ Compiles a string literal into the thread.
+\ In ITC/DTC that's DOSTRING, then the length, then the chars.
+: ,dostring ( c-addr u -- )
+  dostring tcompile,
+  dup tc,
+  ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tc,   1+ R> REPEAT drop ;
+
 \ Overwrites the code field (address) of the word at word-xt to point to the
 \ ;CODE or DOES> at does-xt.
 \ On DTC DCPU-16, this compiles JSR does-xt as two words: $7c20 does-xt
@@ -181,8 +183,6 @@ label DOSTRING
 : !dest ( dest slot -- ) t! ;
 
 : t>body ( target-xt -- target-body ) 2 tcells + ;
-
-: ,dostring   ( -- ) dostring tcompile, ;
 
 
 \ Some dictionary header pieces.

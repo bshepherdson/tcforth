@@ -1,0 +1,36 @@
+\ "Host" is the machine and Forth that are running the metacompiler. Typically
+\ x86_64 or ARM or something.
+\ "Target" is the machine for which we're metacompiling, perhaps Risque-16.
+
+\ There are four relevant vocabularies when metacompiling:
+\ - NATIVE    is the actual host system, Gforth or similar ANS Forth.
+\ - HOST      holds some metacompiler words which hide ANS names like HERE.
+\ - TARGET    holds "mirror words" that compile themselves into the Target.
+\ - Plus the actual Target dictionary under construction, which is not used to
+\   look anything up.
+
+\ First, let's defined handy words to switch the ANS search order between
+\ NATIVE, HOST and TARGET.
+
+\ First the native-side words.
+: NATIVE   only forth ; immediate
+
+wordlist CONSTANT host-wl
+wordlist CONSTANT target-wl
+
+: HOST     postpone native   host-wl >order ; immediate
+HOST DEFINITIONS
+
+: TARGET   only target-wl >order ; immediate
+
+
+\ Copy things into the target wordlist from native and host.
+target-wl set-current
+: TARGET ; immediate
+: HOST   postpone host ; immediate
+: NATIVE postpone native ; immediate
+: DEFINITIONS native definitions host ;
+: \  native postpone \ host ;
+: (  native postpone ( host ;     \ Fixing the busted highlighting )
+host definitions
+

@@ -48,6 +48,7 @@ $7fff CONSTANT mask_len_hidden
 
 host definitions REQUIRE assembler.ft      \ DCPU-16 assembler
 
+host REQUIRE ../host/helpers.ft
 host REQUIRE model.ft                             \ Add the DCPU-16 model words
 host REQUIRE ../host/mirrors.ft
 

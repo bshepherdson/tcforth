@@ -160,7 +160,7 @@ VARIABLE key-xt
 
 : ACCEPT ( c-addr max -- len )
   drop dup >R  \ TODO Ignores the max length!
-  BEGIN key-xt @ execute   dup $11 <> WHILE \ ( c-addr key ) Not a newline - DCPU-specific!
+  BEGIN key-xt @ execute   dup $11 <> WHILE \ ( c-addr key )
     dup $10 = IF drop R@ backspace ELSE accept-char THEN
   REPEAT ( end newline   R: start ) drop R> - ( len ) ;
 

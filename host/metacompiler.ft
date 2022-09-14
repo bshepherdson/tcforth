@@ -145,6 +145,8 @@ code : end-code 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, \ 7 cells since overwriting NEXT
   host acts: ?forward   (TCREATE)   ?!forward   ,docol   meta] ;
 
 code ; end-code 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, \ Likewise, 7 cells.
+\ Mark ; as IMMEDIATE
+latest tcell+ dup tc@ f_immed or swap tc!
   host acts: 0 state !   'EXIT @ tcompile, ; IMPERATIVE
 
 

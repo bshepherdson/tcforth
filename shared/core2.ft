@@ -59,30 +59,8 @@ target : CREATE ( "name" --     X: -- addr )
 
 
 \ (DOES>) - implementing sequence 2 ==========================================
-\ (DOES>) runs in eg. CONSTANT to properly compile a particular constant.
-\ Inside target (DOES>), TORS points at the EXIT. Just after it is the
-\ dodoes-code that should become the new codeword's jump location.
-\ $7c20 is JSR lit on DCPU. DCPU-specific!
-target : (DOES>) latest >cfa   $7c20 over !    cell+ R@ cell+ swap ! ;
-
-\ On the host, mimic the target (DOES>). On the host side, the mirror body for
-\ our defining word (eg. CONSTANT) is on the stack - it contains the target-xt
-\ for the DOES> code, as well as the host-xt for the host's DOES> code!
-host definitions
-: (DOES>) ( mirror-CONSTANT -- )
-  \ Step 1: Change the target code field to point to the does-code
-  \ which is found in mirror-CONSTANT's t-does field.
-  \ t-does is 0 for CREATEd words without TARGET DOES>, eg. VARIABLE.
-  dup mirror>t-does @   ?dup IF 'mirror @ mirror>txt @   !dodoes THEN  ( mirror-CONSTANT )
-  \ Step 2: Change the newest 'mirror word's interp-xt to mirror-CONSTANT's
-  \ h-does field.
-  mirror>h-does @   'mirror @ mirror>interp ! ( ) ;
-
-target definitions
-
-host T' (DOES>) '(DOES>) !
-host T' EXIT    'EXIT !
-
+\ These depend on the model and machine, so they are expected to be defined in
+\ the machine-specific code (eg. in model.ft and model-target.ft).
 
 \ DOES> - implementing sequence 1 ============================================
 \ Target side: Compiles (DOES>) | EXIT | dodoes-code into the definition; saves
@@ -92,9 +70,7 @@ host T' EXIT    'EXIT !
 \ Use the acting? and doing? flags in HOST ; to define the interp-xt (current
 \ :noname) and target-does-xt (about to be started) actions.
 target : DOES> ( -- )
-    [ host T' (DOES>)   tliteral target ] compile,
-    [ host T' EXIT      tliteral target ] compile,
-    [ host jsr_docol t@ tliteral target ] ,               \ DCPU-specific
+    [ host T,DOES target ]
     ; IMMEDIATE
   host acts: does,   'mirror @ mirror>t-does ! ; IMPERATIVE
   \ This is just the Target side; it saves the target xt of target DOES> code
@@ -260,7 +236,7 @@ T' EXIT     tcompile,
 T' ;
 ( old-dp t-xt )
 \ First make it immediate; the length is 2 cells back. DCPU-specific!
-dup 2 tcells -   dup t@ f_immed or swap t!
+\ dup 2 tcells -   dup t@ f_immed or swap t!
 ( old-dp t-xt ) dp !    \ Pretend we're compiling at semicolon
 ,docol
 T' EXIT tliteral \ NB That's two cells wide

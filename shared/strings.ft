@@ -6,25 +6,16 @@ target : [CHAR] ( "<spaces>name" --    X: -- char )
     parse-name drop c@   postpone literal ; IMMEDIATE
   host acts: char tliteral ; IMPERATIVE
 
-\ DCPU-specific I think? Need to find a better way to abstract DOSTRING logic.
-\ It'll be easier to do once I've got a STC one underway.
-target : ,DOSTRING ( -- ) [ host dostring tliteral target ] compile, ;
-
 \ Following the standard, S" ." and .( are only supported in definitions.
 host definitions
 : (S")
   '"' parse
-  ,dostring   dup tc,
-  ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tc,   1+ R> REPEAT drop ;
+  ,dostring ;
 target definitions
 
 target : S" ( "ccc"" --     X: -- c-addr u )
     [ host '"' tliteral target ]
-    parse ( c-addr u )
-    ,dostring   dup >R c, \ Compile the length
-    here R@ cmove         \ And the text
-    R> chars allot        \ And make room for it.
-  ; IMMEDIATE
+    parse ( c-addr u ) ,dostring ; IMMEDIATE
   host acts: (S") ; IMPERATIVE
 
 \ Forward reference to TYPE, resolved later.

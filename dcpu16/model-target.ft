@@ -32,27 +32,12 @@ target : PAD ( -- addr ) $fb00 ;
 \ $7c20 is JSR lit on DCPU.
 target : (DOES>) latest >cfa   $7c20 over !    cell+ R@ cell+ swap ! ;
 
-\ On the host, mimic the target (DOES>). On the host side, the mirror body for
-\ our defining word (eg. CONSTANT) is on the stack - it contains the target-xt
-\ for the DOES> code, as well as the host-xt for the host's DOES> code!
-host definitions
-: (DOES>) ( mirror-CONSTANT -- )
-  \ Step 1: Change the target code field to point to the does-code
-  \ which is found in mirror-CONSTANT's t-does field.
-  \ t-does is 0 for CREATEd words without TARGET DOES>, eg. VARIABLE.
-  dup mirror>t-does @   ?dup IF 'mirror @ mirror>txt @   !dodoes THEN  ( mirror-CONSTANT )
-  \ Step 2: Change the newest 'mirror word's interp-xt to mirror-CONSTANT's
-  \ h-does field.
-  mirror>h-does @   'mirror @ mirror>interp ! ( ) ;
-
-target definitions
-
 host T' (DOES>) '(DOES>) !
 host T' EXIT    'EXIT !
 
 \ Runs during compilation TARGET : DOES> - compile code into its thread!
 host definitions
-: T,DOES
+: TDOES,
   [T'] (DOES>) tliteral  [T'] compile, tcompile,
   [T'] EXIT    tliteral  [T'] compile, tcompile,
   jsr_docol t@ tliteral  [T'] ,        tcompile, ;

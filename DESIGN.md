@@ -2,15 +2,15 @@
 
 The goals of this version are to be as abstracted/flexible as possible:
 - Easy to port between machines
-- ITC, DTC, STC all with minimal porting
+- ITC, DTC, STC all with minimal porting of most of the Forth words.
 
 ## Metacompiling
 
 Metacompiling uses a *Host* Forth system (eg. Gforth on your x86_64 laptop) to
 build an application for a *Target* machine, by running normal-looking Forth
 code. That is, it contains colon definitions and `CREATE foo 64 cells allot` and
-`: defining-word CREATE foo , DOES> @ 1+ ;` all the other magic you do in Forth
-code.
+`: defining-word CREATE foo , DOES> @ 1+ ;` and all the other magic you do in
+Forth code.
 
 The trick is that by cleverly juggling the search order and compilation
 wordlist, the metacompiler can run through Forth code written for the target,
@@ -28,11 +28,11 @@ in play during metacompiliation.
 
 1.  `native` - the normal Host Forth words.
 1.  `host` - the metacompiler's vocabulary, which duplicates some native words
-    and so is handled separately.
+    and so is made separate.
 1.  `target` - contains *mirror words* that correspond 1-1 with the words in the
     Target image.
 1.  The nameless dictionary being constructed in the Target image - it's not
-    actually used during metacompilation.
+    actually searched during metacompilation.
 
 As an illustration, consider the three `HERE` words that exist at once:
 
@@ -76,30 +76,31 @@ flag). It tracks whether we're *metacompiling* or *metainterpreting*.
 Host dictionary that points to the new word in the Target image. (And similarly
 for `:` etc.)
 
-The parameter field of a mirror word contains three cells:
+#### Internals
+
+Feel free to skip this section - the mirror words should Just Work and you don't
+need to know their gory details to eg. port to a new machine.
+
+The parameter field of a mirror word contains six cells:
 - Corresponding Target xt
 - Host xt for metainterpreting state
 - Host xt for metacompiling state
+- Host DOES routine's (host) xt
+- Target DOES routine's (target) xt
+- Host nt (name token) for this mirror word itself.
 
-In both cases, the mirror word parameter field address is kept on the stack, so
-the two metacompiler xts are expected to have `( host-addr -- )` stack effects.
+There are *four* different semantics for what the text interpreter should do
+when it encounters a word: interpreting on the target, compiling on the target,
+metainterpreting on the host, and metacompiling on the host.
 
-For any word, there are four separate semantics:
+The metainterpreting and metacompiling xts in the mirror word control what
+happens when the metacompiler encounters them.
 
-- Target interpretation: by default, execute this word.
-- Target compilation: by default, compile this word so it will execute as part
-  of the current definition
-- Host metainterpretation: by default, throw an error (can't run vanilla Target
-  words while metacompiling)
-- Host metacompilation: by default, compile the Target xt for this word into the
-  Target image.
+By default, the metainterpreting xt throws an error - most words don't have a
+Host-side action.
 
-The two Host actions are exactly the xts in the mirror word described above.
-The Target actions are being constructed in the Target image, but not executed
-currently.
-
-The default mirror word metacompilation semantics is `@ T,` to read the
-Target xt from the Host's memory and compile it into the Target.
+The default mirror word metacompilation semantics is to read the Target xt from
+the mirror word's parameter field and `tcompile,` it into the Target image.
 
 Note that `HOST STATE` controls which of the two Host semantics will be
 performed. (The Target semantics aren't run during metacompilation.)
@@ -113,7 +114,7 @@ These can be defined with `HOST ACTS:` like this:
 
 ```forth
 TARGET   : VARIABLE ( "name" --     X: -- addr ) create 0 , ;
-HOST ACTS: create 0 T, ;
+  HOST ACTS: create 0 T, ;
 ```
 (Note that `host create` builds both a mirror word and target word with the
 default `DOVAR` style semantics.)
@@ -129,9 +130,10 @@ compilation semantics (and undefined interpretation semantics)?
 For this, a syntax like the following can be used:
 
 ```forth
-TARGET  : IF ( ? --    C: if-loc ) [LIT] 0BRANCH compile,   HERE 0 , ; IMMEDIATE
-HOST ACTS: ( mirror-body -- )
-    drop   TARGET lit 0branch compile,   host HERE 0 T, ; IMPERATIVE
+TARGET  : IF ( ? --    C: if-loc )
+    [ host T' 0BRANCH tliteral target ] compile,   HERE 0 , ; IMMEDIATE
+HOST ACTS: ( -- )
+    [T'] 0branch tcompile,   here 0 t, ; IMPERATIVE
 ```
 
 `HOST ACTS:` works as above, changing the metainterpretation xt. `IMPERATIVE`
@@ -184,14 +186,15 @@ pointer to the first `EXIT`. It advances this copy two cells so it points at
 `dodoes-code`. (To be 100% clear, the actual IP or address in RSP are *not*
 changed.)
 
-This is a pointer to machine code, which is to say a code field address in DTC!
+This is a pointer to machine code, which is to say an xt in DTC!
 `(DOES>)` overwrites the `jsr dovar` at the start of `foo` with `jsr this-addr`,
 which causes `foo` to jump to that code when executed (sequence 3).
 
 
 #### Sequence 3 - Executing `foo`
 
-The code field now jumps to the `dodoes-code` inside `CONSTANT`'s thread.
+The code field of our newly created word `foo` now jumps to the `dodoes-code`
+inside `CONSTANT`'s thread, instead of the basic `dovar`.
 
 The address of `foo`'s parameter field (where the 7 is) is that pushed/saved by
 `jsr`!
@@ -238,7 +241,8 @@ Each mirror word holds two xts in its parameter field, and has a `NATIVE DOES>`
 action that runs either the metacompiling and metainterpreting xt according to
 `HOST STATE`.
 
-`HOST DOES>` is the key here: it does both `TARGET DOES>` and `NATIVE DOES>`!
+`HOST DOES>` is the key here: it effectively does both `TARGET DOES>` and
+`NATIVE DOES>`!
 
 Thus both `CONSTANT`'s Target word and mirror word are transformed with
 `(DOES>)`. Then when `CONSTANT` is executed, both the Target's `foo` and its
@@ -252,7 +256,8 @@ interpreting, after all) rather than compiled into the Target definition. We
 need some means of capturing numbers and compiling `[LIT | n]` into the Target.
 
 This is handled by replacing the Host's `native interpret` (or `]`) to handle
-numbers specially when metacompiling. This is handled with a `HOST ]` routine.
+numbers specially when metacompiling. This is handled with a `HOST meta]`
+routine.
 
 
 ## Abstraction via the "Model"
@@ -261,18 +266,63 @@ The words in `$machine/model.ft` and `$machine/model-target.ft` hide some
 details specific to the target machine and the threading model. Then most of the
 metacompiled Forth code can be shared across all machines.
 
-| Word       | ITC                 | DTC               | STC |
-| :--        | :--                 | :--               | :-- |
-| `COMPILE,` | address             | address           | `JSR address` |
-| `!CF`      | address of codeword | `JSR address`     | `JSR address` |
-| `,CF`      | ???                 | `!CF`             | `!CF`         |
-| `!COLON`   | address of `DOCOL`  | `JSR DOCOL`       | nothing!      |
-| `,EXIT`    | address of `EXIT`   | address of `EXIT` | `RET` etc.    |
+### Host-side Model
 
-In the ideal case, this reduces the porting effort to target a new machine to:
+`$machine/model.ft` abstracts the Forth model and target machine. This file is
+full of `host definitions`; see below for the Target-side model.
 
-- Write an assembler for that machine.
-- Port `kernel.ft` using that assembler.
-- Port `model.ft` and `model-target.ft` likewise.
-- Write a `main.ft` to capture the complete workflow, like `dcpu16/main.ft`.
+- Define any `T,` prefixed words not defined by the assembler.
+    - The complete set is `T@ T! TC@ TC! T, TC, TCOMPILE,`.
+- Define `HOST DP` and `HOST HERE` based on the assembler's output image.
+    - `HOST DP` is often a synonym for the assembler's output pointer,
+      traditionally called `there`.
+- Assemble the first bit of code eg. any vectors at the top of memory.
+    - Position the assembler's output pointer to wherever the machine code words
+      should go.
+- Write `DOES,`, which assembles the `(DOES>) EXIT dodoes-code` into a Target
+  word. Those words probably don't exist yet; make them `HOST VARIABLE`s and
+  update the values later.
+- Write the code words: `DOCOL`, `DOVAR`, `LIT`, `LITSTRING`.
+- Write `,docol` and `,dovar` to compile the code fields for colon definitions
+  and `CREATE`d definitions into the Target image.
+- Write `,dostring` to compile a literal string into the current definition
+  (this is called by `S"` etc., they should compile code that pushes the string
+  at runtime.)
+- `!dodoes ( does-xt word-xt -- )` is called by `DOES>` to update the code field
+  of a `CREATE`d definition to point to the `DOES>` routine.
+    - In ITC this is simply `t!`; in DTC it's more complex.
+- `tliteral` should compile code into the Target such that it pushes a literal
+  number at compile time.
+- `,dest` is given a Forth branch destination, and compiles it.
+    - That's just `t,` if branch targets are absolute; but might need to do
+      arithmetic for relative distances.
+- `!dest ( dest slot -- )` gets the branch target and the location of the
+  branch offset.
+- `t>body` is given a Target xt for a `CREATE`d word and should return its
+  parameter field address. For ITC that's `tcell+`; for DTC it depends on the
+  size of the code field.
+- Define `rp0` and `sp0`, constants for the starting stacks.
+- Define an image variable `entry-point`, currently an empty cell. This will get
+  set to the xt for `COLD`, the startup word.
+
+
+### Target-side Model
+
+`$machine/model-target.ft` contains the `target definitions` for abstracting on
+the Target itself.
+
+- `,cf` is given the address of a codeword (eg. `dovar`) and compiles the
+  code field for a defintion. (On ITC, `t,`. On DTC, compiles a jump.)
+- `,docol` is called from `:` and compiles such a codeword.
+    - This is separate from `,cf` because sometimes `docol` is inlined.
+- `,dostring` is the same as the Host `,dostring`.
+- Implement `target (DOES>)`.
+- Update any forward references from `$machine/model.ft`, eg. for `(DOES>)` and
+  `EXIT`.
+- Define a `host` word called `T,DOES` that **compiles the inside of TARGET
+  DOES>**
+    - This is weirdly indirect, but it was the best way to keep all the
+      target-specific code in place.
+
+Plus definitions for the ANS Forth words `ALIGNED ALIGN PAD`.
 

@@ -113,23 +113,6 @@ VARIABLE 'EXIT   \ These get populated later.
 : DOES, ( -- xt-does ) '(DOES>) @ t,   'EXIT @ t,   here   DOCOL # jsr, ;
 
 
-\ Old TC-Forth DODOES, which has been obsoleted.
-\ label DODOES
-\   pop  ra   set, \ DOES> slot address now in A.
-\   ra   push set, \ Push it
-\   1 #  peek add, \ And +1 so it's now the parameter field address.
-\   \ Now check if the DOES> slot has anything good in it.
-\   0 #  [a]  ife,
-\     fwd   pc set, \ Boring, 0 in the slot. Just leave the PFA on the stack.
-\ 
-\   \ Interesting case: jump to the DOES> slot.
-\   ri pushrsp,
-\   [a] ri set,
-\ 
-\   resolve
-\   next,
-
-
 \ Not really words, just assembler routines.
 \ TODO Maybe these are better as mirror words without Target-side headers?
 label LIT
@@ -145,13 +128,6 @@ label DOSTRING
   next,
 
 
-
-\ Compiles a fresh Target header with an empty code field.
-: (mk-header) ( c-addr u -- target-xt )
-  here   latest t,   'latest !
-  dup tc, \ Length byte
-  0 DO ( c-addr ) dup i + c@ >upper tc, LOOP drop ( )
-  here ( target-xt ) ;
 
 \ Compiles the code field (address) for a colon declaration.
 \ For DTC that means assembling a JSR docol.

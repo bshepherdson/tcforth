@@ -144,13 +144,6 @@ VARIABLE 'EXIT   \ These get populated later.
 
 
 \ Dictionary headers =========================================================
-\ Compiles a fresh Target header with an empty code field.
-: (mk-header) ( c-addr u -- target-xt )
-  here   latest t,   'latest !
-  dup tc, \ Length byte
-  0 DO ( c-addr ) dup i + c@ >upper tc, LOOP drop ( )
-  here ( target-xt ) ;
-
 \ Compiles the code field for a colon definition.
 \ In ITC this is the address of DOCOL.
 : ,docol ( -- ) docol t, ;

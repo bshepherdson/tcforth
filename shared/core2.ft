@@ -86,7 +86,7 @@ target definitions
 \ Use the acting? and doing? flags in HOST ; to define the interp-xt (current
 \ :noname) and target-does-xt (about to be started) actions.
 target : DOES> ( -- )
-    [ host T,DOES target ]
+    [ host TDOES, target ]
     ; IMMEDIATE
   host acts: does,   'mirror @ mirror>t-does ! ; IMPERATIVE
   \ This is just the Target side; it saves the target xt of target DOES> code

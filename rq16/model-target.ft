@@ -45,7 +45,7 @@ host definitions
 \ stack (low address first).
 : asm-lit ( u -- w ... ) dup negate there +!   0 DO there @ i + t@ LOOP ;
 
-: T,DOES
+: TDOES,
   [T'] (DOES>) tliteral  [T'] compile, tcompile,
   [T'] EXIT    tliteral  [T'] compile, tcompile,
 

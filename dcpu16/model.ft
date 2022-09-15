@@ -49,13 +49,16 @@ $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
 : pushrsp, ( rhs -- ) 1 # rsp sub,   ( rhs ) [rsp] set, ;
 : poprsp,  ( lhs -- ) [rsp] 2swap ( rhs lhs ) set,   1 # rsp add, ;
 
+: tchars    ( n -- n2 ) ;
+: tchar+    ( n -- n2 ) 1+ ;
 : tcells    ( n -- n2 ) ;
 : tcell+    ( n -- n2 ) 1+ ;
 : tcompile, t, ;
+: taligned  ( x -- x2 ) ;
+: talign    ( -- ) ;
 
-: t>cfa ( target-nt -- target-xt ) tcell+ dup t@ mask_len and + tcell+ ;
-
-16 CONSTANT twidth  \ 16 bits per cell!
+16 CONSTANT tcellbits  \ 16 bits per cell
+16 CONSTANT tbits      \ 16 bits per address unit
 
 VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
 : LATEST ( -- nt ) 'latest @ ;
@@ -160,12 +163,6 @@ label DOSTRING
 
 : t>body ( target-xt -- target-body ) 2 tcells + ;
 
-
-\ Some dictionary header pieces.
-$8000 CONSTANT f_immed
-$4000 CONSTANT f_hidden
-$7fff CONSTANT mask_len_hidden
-$3fff CONSTANT mask_len
 
 0     CONSTANT rp0
 $ff80 CONSTANT sp0

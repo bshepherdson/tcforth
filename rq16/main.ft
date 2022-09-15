@@ -7,6 +7,7 @@ host definitions REQUIRE assembler.ft
 
 host REQUIRE ../host/helpers.ft
 host REQUIRE model.ft                      \ Machine-specific model words
+host REQUIRE ../host/dictionary.ft
 host REQUIRE ../host/mirrors.ft
 
 \ Now we have what we need to metacompile the CODE definitions at the heart of
@@ -15,8 +16,6 @@ host definitions REQUIRE kernel.ft
 
 \ The main part of the metacompiler
 host REQUIRE ../host/metacompiler.ft
-
-host T' EXIT cr cr dup hex. t@ hex. cr cr
 
 \ Now the first chunk of Target Forth code!
 host REQUIRE ../shared/core1.ft

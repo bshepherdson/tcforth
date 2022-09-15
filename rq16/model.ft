@@ -49,13 +49,16 @@ there CONSTANT DP
   {{ tos }} push,
   ( value ) tos load, ;
 
+: tchars    ( n -- n2 ) ;
+: tchar+    ( n -- n2 ) 1+ ;
 : tcells    ( n -- n2 ) ;
 : tcell+    ( n -- n2 ) 1+ ;
 : tcompile, t, ;
+: taligned  ( x -- x2 ) ;
+: talign    ( -- ) ;
 
-: t>cfa ( target-nt -- target-xt ) tcell+ dup t@ mask_len and + tcell+ ;
-
-16 CONSTANT twidth  \ 16 bits per cell!
+16 CONSTANT tcellbits  \ 16 bits per cell
+16 CONSTANT tbits      \ 16 bits per address unit
 
 VARIABLE 'latest
 : LATEST ( -- nt ) 'latest @ ;

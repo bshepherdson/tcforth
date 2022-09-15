@@ -72,13 +72,6 @@ VARIABLE >mirror \ Holds the body address of the mirror currently executing.
       mirror>interp
     THEN @ execute ;
 
-\ Compiles a fresh Target header with an empty code field.
-: (mk-header) ( c-addr u -- target-xt )
-  here   latest t,   'latest !
-  dup tc, \ Length byte
-  0 DO ( c-addr ) dup i + c@ >upper tc, LOOP drop ( )
-  here ( target-xt ) ;
-
 \ Creates a new, bare dictionary entry on the Target, and its mirror word in the
 \ TARGET vocabulary! They both have the same name.
 \ Leaves the vocabulary set to HOST.

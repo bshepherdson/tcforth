@@ -1,60 +1,18 @@
 \ Entry point for metacompiling the portable kernel to DCPU-16.
 \ Most of the heavy lifting is done in other files, this is just orchestrating.
 
-\ "Host" is the machine and Forth that are running the metacompiler. Typically
-\ x86_64 or ARM or something.
-\ "Target" is the machine for which we're metacompiling, perhaps DCPU-16.
-
-\ There are four relevant vocabularies when metacompiling:
-\ - NATIVE    is the actual host system, Gforth or similar ANS Forth.
-\ - HOST      holds some metacompiler words which hide ANS names like HERE.
-\ - TARGET    holds "mirror words" that compile themselves into the Target.
-\ - Plus the actual Target dictionary under construction, which is not used to
-\   look anything up.
-
-\ First, let's defined handy words to switch the ANS search order between
-\ NATIVE, HOST and TARGET.
-
-\ First the native-side words.
-: NATIVE   only forth ; immediate
-
-wordlist CONSTANT host-wl
-wordlist CONSTANT target-wl
-
-: HOST     postpone native   host-wl >order ; immediate
-HOST DEFINITIONS
-
-: TARGET   only target-wl >order ; immediate
-
-
-\ Copy things into the target wordlist from native and host.
-target-wl set-current
-: TARGET ; immediate
-: HOST   postpone host ; immediate
-: NATIVE postpone native ; immediate
-: DEFINITIONS native definitions host ;
-: \  native postpone \ host ;
-: (  native postpone ( host ;     \ Fixing the busted highlighting )
-host definitions
-
-\ Some DCPU-specific constants
-$0000 CONSTANT rp0
-$ff80 CONSTANT sp0
-
-$8000 CONSTANT f_immed
-$4000 CONSTANT f_hidden
-$2fff CONSTANT mask_len
-$7fff CONSTANT mask_len_hidden
+REQUIRE ../host/vocabularies.ft
 
 host definitions REQUIRE assembler.ft      \ DCPU-16 assembler
 
 host REQUIRE ../host/helpers.ft
 host REQUIRE model.ft                             \ Add the DCPU-16 model words
+host REQUIRE ../host/dictionary.ft
 host REQUIRE ../host/mirrors.ft
 
 \ Now we have what we need to metacompile the CODE definitions at the heart of
 \ the new kernel.
-host REQUIRE kernel.ft                             \ Add the DCPU-16 model words
+host REQUIRE kernel.ft
 
 \ Overwrite the jump target of the entry code to be main.
 \ The instruction is at $0000 and its target argument at $0001.

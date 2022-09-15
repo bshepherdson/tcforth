@@ -272,7 +272,7 @@ metacompiled Forth code can be shared across all machines.
 full of `host definitions`; see below for the Target-side model.
 
 - Define any `T,` prefixed words not defined by the assembler.
-    - The complete set is `T@ T! TC@ TC! T, TC, TCOMPILE,`.
+    - The complete set is `T@ T! TC@ TC! T, TC, TCOMPILE, TALIGN TALIGNED`.
 - Define `HOST DP` and `HOST HERE` based on the assembler's output image.
     - `HOST DP` is often a synonym for the assembler's output pointer,
       traditionally called `there`.

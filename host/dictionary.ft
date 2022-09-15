@@ -1,0 +1,46 @@
+\ Defines the format of Target dictionary headers.
+\ Uses abstracted words like TC@ and TCELL+ so it should work on any Target.
+host definitions
+
+\ Header structure ===========================================================
+\ Each header is a variable-length block like this:
+\ Start       Contents                 Size
+\ 0           link pointer             1 cell
+\ 1c          length byte              1 unit
+\ 1c+1u       name characters          1 unit per character (L characters)
+\ 1c+(1+L)u   (blank space)            0 to 1c-1u, enough to align.
+\ kc          code field               ...
+
+\ So for example, on a byte-addressable 32-bit machine with 4-byte alignment:
+\ 0           $1234                    1 cell (4 bytes)
+\ 4           Length 5                 1 byte
+\ 5           First char F             1 byte
+\ 6           First char O             1 byte
+\ 7           First char R             1 byte
+\ 8           First char T             1 byte
+\ 9           First char H             1 byte
+\ 10          (blank for alignment)    2 bytes
+\ 12          code field
+
+\ On a machine with 16-bit address units and cells, like DCPU-16, every field
+\ is a 16-bit word and no alignment is needed.
+
+\ First the header and length. The top bit is used for IMMEDIATE, the next for
+\ smudge, the rest for length. That gives a length of 63 characters if the width
+\ is 8 bits.
+1 tbits  1- lshift CONSTANT f_immed
+f_immed  1 rshift  CONSTANT f_hidden
+f_immed  1-        CONSTANT mask_len_hidden
+f_hidden 1-        CONSTANT mask_len
+
+
+\ Compiles a fresh Target header with an empty code field.
+: (mk-header) ( c-addr u -- target-xt )
+  here   latest t,   'latest !
+  dup tc, \ Length byte
+  0 DO ( c-addr ) dup i + c@ >upper tc, LOOP drop ( )
+  talign here ( target-xt ) ;
+
+: t>cfa ( target-nt -- target-xt )
+  tcell+ dup tc@ mask_len and + tchar+ taligned ;
+

@@ -200,7 +200,7 @@ VARIABLE (picout)
 
 : (#HOLD) ( n -- c-addr u )
   \ The smallest integer is a special case - it has no positive counterpart!
-  [ host 1 twidth 1- lshift tliteral target ] over = IF
+  [ host 1 tcellbits 1- lshift tliteral target ] over = IF
     <# 0 #S [ host '-' tliteral target ] hold #>
   ELSE <# dup abs S>D #S rot sign #> THEN ;
 

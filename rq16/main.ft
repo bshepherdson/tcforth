@@ -3,15 +3,6 @@
 
 REQUIRE ../host/vocabularies.ft
 
-\ Some Risque-specific constants
-$0000 CONSTANT rp0
-$ff80 CONSTANT sp0
-
-$8000 CONSTANT f_immed
-$4000 CONSTANT f_hidden
-$2fff CONSTANT mask_len
-$7fff CONSTANT mask_len_hidden
-
 host definitions REQUIRE assembler.ft
 
 host REQUIRE ../host/helpers.ft

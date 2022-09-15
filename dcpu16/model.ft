@@ -192,7 +192,7 @@ $7fff CONSTANT mask_len_hidden
 $3fff CONSTANT mask_len
 
 0     CONSTANT rp0
-$fe80 CONSTANT sp0
+$ff80 CONSTANT sp0
 
 label entry-point 0 asm,
 

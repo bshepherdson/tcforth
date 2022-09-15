@@ -4,6 +4,16 @@
 
 host definitions
 
+\ Basic constants of the dictionary
+$8000 CONSTANT f_immed
+$4000 CONSTANT f_hidden
+$7fff CONSTANT mask_len_hidden
+$3fff CONSTANT mask_len
+
+\ And other constants
+0     CONSTANT rp0
+$ff7f CONSTANT sp0 \ This is the value to literally write to SP for an empty stack.
+
 there CONSTANT DP
 : here dp @ ;
 0 dp !
@@ -167,16 +177,6 @@ VARIABLE 'EXIT   \ These get populated later.
 : !dest ( dest slot -- ) t! ;
 
 : t>body ( target-xt -- target-body ) tcell+ ;
-
-
-\ Some dictionary header pieces.
-$8000 CONSTANT f_immed
-$4000 CONSTANT f_hidden
-$7fff CONSTANT mask_len_hidden
-$3fff CONSTANT mask_len
-
-0     CONSTANT rp0
-$fe80 CONSTANT sp0
 
 label entry-point 0 asm,
 

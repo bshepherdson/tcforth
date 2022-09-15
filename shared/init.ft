@@ -14,7 +14,7 @@ target : (   41 parse 2drop ; IMMEDIATE
 \ Fundamental multi-line interpreter loop.
 \ Separate from QUIT because it gets called by file readers as well.
 target : (QUIT) ( -- )
-  BEGIN refill-xt @ 11 break execute 12 break WHILE
+  BEGIN refill-xt @ execute WHILE
     [ host T' INTERPRET tliteral target ] catch
     CASE
     0   OF state @ 0=   source-id 0= and IF ."  ok" cr THEN ENDOF

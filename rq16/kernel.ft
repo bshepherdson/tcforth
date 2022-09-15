@@ -113,7 +113,7 @@ code 2SWAP ( r2 r1 r0 tos -- r0 tos r2 r1 )
 end-code
 
 code 2OVER ( z y x tos -- z y x tos z y )
-  3 # sp [+] r0 ldr, \ z -> r0
+  2 # sp [+] r0 ldr, \ z -> r0
   {{ tos r0 }} push, \ Push old-tos and Z; memory stack now ( z y x tos z )
   3 # sp [+] tos ldr, \ y -> tos
 end-code
@@ -121,7 +121,6 @@ end-code
 
 code SP@ \ Pushes TOS first so it counts in the SP.
   {{ tos }} push,
-  tos tos tos xor, \ Zero TOS
   0 # sp tos add,  \ And put SP into it.
 end-code
 
@@ -155,36 +154,41 @@ code R@
   rsp [] tos ldr,
 end-code
 
+\ This is a bit weird with TOS in register. The bottom value in memory is
+\ actually whatever dummy value was in the TOS register when the first real
+\ value was pushed.
+\ BUT sp0 is $ff7f and not $ff80, because that's the right value to   sp0 sp!
+\ so DEPTH actually pushes TOS early to move SP one notch "too far", then
+\ measures the depth from $ff7f, rather than the real empty SP of $ff80.
 code DEPTH
   sp0 r0 load,
-  {{ tos }} push, \ Make sure TOS gets counted as part of depth.
-  0 # r1 mov,
+  {{ tos }} push, \ Make sure TOS is counted as an extra level of depth!
   0 # sp r1 add,  \ SP -> r1
-  r1 r0 tos sub,   \ Subtract current sp from sp0, into TOS.
+  r1 r0 tos sub,  \ Subtract current sp from sp0, into TOS.
 end-code
 
 
 \ Memory =====================================================================
 code @
+label @-code
   tos [] tos ldr,
 end-code
 
 code !
+label !-code
   {{ r0 }}  pop,
   tos [] r0 str,
   {{ tos }} pop,
 end-code
 
-\ C@ and C! are identical to @ and !
+\ C@ and C! are identical to @ and ! - just borrow their codewords.
 code C@
-  tos [] tos ldr,
-end-code
+  @-code   here 1 tcells -   t!
+end-code-bare
 
 code C!
-  {{ r0 }}  pop,
-  tos [] r0 str,
-  {{ tos }} pop,
-end-code
+  !-code   here 1 tcells -   t!
+end-code-bare
 
 \ These store hi, lo in memory, but push as ( lo hi ) double-words.
 code 2@
@@ -253,6 +257,7 @@ label (compile)
   r0     []  r1  ldr,  \ dp  -> r1
   1 # r1 []+ tos str,  \ tos -> [dp], bump dp
   r0     []  r1  str,  \ Write back dp
+  {{ tos }} pop,
 end-code
 
 code C,       (compile) b, end-code-bare
@@ -324,7 +329,7 @@ code UDM* ( l1 h1 u2 -- l3 h3 ) \ That is, multiply unsigned double by single.
   \ First a special case - push 0s and bail if u2 is 0.
   0 # tos cmp,
   fwd bne,
-    {{ r0 r1 }} push, \ We happen to have two 0s handy.
+    {{ r0 }} push, \ We happen to have a 0 handy, and 0 in TOS.
     next, \ And we're done.
   resolve
 
@@ -343,11 +348,11 @@ code UDM* ( l1 h1 u2 -- l3 h3 ) \ That is, multiply unsigned double by single.
     1 # tos lsr,
     fwd beq, \ And skip ahead if it's 0.
 
-    \ If it's not zero, shift the result up by 1.
-    1 # r0 lsl,   \ Hi first
-    1 # r1 lsl,   \ Then lo
+    \ If it's not zero, shift the multiplicand up by 1.
+    1 # r2 lsl,   \ Hi first
+    1 # r3 lsl,   \ Then lo
     fwd bcc,      \ Skip next if that didn't carry, ie. it shifted out a 0.
-      1 # r0 add, \ If it did shift a 1, add 1 to hi.
+      1 # r2 add, \ If it did shift a 1, add 1 to hi.
     resolve
 
     \ Now jump back to the top of the loop.
@@ -429,11 +434,11 @@ code EXIT
 end-code
 
 code >CFA ( nt -- xt )
-  1 # tos [+] r0 ldr, \ Get the length word
-  2 # tos        add, \ Skip over the link pointer and length word.
-  mask_len    r1 lit, \ Get the length mask into r1
-  r1 r0       r0 and, \ Mask it to get the real length.
-  r0 tos     tos add, \ And advance TOS that far.
+  1 # tos [+] r0 ldr,  \ Get the length word
+  2 # tos        add,  \ Skip over the link pointer and length word.
+  mask_len    r1 load, \ Get the length mask into r1
+  r1 r0       r0 and,  \ Mask it to get the real length.
+  r0 tos     tos add,  \ And advance TOS that far.
 end-code
 
 
@@ -641,10 +646,10 @@ label main
   ifc,
   rp0 rsp load,
   sp0 r0  load,
-  {{ r0 }} push,
-  popsp,
+  {{ r0 }} push, \ This sequence...
+  popsp,         \ is pretending...
+  {{ tos }} pop, \ it's sp! - which pops the TOS register from the stack!
 
-  brk,
   entry-point r0 load, \ entry-point is a variable holding an xt.
   r0 [] r0 ldr,        \ the xt itself is now in r0.
   EXECUTE-tail b,      \ jump to EXECUTE's innards.

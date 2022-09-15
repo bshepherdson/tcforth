@@ -90,11 +90,3 @@ VARIABLE >mirror \ Holds the body address of the mirror currently executing.
 
 host definitions
 
-\ These are HOST vocab words that define assembler words on the Target - their
-\ mirror words are regular.
-: code      ( "name" -- ) (TCREATE) ;
-: end-code  ( -- )        next, ;
-\ End marker, but no NEXT.
-: end-code-bare ( -- ) ;
-
-

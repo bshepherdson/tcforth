@@ -1,0 +1,182 @@
+\ Threading model ============================================================
+\ ITC with TOS in register.
+\ An xt thus is not a pointer to code, but a pointer to a pointer to code!
+
+host definitions
+
+there CONSTANT DP
+: here dp @ ;
+0 dp !
+
+: t,     ( w -- ) asm, ;
+: tc,    ( b -- ) asm, ;
+: tc@ t@ ;
+: tc! t! ;
+
+\ Registers ==================================================================
+\ SP is data stack pointer
+\ r7 is return stack pointer
+\ r6 is IP
+\ r5 is TOS
+\ r0-r4 are free
+
+: rsp r7 ;
+: ip  r6 ;
+: tos r5 ;
+
+\ Assembler macros
+: next,  ( -- )
+  1 # ip []+ r0 ldr,
+  1 # r0 []+ r1 ldr,  \ r0 is adjusted to point after the code field address!
+  r1 bx, ;
+3 CONSTANT next-len
+
+: pushrsp, ( d-rhs -- ) 2>R   1 # rsp sub,   rsp [] 2R> str, ;
+: poprsp,  ( d-lhs -- ) 2>R {{ 2R> }} rsp ldmia, ;
+
+\ Pushes a literal in code, after saving TOS to memory.
+: lit,   ( value -- )
+  {{ tos }} push,
+  ( value ) tos load, ;
+
+: tcells    ( n -- n2 ) ;
+: tcell+    ( n -- n2 ) 1+ ;
+: tcompile, t, ;
+
+: t>cfa ( target-nt -- target-xt ) tcell+ dup t@ mask_len and + tcell+ ;
+
+16 CONSTANT twidth  \ 16 bits per cell!
+
+VARIABLE 'latest
+: LATEST ( -- nt ) 'latest @ ;
+0 'latest !
+
+
+\ Starting the assembly ======================================================
+\ At the top of memory on the Risque-16 are the reset and interrupt vectors.
+0 there !
+$8000 b, \ Dummy long branch; will get rewritten with main.
+
+8 there !
+$8000 b, \ Dummy long branch; will get rewritten with the interrupt handler.
+
+\ Code words =================================================================
+label DOCOL
+  \ r0 holds the parameter field address, ie. the IP for this thread.
+  ip pushrsp,
+  r0 ip mov,
+  next,
+
+\ This is the code word for CREATEd words by default.
+\ r0 holds the parameter field address; it needs to be pushed.
+\ (DOES>) rewrites the code word to point at the dodoes-code, see below.
+label DOVAR
+  {{ tos }} push,
+  r0 tos mov,
+  next,
+
+\ Pseudo code word for literals in the stream.
+label LIT 0 asm,
+label (LIT)
+  {{ tos }} push,
+  1 # ip []+ tos ldr,
+  next,
+(LIT) LIT t!
+
+label DOSTRING  0 asm,
+label (DOSTRING)
+  \ Next word is the length, then followed by that many characters.
+  {{ tos }} push,     \ Push old TOS
+  1 # ip []+ tos ldr, \ Length in TOS
+  {{ ip }} push,      \ IP points at the start of the string now, push it.
+  tos ip ip add,      \ Bump IP past the string.
+  next,
+(DOSTRING) DOSTRING t!
+
+\ DOES> ======================================================================
+\ This is different from the original TC-Forth DODOES scheme.
+\ Sequence 1: while eg. : CONSTANT create , DOES> @ ; is being defined.
+\ Sequence 2: while CONSTANT is running, defining a new constant.
+\ Sequence 3: while a particular constant is executing.
+
+\ DOES> is an immediate word, it runs during "Sequence 1".
+\ It compiles   (DOES>) EXIT dodoes-code   at the end of CONSTANT.
+\ Then the Forth code after DOES> is compiled. The final CONSTANT looks like:
+\ link | len | CONSTANT | docol | CREATE | , | (DOES>) | EXIT |
+\     dodoes-code... | @ | EXIT
+
+\ Sequence 2 (eg. 7 CONSTANT FOO) CREATEs the new header with the default
+\ DOVAR as its code word, but then (DOES>) runs and patches it to be the address
+\ of dodoes-code above, ie. after the EXIT:
+\ link | len | FOO | &dodoes-code | 7
+
+\ In ITC, the dodoes-code is entered with the parameter field (pointer to 7)
+\ in r0. The dodoes-code makes that TOS, then sets r0 to the following thread
+\ and jumps to DOCOL! DOCOL pushes the old IP, makes this thread the new one,
+\ and executes it, returning to whoever called FOO.
+\ ADD ip, PC, #imm makes it easy to aim the IP at the following thread.
+
+\ This HOST word is invoked by Host-side DOES> to compile the necessary pieces.
+VARIABLE '(DOES>)
+VARIABLE 'EXIT   \ These get populated later.
+
+: DOES, ( -- 'dodoes-code )
+  '(DOES>) @ t,   'EXIT @ t,
+  here
+  \ On entering here, r0 is the parameter field address, and the thread follows
+  \ after this code.
+  {{ tos }} push,
+  r0 tos mov,     \ Pushing the parameter field address.
+  2 # pc r0 add,  \ PC+2 -> r0 - that points AFTER the following (long) branch.
+  docol b,
+  \ That's 5 words, 5 cycles, plus DOCOL. Unfortunately fairly bulky.
+;
+
+
+\ Dictionary headers =========================================================
+\ Compiles a fresh Target header with an empty code field.
+: (mk-header) ( c-addr u -- target-xt )
+  here   latest t,   'latest !
+  dup tc, \ Length byte
+  0 DO ( c-addr ) dup i + c@ >upper tc, LOOP drop ( )
+  here ( target-xt ) ;
+
+\ Compiles the code field for a colon definition.
+\ In ITC this is the address of DOCOL.
+: ,docol ( -- ) docol t, ;
+
+\ Compiles the code field for a CREATEd word.
+: ,dovar ( -- ) dovar t, ;
+
+\ Compiles a string literal into the thread.
+\ In ITC/DTC that's DOSTRING, then the length, then the chars.
+: ,dostring ( c-addr u -- )
+  dostring tcompile,
+  dup tc,
+  ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tc,   1+ R> REPEAT drop ;
+
+\ Overwrites the code word of the word at word-xt to point to does-addr.
+\ That's just a store for ITC.
+: !dodoes ( dodoes-code word-xt -- ) t! ;
+
+\ Compile a literal. This is in the model because eg. STC handles this very
+\ differently.
+: tliteral ( x --   X: -- x ) lit tcompile,   t, ;
+
+: ,dest ( dest -- ) t, ;
+: !dest ( dest slot -- ) t! ;
+
+: t>body ( target-xt -- target-body ) tcell+ ;
+
+
+\ Some dictionary header pieces.
+$8000 CONSTANT f_immed
+$4000 CONSTANT f_hidden
+$7fff CONSTANT mask_len_hidden
+$3fff CONSTANT mask_len
+
+0     CONSTANT rp0
+$fe80 CONSTANT sp0
+
+label entry-point 0 asm,
+

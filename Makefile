@@ -9,6 +9,11 @@ forth-dcpu16.bin: host/*.ft dcpu16/*.ft shared/*.ft
 
 dcpu16: forth-dcpu16.bin
 
+forth-rq16.bin: host/*.ft rq16/*.ft shared/*.ft dcpu16/disks.ft dcpu16/hardware.ft dcpu16/screen.ft
+	$(FORTH) rq16/main.ft dcpu16/disks.ft rq16/tail.ft
+
+rq16: forth-rq16.bin
+
 test: forth-dcpu16.bin test/*.ft
 	cat test/harness.ft test/basics.ft test/comparisons.ft test/arithmetic.ft \
 		test/rest.ft > test.disk

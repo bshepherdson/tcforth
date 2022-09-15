@@ -28,8 +28,6 @@ target
 : <>   = not ;
 : 0<>  0= not ;
 
-: /MOD ( a b -- r q ) 2dup mod   -rot / ;
-
 \ Memory operations
 : COUNT dup c@ >R char+ R> ;
 

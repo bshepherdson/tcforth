@@ -14,11 +14,6 @@ target definitions
 target : SOURCE    'SOURCE    2@ ;
 target : SOURCE-ID 'SOURCE-ID  @ ;
 
-target : (TYPE) ( c-addr u -- )
-  BEGIN dup WHILE
-    >R dup c@ log 1+ R> 1-
-  REPEAT 2drop ;
-
 target : >UPPER ( ch1 -- ch2 )
   dup [ host 'a' tliteral 'z' 1+ tliteral target ] within IF 32 - THEN ;
 
@@ -159,7 +154,7 @@ target : INTERP1   ( c-addr u -- )
       \ Really undefined. Emit an error message.
       err-undefined throw
     THEN
-  THEN ( depth log ) ;
+  THEN ;
 
 \ Fundamental single-line interpreter loop.
 target : INTERPRET ( -- ) BEGIN parse-name dup WHILE interp1 REPEAT 2drop ;

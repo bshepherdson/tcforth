@@ -149,10 +149,10 @@ host presume scroll target
 
 : ACCEPT-CHAR ( c-addr ch -- c-addr' ) dup emit   over c! 1+ ;
 
-: (KEY-SERIAL) ( -- key )
-  dev-serial   @ (key-ssi)
-  dup 10 = IF drop $11 THEN   \ Newline
-  dup  8 = IF drop $10 THEN ; \ Backspace
+\ : (KEY-SERIAL) ( -- key )
+\   dev-serial   @ (key-ssi)
+\   dup 10 = IF drop $11 THEN   \ Newline
+\   dup  8 = IF drop $10 THEN ; \ Backspace
 
 : (KEY-KB)     ( -- key ) dev-keyboard @ (key) ;
 
@@ -168,7 +168,7 @@ VARIABLE key-xt
 
 
 \ Input sources ==============================================================
-: SERIAL   ( -- ) ['] (key-serial) key-xt ! ;
+\ : SERIAL   ( -- ) ['] (key-serial) key-xt ! ;
 : KEYBOARD ( -- ) ['] (key-kb)     key-xt ! ;
 host T' (key-kb) T' key-xt t>body t! target
 

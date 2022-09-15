@@ -1,0 +1,4 @@
+\ Some extra Target words that supplement the core library.
+target definitions
+
+: /MOD ( a b -- r q ) 2dup mod   -rot / ;

@@ -1,0 +1,57 @@
+\ Target words to get metacompiled, that hide the details of the machine and the
+\ Forth model (eg. ITC vs. DTC vs. STC)
+\ This file: ITC on the Risque-16.
+
+\ >CFA is already defined, so is ,DOCOL.
+target definitions
+
+\ Add ,CF, which expects the address of the codeword on the stack.
+\ For ITC this is , to compile the target address.
+target : ,CF ( codeword-addr -- ) , ;
+
+\ Write the code field for a colon definition.
+\ In ITC this means the address of DOCOL.
+target : ,DOCOL ( -- ) [ host docol tliteral target ] ,CF ;
+
+\ Compiles a string literal into a thread.
+\ On ITC/DTC that means the address of DOSTRING, the length, then the words.
+target : ,DOSTRING ( c-addr u -- )
+  [ host dostring tliteral target ] compile,   \ Compile the codeword first.
+  dup >R c,        \ Then the length
+  here R@ cmove    \ And the text
+  R> chars allot ; \ And make room for it.
+
+\ No alignment on Risque-16 and other wordy machines.
+target : ALIGNED ;
+target : ALIGN ;
+
+target : PAD ( -- addr ) $fb00 ;
+
+\ DOES> ======================================================================
+\ Implementing sequence 2
+\ (DOES>) runs in eg. CONSTANT to properly compile a particular constant.
+\ Inside target (DOES>), TORS points at the EXIT. Just after it is the
+\ dodoes-code that should become the new codeword.
+\ This is easy in ITC.
+target : (DOES>) R@ cell+   latest >cfa   ! ;
+
+host T' (DOES>) '(DOES>) !
+host T' EXIT    'EXIT !
+
+\ Runs during compilation TARGET : DOES> - compile code into its thread!
+host definitions
+
+\ Moves THERE back by u and pushes the most recently compiled words onto the
+\ stack (low address first).
+: asm-lit ( u -- w ... ) dup negate there +!   0 DO there @ i + t@ LOOP ;
+
+: T,DOES
+  [T'] (DOES>) tliteral  [T'] compile, tcompile,
+  [T'] EXIT    tliteral  [T'] compile, tcompile,
+
+  [ {{ tos }} push, 1 asm-lit tliteral          ] [T'] , tcompile,
+  [ r0 tos mov,     1 asm-lit tliteral          ] [T'] , tcompile,
+  [ 2 # pc r0 add,  1 asm-lit tliteral          ] [T'] , tcompile,
+  [ docol b,        2 asm-lit tliteral tliteral ] [T'] , dup tcompile, tcompile,
+;
+

@@ -170,7 +170,7 @@ VARIABLE max-out
   DOES> 2@ (3reg/imm) ;
 
 \ ADD and SUB are special and already handled.
- 4  6 3reg/imm mul,
+ 5  6 3reg/imm mul,
  6  7 3reg/imm lsl,
  7  8 3reg/imm lsr,
  8  9 3reg/imm asr,
@@ -325,6 +325,34 @@ $f (branch) ble,
 
 : ldmia, ( mask pc? rb 0 -- ) drop nip 2 (ldm/stm) ;
 : stmia, ( mask pc? rb 0 -- ) drop nip 3 (ldm/stm) ;
+
+
+: host-signed ( tgt-signed -- host-signed )
+  dup $8000 and IF -1 $ffff invert and or THEN ;
+
+\ Finds the most compact way to load a literal value into a register.
+\ This could be MOV, MVN, NEG, or in the worst case MOV + MVH.
+\ Use it like val r0 load, no # needed.
+: load, ( value  rd 0 -- )
+  2>R ( value )
+  host-signed
+  dup        0 256 within IF        # 2R> mov, EXIT THEN \ Unsigned 8, just MOV.
+  dup negate 0 256 within IF negate # 2R> neg, EXIT THEN \ Unsigned 8, negated.
+  \ Otherwise do MOV lo; MVH hi.
+  dup      $ff and # 2R> 2dup 2>R mov,
+  8 rshift $ff and # 2R>          mvh, ;
+
+
+\ Control structures =========================================================
+\ Branch ops already take an absolute target; easy enough to use LABEL.
+\ fwd beq, compiles a dummy relative offset and leaves there on the stack.
+: fwd ( -- loc abs-target ) there @ dup 100 + ;
+
+\ Resolve expects a loc on the stack, and resolves it to point to there @.
+: resolve ( loc -- )
+  there @ over - 1- ( loc relative ) dup 256 >= ABORT" fwd/resolve too long"
+  over t@ $1ff invert and or ( loc op' )
+  swap t! ;
 
 
 : dump ( c-addr u -- )

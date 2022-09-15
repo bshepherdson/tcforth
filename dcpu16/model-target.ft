@@ -5,11 +5,11 @@
 \ >CFA is already defined, so is ,DOCOL.
 target definitions
 
-\ Add !CF, which expects the address to jump to on the stack.
+\ Add ,CF, which expects the address to jump to on the stack.
 \ A code field here is jsr lit, $7c20 + the literal.
-target : !CF ( addr -- ) $7c20 , , ;
+target : ,CF ( codeword-addr -- ) $7c20 , , ;
 
-target : !DOCOL ( -- ) [ host jsr_docol t@ tliteral target ] , ;
+target : ,DOCOL ( -- ) [ host jsr_docol t@ tliteral target ] , ;
 
 \ Compiles a string literal into a thread.
 \ On ITC/DTC that means the address of DOSTRING, the length, then the words.

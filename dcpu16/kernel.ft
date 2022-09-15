@@ -15,6 +15,14 @@
 \ - A B C X Y are free.
 \ - J is reserved. No STI/STD.
 
+\ These are HOST vocab words that define assembler words on the Target - their
+\ mirror words are regular.
+: code      ( "name" -- ) (TCREATE) ;
+: end-code  ( -- )        next, ;
+\ End marker, but no NEXT.
+: end-code-bare ( -- ) ;
+
+
 \ Standard dictionary headers: link, length+immediate+hidden word, len words of
 \ name, code field.
 
@@ -438,13 +446,6 @@ code CMOVE<   (MOVE<) # pc set,  end-code-bare
 
 \ A jsr docol for reference.
 label jsr_docol   docol # jsr,
-
-\ Compiles a jsr docol into the current definition.
-code ,DOCOL ( -- )
-  var_dp    [#] ra  set, \ A is DP
-  jsr_docol [#] [a] set, \ Store the jsr docol at [A]: the current HERE.
-  1 #   var_dp  [#] add, \ Update the DP
-end-code
 
 code (DO) ( limit index --   R: -- limit index )
   pop ra set,

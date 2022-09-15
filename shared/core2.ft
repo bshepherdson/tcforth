@@ -16,7 +16,7 @@ host definitions
 target definitions
 
 target : CREATE ( "name" --     X: -- addr )
-    (CREATE) [ host dovar tliteral target ] !cf ;
+    (CREATE) [ host dovar tliteral target ] ,cf ;
   host acts: create ;
 
 
@@ -61,6 +61,22 @@ target : CREATE ( "name" --     X: -- addr )
 \ (DOES>) - implementing sequence 2 ==========================================
 \ These depend on the model and machine, so they are expected to be defined in
 \ the machine-specific code (eg. in model.ft and model-target.ft).
+
+\ On the host, mimic the target (DOES>). On the host side, the mirror body for
+\ our defining word (eg. CONSTANT) is on the stack - it contains the target-xt
+\ for the DOES> code, as well as the host-xt for the host's DOES> code!
+host definitions
+: (DOES>) ( mirror-CONSTANT -- )
+  \ Step 1: Change the target code field to point to the does-code
+  \ which is found in mirror-CONSTANT's t-does field.
+  \ t-does is 0 for CREATEd words without TARGET DOES>, eg. VARIABLE.
+  dup mirror>t-does @   ?dup IF 'mirror @ mirror>txt @   !dodoes THEN  ( mirror-CONSTANT )
+  \ Step 2: Change the newest 'mirror word's interp-xt to mirror-CONSTANT's
+  \ h-does field.
+  mirror>h-does @   'mirror @ mirror>interp ! ( ) ;
+
+target definitions
+
 
 \ DOES> - implementing sequence 1 ============================================
 \ Target side: Compiles (DOES>) | EXIT | dodoes-code into the definition; saves
@@ -284,6 +300,6 @@ target : M*    ( n1 n2 -- n3 )    >R S>D R> UDM* D>S ;
 target : */MOD ( n1 n2 n3 -- n4 ) >R M* R> sm/rem ;
 target : */    ( n1 n2 n3 -- n4 ) */MOD nip ;
 
-target : :noname ( C: -- xt ) here !docol postpone ] ;
+target : :noname ( C: -- xt ) here ,docol postpone ] ;
   host acts: here ,docol   postpone target meta] ;
 

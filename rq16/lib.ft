@@ -1,0 +1,13 @@
+\ Extra Target library words for eg. division.
+\ The Risque-16 has no instructions for division, and so these are based on
+\ SM/REM.
+target definitions
+
+: /MOD ( n n -- r q ) >R S>D R> SM/REM ;
+: /    ( n n -- q )   /MOD nip ;
+: MOD  ( n n -- r )   /MOD drop ;
+
+: U/MOD ( u u -- ur uq ) >R S>D R> UM/MOD ;
+: U/    ( u u -- uq )    U/MOD nip ;
+: UMOD  ( u u -- uq )    U/MOD drop ;
+

@@ -139,5 +139,26 @@ T{ {{ r0 r1 r2 r3 r4 r5 r6 r7 }} r3 ldmia, -> $f3ff }T
 T{ {{ r6 }} r3 stmia, -> $fb40 }T
 
 
+\ load, and its efficiencies
+\ Small positive: MOV r6, #imm
+\ mov r6, #xx               = 0 0001 110 xxxx xxxx = 0000 1110 xxxx xxxx = $0e__
+T{ 0   r6 load,   -> $0e00 }T
+T{ 12  r6 load,   -> $0e0c }T
+T{ 255 r6 load,   -> $0eff }T
+\ Small negative: NEG r6, #imm
+\ neg r6, #xx               = 0 0010 110 xxxx xxxx = 0001 0110 xxxx xxxx = $16__
+T{ -1   r6 load,   -> $1601 }T
+T{ -12  r6 load,   -> $160c }T
+T{ -255 r6 load,   -> $16ff }T
+\ Too big: MOV + MVH
+\ mov r6, #ll               = 0 0001 110 xxxx xxxx = 0000 1110 xxxx xxxx = $0e__
+\ mvh r6, #hh               = 0 1111 110 xxxx xxxx = 0111 1110 xxxx xxxx = $7e__
+T{ 256    r6 load,   -> $0e00 $7e01 }T
+T{ $7fff  r6 load,   -> $0eff $7e7f }T
+T{ $8000  r6 load,   -> $0e00 $7e80 }T
+T{ $dead  r6 load,   -> $0ead $7ede }T
+T{ $ffff  r6 load,   -> $1601 }T \ Smart enough to see $ffff is -1
+
+
 : tests-done cr error? @ IF ." Tests failed!" ELSE ." Tests complete" THEN cr ;
 tests-done bye

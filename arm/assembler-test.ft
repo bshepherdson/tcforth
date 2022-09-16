@@ -1,0 +1,94 @@
+VARIABLE start-depth
+
+VARIABLE error?
+error? off
+
+: error error? on   type source type cr ;
+
+: T{ 0 there !   depth start-depth ! ;
+
+: -> depth start-depth @ <> IF S" Stack not clean during assembly " error THEN ;
+
+: }T depth start-depth @ <= IF S" Empty expectation " error THEN
+  there @ BEGIN instr-width - dup 0>= WHILE ( ... exp tgt-addr )
+    tuck t@ <> IF S" Mismatch " error THEN ( ... tgt-addr )
+  REPEAT drop
+  depth start-depth @ swap - IF S" Expectation longer than actual " error THEN ;
+
+
+\ Data Processing ============================================================
+T{ r0   r1 r2     add, -> $e0812000 }T
+T{ r0   r1 r2 S   add, -> $e0912000 }T
+T{ 14 # r1 r2 lt? add, -> $b281200e }T
+T{ 14 # r1 r2 S   add, -> $e291200e }T
+
+T{ 14   #     r2 tst, -> $e312000e }T
+T{ 1200 #     r2 tst, -> $e3120e4b }T  \ 1200 = $4b0 = 01001011 ROR 28 -> $e4b
+T{ r6 2 # lsr r2 tst, -> $e1120126 }T
+
+T{ r3    r4   mov, -> $e1a04003 }T
+T{ 300 # r4 S mvn, -> $e3f04f4b }T \ 300 = $12c = 01001011 ROR 30 -> $f4b
+
+
+\ Single Data Transfer - LDR and STR =========================================
+T{            r4 []   r8 ldr, -> $e5948000 }T
+T{       ne?  r4 []   r8 ldr, -> $15948000 }T
+T{ r3         r4 [+]  r8 ldr, -> $e7948003 }T
+T{ r3 2 # lsl r4 [+]  r8 ldr, -> $e7948103 }T
+T{ r3 6 # asr r4 [+]  r8 ldr, -> $e7948343 }T
+T{ r3 r2  lsr r4 [+]  r8 ldr, -> $e7948233 }T
+T{ r3 r2  lsr r4 [+]! r8 ldr, -> $e7b48233 }T
+
+\ Working through all the bit combinations: UBWL
+T{ $abc #     r4 [-]  r8 str,  -> $e5048abc }T  \ ubwl
+T{ $abc #     r4 [-]  r8 ldr,  -> $e5148abc }T  \ ubwL
+T{ $abc #     r4 [-]! r8 str,  -> $e5248abc }T  \ ubWl
+T{ $abc #     r4 [-]! r8 ldr,  -> $e5348abc }T  \ ubWL
+T{ $abc #     r4 [-]  r8 strb, -> $e5448abc }T  \ uBwl
+T{ $abc #     r4 [-]  r8 ldrb, -> $e5548abc }T  \ uBwL
+T{ $abc #     r4 [-]! r8 strb, -> $e5648abc }T  \ uBWl
+T{ $abc #     r4 [-]! r8 ldrb, -> $e5748abc }T  \ uBWL
+T{ $abc #     r4 [+]  r8 str,  -> $e5848abc }T  \ Ubwl
+T{ $abc #     r4 [+]  r8 ldr,  -> $e5948abc }T  \ UbwL
+T{ $abc #     r4 [+]! r8 str,  -> $e5a48abc }T  \ UbWl
+T{ $abc #     r4 [+]! r8 ldr,  -> $e5b48abc }T  \ UbWL
+T{ $abc #     r4 [+]  r8 strb, -> $e5c48abc }T  \ UBwl
+T{ $abc #     r4 [+]  r8 ldrb, -> $e5d48abc }T  \ UBwL
+T{ $abc #     r4 [+]! r8 strb, -> $e5e48abc }T  \ UBWl
+T{ $abc #     r4 [+]! r8 ldrb, -> $e5f48abc }T  \ UBWL
+
+
+\ Multiple Data Transfer - LDM and STM =======================================
+T{ {{ r1 r5 r7 }} r4   stmda,   -> $e80400a2 }T  \ puwl
+T{ {{ r1 r5 r7 }} r4   ldmda,   -> $e81400a2 }T  \ puwL
+T{ {{ r1 r5 r7 }} r4  !stmda,   -> $e82400a2 }T  \ puWl
+T{ {{ r1 r5 r7 }} r4  !ldmda,   -> $e83400a2 }T  \ puWL
+T{ {{ r1 r5 r7 }} r4   stmia,   -> $e88400a2 }T  \ pUwl
+T{ {{ r1 r5 r7 }} r4   ldmia,   -> $e89400a2 }T  \ pUwL
+T{ {{ r1 r5 r7 }} r4  !stmia,   -> $e8a400a2 }T  \ pUWl
+T{ {{ r1 r5 r7 }} r4  !ldmia,   -> $e8b400a2 }T  \ pUWL
+T{ {{ r1 r5 r7 }} r4   stmdb,   -> $e90400a2 }T  \ Puwl
+T{ {{ r1 r5 r7 }} r4   ldmdb,   -> $e91400a2 }T  \ PuwL
+T{ {{ r1 r5 r7 }} r4  !stmdb,   -> $e92400a2 }T  \ PuWl
+T{ {{ r1 r5 r7 }} r4  !ldmdb,   -> $e93400a2 }T  \ PuWL
+T{ {{ r1 r5 r7 }} r4   stmib,   -> $e98400a2 }T  \ PUwl
+T{ {{ r1 r5 r7 }} r4   ldmib,   -> $e99400a2 }T  \ PUwL
+T{ {{ r1 r5 r7 }} r4  !stmib,   -> $e9a400a2 }T  \ PUWl
+T{ {{ r1 r5 r7 }} r4  !ldmib,   -> $e9b400a2 }T  \ PUWL
+
+T{ {{ r0 r1 r2 r3 r4 r5 r6 r7 r8 r9 r10 r11 r12 sp lr pc }} r4  !ldmib,   -> $e9b4ffff }T
+
+T{ {{ r2 }} r4  ne? ldmia,   -> $18940004 }T
+T{ {{ r2 }}         push,    -> $e92d0004 }T
+T{ {{ r2 }}         pop,     -> $e8bd0004 }T
+
+
+\ SWP ========================================================================
+T{ r1 r2 r4     swp,  -> $e1014092 }T
+T{ r1 r2 r4 ne? swp,  -> $11014092 }T
+T{ r1 r2 r4     swpb, -> $e1414092 }T
+T{ r1 r2 r4 ne? swpb, -> $11414092 }T
+
+
+: tests-done cr error? @ IF ." Tests failed!" ELSE ." Tests complete" THEN cr ;
+tests-done bye

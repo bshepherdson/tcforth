@@ -1,0 +1,357 @@
+\ Forth-powered assembler for ARM7TDMI
+\ This is a 32-bit ARMv4T target, suitable for 32-bit Raspberry Pis etc.
+\ Syntax style is reversed from the classical ARM syntax:
+\ Canonical ARM:     add r0, r1, r2      ldr r4, [r6, #-12]
+\ This assembler:    r2 r1 r0 add,       -12 # r6 [+] r4 ldr,
+
+CREATE output 256 1024 * allot
+VARIABLE there
+0 there !
+VARIABLE max-out
+0 max-out !
+
+: hex.s base @ >R   hex .s   R> base ! ;
+
+: +max ( t-addr -- ) max-out @ max max-out ! ;
+
+: ta ( t-addr -- c-addr ) output + ;
+
+\ 32-bit cells are written little-endian.
+: t@ ( t-addr -- w )
+  ta >R
+  R@     c@
+  R@ 1+  c@  8 lshift or
+  R@ 2 + c@ 16 lshift or
+  R> 3 + c@ 24 lshift or ;
+
+: t! ( w t-addr -- )
+  ta >R
+  dup           $ff and R@     c!
+  dup  8 rshift $ff and R@ 1+  c!
+  dup 16 rshift $ff and R@ 2 + c!
+      24 rshift $ff and R> 3 + c! ;
+
+4 CONSTANT instr-width
+
+: asm, ( w -- ) there @ t!   instr-width there +! ;
+
+: label ( "name" --    X: -- t-addr ) there @ CONSTANT ;
+
+\ Condition Fields ===========================================================
+\ These are available on every instruction. These condition code words set a
+\ variable that applies to the next instruction and then gets reset to AL(ways).
+VARIABLE condition
+: cond? ( code "name" --    X: -- ) CREATE , DOES> @ condition ! ;
+$0 cond? eq?   $1 cond? ne?   $2 cond? cs?   $3 cond? cc?
+$4 cond? mi?   $5 cond? pl?   $6 cond? vs?   $7 cond? vc?
+$8 cond? hi?   $9 cond? ls?   $a cond? ge?   $b cond? lt?
+$c cond? gt?   $d cond? le?   $e cond? al?
+
+al?
+
+\ Operands ===================================================================
+\ Each instruction style has a relatively fixed set of inputs, so little in the
+\ way of marking them is required.
+: r0    0 0 ;   : r1    1 0 ;   : r2    2 0 ;   : r3    3 0 ;
+: r4    4 0 ;   : r5    5 0 ;   : r6    6 0 ;   : r7    7 0 ;
+: r8    8 0 ;   : r9    9 0 ;   : r10  10 0 ;   : r11  11 0 ;
+: r12  12 0 ;   : r13  13 0 ;   : r14  14 0 ;   : r15  15 0 ;
+: sp r13 ;
+: lr r14 ;
+: pc r15 ;
+
+: # ( value -- value 1 ) 1 ;
+
+\ Op2 has several forms, though:
+\ - I=0 register forms
+\   - shift + reg, and the shift is specified by immediate or register.
+\     Shift type is LSL LSR ASR ROR, so overall it looks like this:
+\     - Just register: r0 r1 r2 add,            ( 0 0   1 0   2 0 )
+\     - Immediate shift: r0 4 # lsl r1 r2 add,  ( 0 0   4 1 80   1 0 2 0 )
+\     - Register shift:  r0 r5  lsl r1 r2 add,  ( 0 0   5 0 80   1 0 2 0 )
+\   - Note that no shift is encoded as 0 # LSL
+\   - RRX is a special case, it encodes as 0 # ROR
+\ - I=1 immediate forms
+\   - 8-bit unsigned immediate, plus a 4-bit rotate right by *twice* the value
+\     so encoded.
+\   - The user passes a literal value, and the assembler tries to fit it into
+\     the format, erroring if it can't be made to fit.
+
+: LSL ( -- shift-type )      $80 ;
+: LSR ( -- shift-type )      $81 ;
+: ASR ( -- shift-type )      $82 ;
+: ROR ( -- shift-type )      $83 ;
+: RRX ( -- imm-0 shift-type) 0 # ror ;
+
+\ - Registers are represented as  ( reg 0 )
+\ - Immediates are represented as ( imm 1 )
+\ - Labels are represented as immediates, usually.
+
+: reg CREATE , DOES> @ 0 ;
+0 reg r0   1 reg r1   2 reg r2   3 reg r3
+4 reg r4   5 reg r5   6 reg r6   7 reg r7
+
+: # ( imm -- imm 1 ) 1 ;
+
+
+\ Helpers ====================================================================
+\ These throw if the range is exceeded.
+: ?u4 ( imm -- ) 0 16  within 0= ABORT" Out of U4 range" ;
+: ?u8 ( imm -- ) 0 256 within 0= ABORT" Out of U8 range" ;
+
+: ?reg  ( 0 -- ) 0<>  ABORT" Expected register" ;
+
+: +cond ( opcode -- opcode' ) condition @ 28 lshift or   al? ;
+
+\ Many opcodes have an S bit at bit 20
+VARIABLE S?   0 S? !
+: +S    ( opcode -- opcode' ) S? @ or   0 S? ! ;
+: S     ( -- ) $00100000 S? ! ;
+
+
+\ BX =========================================================================
+\ cccc 0001 0010 1111 1111 1111 0001 nnnn
+: bx, ( r 0 -- ) ?reg $012fff10 or +cond asm, ;
+
+\ B and BL ===================================================================
+\ cccc 101L signed-24-offset
+\ The offset is shifted down by 2, so it only points to word addresses.
+\ The offset is also relative to 2 words after the assembly location.
+
+: (b) ( abs-addr link-mask -- )
+  >R
+  dup 3 and 0<> ABORT" B and BL addresses must be word-aligned"
+  there @ 8 +   swap - ( delta-bytes ) 2 rshift ( delta-words )
+  dup 24 rshift ( delta upper ) dup $ff =   swap 0= or 0= ABORT" Branch too far"
+  R> or $0a000000 or   +cond asm, ;
+
+: b,   0         (b) ;
+: bl,  $01000000 (b) ;
+
+
+\ Data Processing ============================================================
+\ I=0 reg-shift   cccc 000o oooS nnnn dddd ssss 0SS1 mmmm
+\ I=0 imm-shift   cccc 000o oooS nnnn dddd ssss sSS0 mmmm
+\ I=1             cccc 001o oooS nnnn dddd RRRR iiii iiii
+\ Ops: AND EOR SUB RSB ADD ADC SBC RSC TST TEQ CMP CMN ORR MOV BIC MVN
+: rotate ( x rot -- x' )
+  31 and   2dup 32 swap - lshift >R   rshift R> or   $ffffffff and ;
+
+: find-shift1 ( value -- encoded valid? )
+  32 0 DO
+    dup i rotate   $ffffff00 and 0= IF \ Matched ( value )
+      \ Reverse the shift and this value will work.
+      i rotate   32 i - 31 and ( base shift ) 2/ 8 lshift or ( encoded )
+      true UNLOOP EXIT THEN
+  2 +LOOP drop 0 false ;
+
+: find-shift ( value -- encoded valid? )
+  dup find-shift1 IF nip true EXIT THEN
+  drop 1 rotate find-shift1 ;
+
+: (op2-imm) ( value -- encoded )
+  find-shift ( encoded valid? ) 0= ABORT" Op2 immediate doesn't fit" ( encoded )
+  $02000000 or ; \ Include the I bit in the encoded field.
+
+: (op2) ( m 0 [ | s 0 $8x | s 1 $8x ] -- encoded )
+  \ Simple register assembled as LSL #0: 00000 00 0 rrrr
+  dup 0 = IF drop ( r )     EXIT THEN
+  dup 1 = IF drop (op2-imm) EXIT THEN
+
+  \ Otherwise, it's a shifted register.
+  \ TOS is $80-83, the low nybble is the rotate encoding.
+  $f and 5 lshift ( m 0 s 0|1 rot-mask )
+  >R IF \ Immediate shift ( m 0 s )
+    dup 0 32 within 0= ABORT" Immediate shift amount too big (0-31)"
+    7 lshift R> or ( m 0 encoded )
+  ELSE \ Register shift ( m 0 s )
+    8 lshift R> or $10 or ( m 0 encoded )
+  THEN
+  >R ?reg R> or ;
+
+
+\ The actual DP instructions have some with three arguments (eg. add) and some
+\ with only two (eg. cmp, mov). (dp) captures both.
+: (dp)  ( op2 rn 0 rd 0 opcode -- )
+  21 lshift >R
+  ?reg 12 lshift R> or >R
+  ?reg 16 lshift R> or >R ( op2   R: op )
+  (op2) R> or +S +cond asm, ;
+
+\ 3-argument regular operations
+: (dp3) ( opcode "name" --      X: op2 rn 0 rd 0 -- )
+  CREATE , DOES> @ (dp) ;
+$0 (dp3) and,   $1 (dp3) eor,   $2 (dp3) sub,   $3 (dp3) rsb,
+$4 (dp3) add,   $5 (dp3) adc,   $6 (dp3) sbc,   $7 (dp3) rsc,
+$c (dp3) orr,   $e (dp3) bic,
+
+\ 2-argument data operations like MOV (no Rn)
+: (dp2) ( opcode "name" --      X: op2 rd 0 -- )
+  CREATE , DOES> @ >R r0 2swap R> ( op2 rn=0 0 rd 0 opcode ) (dp) ;
+$d (dp2) mov,   $f (dp2) mvn,
+
+\ 2-argument comparison operations like CMP (no Rd)
+: (dpS) ( opcode "name" --      X: op2 rn 0 -- )
+  CREATE , DOES> @ >R r0 S R> ( op2 rn 0 rd=0 0 opcode ) (dp) ;
+$8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
+
+
+\ TODO MRS and MSR, if I need them.
+
+\ Multiply ===================================================================
+\ cccc 0000 00AS dddd nnnn ssss 1001 mmmm
+\ rs rm rd mul,
+\ rn rs rm rd mla,
+
+\ Helper that sets everything but A and Rn, since that's optional.
+: (mul) ( rs 0 rm 0 rd 0 -- encoded )
+  ?reg 16 lshift >R
+  ?reg           R> or >R
+  ?reg  8 lshift R> or +S +cond $90 or ;
+
+: mul, ( rs 0 rm 0 rd 0 -- ) (mul) asm, ;
+: mla, ( rn 0 rs 0 rm 0 rd 0 -- ) (mul) >R ?reg 8 lshift R> or asm, ;
+
+
+\ Multiply Long ==============================================================
+\ cccc 0000 1UAS hhhh llll ssss 1001 mmmm
+\ UMULL, SMULL, UMLAL, and SMLAL all have the same syntax:
+\ UMULL rdlo, rdhi, rm, rs
+\ The only difference in encoding is the U and A bits.
+: (mull) ( rs 0 rm 0 rdhi 0 rdlo 0 ua )
+  >R
+  ?reg 12 lshift R> or >R
+  ?reg 16 lshift R> or >R
+  ?reg           R> or >R
+  ?reg  8 lshift R> or
+  +S +cond $00800090 or asm, ;
+
+: umull, ( rs 0 rm 0 rdhi 0 rdlo 0 -- ) 0         (mull) ;
+: smull, ( rs 0 rm 0 rdhi 0 rdlo 0 -- ) $00400000 (mull) ;
+: umlal, ( rs 0 rm 0 rdhi 0 rdlo 0 -- ) $00200000 (mull) ;
+: smlal, ( rs 0 rm 0 rdhi 0 rdlo 0 -- ) $00600000 (mull) ;
+
+
+\ Single Data Transfer =======================================================
+\ I=0  immediate offset   cccc 01IP UBWL nnnn dddd iiii iiii iiii
+\ I=1  shifted reg offset cccc 01IP UBWL nnnn dddd ssss ssss mmmm
+\ Note that the I bits are reversed for historical reasons.
+\ The shifted register form is the same as for Op2 in data processing.
+\ That's not true of the immediate form, though!
+\ PC-relative loading has to account for PC being 8 bytes ahead; the assembler
+\ doesn't do this for explicitly specified pc as base, currently!
+
+\ Addressing modes:
+\ - Literal addresses (eg. addr #) will be assembled as PC-relative pre-indexed
+\   which may or may fit.
+\ - With no indexing, rn []   (this actually assembles a literal pre-index of 0)
+\ - Pre-indexing:  op2 rn [+]  or [+]! for writeback, also [-] [-]! for negative
+\ - Post-indexing: op2 rn []+  or []-   (writeback is implied)
+
+: (ldr-offset) ( op2 -- encoded )
+  \ op2 can be just a register: r 0, or an immediate imm 1,
+  \ or a shifted reg. The shifted regs start with $80-$83 on top.
+  dup $80 $84 within IF (op2) $02000000 or EXIT THEN
+  IF ( imm )
+    dup 0 $1000 within 0= ABORT" Immediate ldr/str offset too big"
+    \ Otherwise it just goes straight in the bottom 12 bits.
+  ELSE ( reg )
+    \ Encode this as 00r and set the I bit.
+    $02000000 or
+  THEN ;
+
+\ Pre-indexing modes, used like this relative to classic ARM syntax:
+\ [r4, #4]!             4 # r4 [+]!
+\ [r4, + r3 lsr #4]!    r3 4 # lsr   r4 [+]!
+\ [r4, - r3 lsr r5]     r3 r5  lsr   r4 [-]
+: ([]) ( op2 rn 0 flags -- encoded )
+  >R   ?reg 16 lshift R> or >R   (ldr-offset)   R> or ;
+
+: [+]  ( op2 rn 0 -- op2 rn 0 UPw ) $01800000 ([]) ;
+: [+]! ( op2 rn 0 -- op2 rn 0 UPw ) $01a00000 ([]) ;
+: [-]  ( op2 rn 0 -- op2 rn 0 uPW ) $01000000 ([]) ;
+: [-]! ( op2 rn 0 -- op2 rn 0 uPW ) $01200000 ([]) ;
+
+\ Shorthand for the common case of no indexing.
+\ r3 []   is equivalent to 0 # r3 [+]
+: [] ( rn 0 -- op2 rn 0 pre-I ) 2>R 0 # 2R> [+] ;
+
+\ Post-indexing modes, used like this relative to classic ARM syntax:
+\ [r4], #4            4 # r4 []+
+\ [r4], r3 lsl #2     r3 2 # lsl r4 []+
+: []+  ( op2 rn 0 -- op2 rn 0 UpW ) $00a00000 ([]) ;
+: []-  ( op2 rn 0 -- op2 rn 0 UpW ) $00200000 ([]) ;
+
+: (ldr) ( encoded-addr rd 0 flags -- )
+  >R ?reg 12 lshift R> or or $04000000 or +cond asm, ;
+
+: ldr,  ( encoded-addr rd 0 -- ) $00100000 (ldr) ;
+: str,  ( encoded-addr rd 0 -- ) $00000000 (ldr) ;
+: ldrb, ( encoded-addr rd 0 -- ) $00500000 (ldr) ;
+: strb, ( encoded-addr rd 0 -- ) $00400000 (ldr) ;
+
+
+\ TODO Halfwords and signed bytes, and SWP, if needed.
+
+\ Block Data Transfer ========================================================
+\ cccc 100P USWL nnnn rrrr rrrr rrrr rrrr
+
+\ For the register lists, we write {{ r1 r4 r6 }} or whatever.
+\ }} leaves the 16-bit field on the stack.
+\ An end marker for }} to consume.
+: {{ -1 ;
+
+: }} ( -1 r 0 r 0 ... -- reg-bits )
+  0 >R BEGIN 0= WHILE 1 swap lshift R> or >R REPEAT R> ;
+
+\ The inner LDM/STM operation:
+: (ldm/stm) ( reg-bits rn 0 flags -- )
+  >R ?reg 16 lshift R> or or +cond $08000000 or asm, ;
+
+\ Now working through all 16 combinations: PU-WL
+:  stmda,  ( reg-bits rn 0 -- ) $08000000 (ldm/stm) ; \ puwl
+:  ldmda,  ( reg-bits rn 0 -- ) $08100000 (ldm/stm) ; \ puwL
+: !stmda,  ( reg-bits rn 0 -- ) $08200000 (ldm/stm) ; \ puWl
+: !ldmda,  ( reg-bits rn 0 -- ) $08300000 (ldm/stm) ; \ puWL
+:  stmia,  ( reg-bits rn 0 -- ) $08800000 (ldm/stm) ; \ pUwl
+:  ldmia,  ( reg-bits rn 0 -- ) $08900000 (ldm/stm) ; \ pUwL
+: !stmia,  ( reg-bits rn 0 -- ) $08a00000 (ldm/stm) ; \ pUWl
+: !ldmia,  ( reg-bits rn 0 -- ) $08b00000 (ldm/stm) ; \ pUWL
+:  stmdb,  ( reg-bits rn 0 -- ) $09000000 (ldm/stm) ; \ Puwl
+:  ldmdb,  ( reg-bits rn 0 -- ) $09100000 (ldm/stm) ; \ PuwL
+: !stmdb,  ( reg-bits rn 0 -- ) $09200000 (ldm/stm) ; \ PuWl
+: !ldmdb,  ( reg-bits rn 0 -- ) $09300000 (ldm/stm) ; \ PuWL
+:  stmib,  ( reg-bits rn 0 -- ) $09800000 (ldm/stm) ; \ PUwl
+:  ldmib,  ( reg-bits rn 0 -- ) $09900000 (ldm/stm) ; \ PUwL
+: !stmib,  ( reg-bits rn 0 -- ) $09a00000 (ldm/stm) ; \ PUWl
+: !ldmib,  ( reg-bits rn 0 -- ) $09b00000 (ldm/stm) ; \ PUWL
+
+: push, ( reg-bits -- ) sp !stmdb, ;
+: pop,  ( reg-bits -- ) sp !ldmia, ;
+
+
+\ SWP ========================================================================
+\ cccc 0001 0B00 nnnn dddd 0000 1001 mmmm
+\ rn rm rd swp,   reads from [Rn], writing rm to memory and the memory to rd.
+: (swp) ( rn 0 rm 0 rd 0 flags -- )
+  >R
+  ?reg 12 lshift R> or >R
+  ?reg           R> or >R
+  ?reg 16 lshift R> or
+  $01000090 or +cond asm, ;
+
+: swp,  ( rn 0 rm 0 rd 0 -- ) 0         (swp) ;
+: swpb, ( rn 0 rm 0 rd 0 -- ) $00400000 (swp) ;
+
+
+\ TODO SWI if I need it.
+
+
+: dump ( c-addr u -- )
+  cr cr ." Assembling to " 2dup type cr
+  W/O BIN create-file ABORT" Failed to open output file" >R
+  output   max-out @ 1+ 2*   R@ write-file ABORT" Failed to write"
+  R@ flush-file ABORT" Failed to flush"
+  R> close-file ABORT" Failed to close" ;
+
+

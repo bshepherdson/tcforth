@@ -32,15 +32,8 @@ target : QUIT ( -- )
   0  'source-id !
   (QUIT) ;
 
-: .intro ( -- ) white fg! light blue bg!
-  \  01234567890123456789012345678901
-  ."        TC-FORTH version 7       "
-  default-colours cr ;
-
 \ Initiates a cold start - locate and init the hardware, then QUIT.
-: cold ( -- )
-  init-devices init-lem init-serial
-  .intro QUIT ;
+: cold ( -- ) init-hardware   '.intro @ execute   QUIT ;
 
 host   T' COLD   entry-point t!
 

@@ -4,6 +4,8 @@ default: dcpu16
 FORTH ?= gforth
 EMULATOR ?= tc-dcpu
 
+ARM_PREFIX ?= arm-none-eabi-
+
 forth-dcpu16.bin: host/*.ft dcpu16/*.ft shared/*.ft
 	$(FORTH) dcpu16/main.ft dcpu16/disks.ft dcpu16/tail.ft
 
@@ -13,6 +15,10 @@ forth-rq16.bin: host/*.ft rq16/*.ft shared/*.ft dcpu16/disks.ft dcpu16/hardware.
 	$(FORTH) rq16/main.ft dcpu16/disks.ft rq16/tail.ft
 
 rq16: forth-rq16.bin
+
+forth-arm.bin: host/*.ft arm/*.ft shared/*.ft
+	$(FORTH) arm/main.ft arm/tail.ft
+	$(ARM_PREFIX)-as -mcpu=arm926ej-s -g startup.s
 
 test: forth-dcpu16.bin forth-rq16.bin test/*.ft
 	cat test/harness.ft test/basics.ft test/comparisons.ft test/arithmetic.ft \

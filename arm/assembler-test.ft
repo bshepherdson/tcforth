@@ -15,6 +15,11 @@ error? off
   REPEAT drop
   depth start-depth @ swap - IF S" Expectation longer than actual " error THEN ;
 
+\ Branches ===================================================================
+T{ 0        b, -> $eafffffe }T
+T{ $100     b, -> $ea00003e }T
+T{ $100 ne? b, -> $1a00003e }T
+
 
 \ Data Processing ============================================================
 T{ r0   r1 r2     add, -> $e0812000 }T
@@ -56,6 +61,11 @@ T{ $abc #     r4 [+]  r8 strb, -> $e5c48abc }T  \ UBwl
 T{ $abc #     r4 [+]  r8 ldrb, -> $e5d48abc }T  \ UBwL
 T{ $abc #     r4 [+]! r8 strb, -> $e5e48abc }T  \ UBWl
 T{ $abc #     r4 [+]! r8 ldrb, -> $e5f48abc }T  \ UBWL
+
+\ PC-relative loads ==========================================================
+T{ $978 r3 ldr-pc,             -> $e59f3970 }T
+T{ -16  r3 ldr-pc,             -> $e51f3018 }T
+
 
 
 \ Multiple Data Transfer - LDM and STM =======================================

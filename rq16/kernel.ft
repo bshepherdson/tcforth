@@ -485,9 +485,6 @@ label (MOVE>)
 end-code
 
 
-code CMOVE>   (MOVE>) b, end-code-bare
-code CMOVE<   (MOVE<) b, end-code-bare
-
 code (DO) ( limit index --   R: -- limit index )
   {{ r0 }} pop, \ limit -> r0
   r0  pushrsp,

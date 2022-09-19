@@ -1,0 +1,65 @@
+\ Target words to get metacompiled, that hide the details of the machine and the
+\ Forth model (eg. ITC vs. DTC vs. STC)
+\ This file: DTC on ARMv4 32-bit.
+
+\ >CFA is already defined, so is ,DOCOL.
+target definitions
+
+\ ARM BL  is cccc 101L + 24-bit signed offset in words.
+\ XXX Assumes the target is in range!
+target : !CF ( codeword-addr xt -- )
+  dup >R \ Save the slot address.
+  8 + -    ( delta-bytes )
+  2 rshift ( delta-words )
+  $eb000000 or R> ! ;
+
+\ Add ,CF, which expects the address of the codeword on the stack.
+\ For DTC this is bl, to compile a branch to the target.
+target : ,CF ( codeword-addr -- ) here   0 ,   !cf ;
+
+\ Write the code field for a colon definition.
+\ This is   docol ,cf
+target : ,DOCOL ( -- ) [ host docol tliteral target ] ,CF ;
+
+\ 4-byte alignment on ARM 32-bit.
+target : ALIGNED   3 + 3 invert and ;
+target : ALIGN     here aligned dp ! ;
+
+\ Compiles a string literal into a thread.
+\ On ITC/DTC that means the address of DOSTRING, the length, then the words.
+target : ,DOSTRING ( c-addr u -- )
+  [ host dostring tliteral target ] compile,   \ Compile the codeword first.
+  dup >R c,        \ Then the length
+  here R@ move     \ And the text
+  R> chars allot   \ And make room for it.
+  aligned ;
+
+target : PAD ( -- addr ) [ host rp0 tliteral target ] ;
+
+\ DOES> ======================================================================
+\ Implementing sequence 2
+\ (DOES>) runs in eg. CONSTANT to properly compile a particular constant.
+\ Inside target (DOES>), TORS points at the EXIT. Just after it is the
+\ dodoes-code that should become the new codeword.
+target : (DOES>) R@ cell+   latest >cfa   !cf ;
+
+host T' (DOES>) '(DOES>) !
+host T' EXIT    'EXIT !
+
+\ TDOES runs during compilation TARGET : DOES> - compile code into its thread!
+host definitions
+
+\ Moves THERE back by 1 cell and pushes the most recently compiled word.
+: asm-lit ( -- w ) -4 there +!   here t@ ;
+
+: TDOES,
+  [T'] (DOES>) tliteral  [T'] compile, tcompile,
+  [T'] EXIT    tliteral  [T'] compile, tcompile,
+
+  \ The dodoes-code here gets the PFA in lr, so it needs to:
+  \ (1) push TOS; (2) lr tos mov, (3) docol bl,
+
+  [ {{ tos }} push, asm-lit tliteral ] [T'] , tcompile,
+  [ lr tos mov,     asm-lit tliteral ] [T'] , tcompile,
+  [ docol bl,       asm-lit tliteral ] [T'] , tcompile, ;
+

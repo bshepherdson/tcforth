@@ -1,0 +1,503 @@
+\ Kernel for 32-bit ARMv4T bare metal.
+\ This file runs in the HOST vocabulary, assembling CODE words into the target.
+\ We attempt to use macros from model.ft (already loaded) to hide details of
+\ the system design.
+
+\ These are HOST vocab words that define assembler words on the Target - their
+\ mirror words are regular.
+: code      ( "name" -- ) (TCREATE) ;
+: end-code  ( -- )        next, ;
+\ End marker, but no NEXT.
+: end-code-bare ( -- ) ;
+
+
+\ Compiles code to push a given literal, based on PC. This is useful for nearby
+\ variables in the kernel.
+: nearby, ( value reg -- )
+  2>R
+  there @ 8 + - dup 0< IF negate # pc 2R> sub, ELSE # pc 2R> add, THEN ;
+
+: push-nearby, ( value -- ) {{ tos }} push,   tos nearby, ;
+
+\ Standard dictionary headers: link, length+immediate+hidden word, len words of
+\ name, code field.
+
+: binary ( xt -- ) >R   {{ r0 }} pop,   tos r0 tos   R> execute ;
+
+code +     ' add, binary   end-code
+code -     ' sub, binary   end-code
+code *     ' mul, binary   end-code
+code AND   ' and, binary   end-code
+code OR    ' orr, binary   end-code
+code XOR   ' eor, binary   end-code
+
+: bin-shift ( shift-xt -- )
+  >R
+  {{ r0 }} pop, \ Shift amount in tos, value in r0.
+  r0 tos R> execute   tos mov, ;
+
+code LSHIFT   ' lsl bin-shift      end-code
+code RSHIFT   ' lsr bin-shift      end-code
+code ARSHIFT  ' asr bin-shift      end-code
+code 2*       tos 1 # lsl tos mov, end-code
+code 2/       tos 1 # asr tos mov, end-code
+
+\ No division operators, so there's code for this elsewhere.
+
+code INVERT   tos     tos mvn, end-code
+code NEGATE   0 # tos tos rsb, end-code
+
+\ Comparison operators all have the same shape with different branches.
+: comparison ( xt-true xt-false "name" -- )
+  >R >R
+  code
+    {{ r0 }} pop,
+    tos r0 cmp,   \ Sets the condition flags.
+    0 # tos R> execute mov,
+    0 # tos R> execute mvn,
+  end-code ;
+
+' eq? ' ne? comparison =
+' lt? ' ge? comparison <
+' cc? ' cs? comparison U<
+
+
+\ Stack operations
+code DUP    {{ tos }} push,   end-code
+code DROP   {{ tos }} pop,    end-code
+code OVER
+  {{ tos }} push,
+  4 # sp [+] tos ldr,
+end-code
+
+code SWAP   sp tos tos swp,   end-code
+
+code ROT ( c b a -- b a c )
+  {{ r0 r1 }} pop,
+  {{ r1  }} push,
+  {{ tos }} push,
+  r0 tos mov,
+end-code
+
+code -ROT ( c b a -- a c b )
+  {{ r0  r1 }} pop,
+  {{ tos r1 }} push,
+  r0 tos mov,
+end-code
+
+code ?DUP
+  0 # tos cmp,
+  {{ tos }} ne? push,
+end-code
+
+code NIP ( y x -- x )
+  4 # sp sp add,
+end-code
+
+code TUCK ( y x -- x y x )
+  {{ r0 }} pop,
+  {{ r0 tos }} push,
+end-code
+
+code 2DUP ( r0 tos -- r0 tos r0 tos )
+  sp [] r0 ldr,
+  {{ r0 tos }} push,
+end-code
+
+code 2DROP ( z y x tos -- z tos=y )
+  4 # sp sp add,
+  {{ tos }} pop,
+end-code
+
+code 2SWAP ( r2 r1 r0 tos -- r0 tos r2 r1 )
+  {{ r2 r1 r0 }} pop,
+  {{ r0 }}       push,
+  {{ tos r2 }}   push,
+  r1 tos mov,
+end-code
+
+code 2OVER ( z y x tos -- z y x tos z y )
+  8  # sp [+] r0 ldr,
+  {{ tos r0 }} push,
+  12 # sp [+] tos ldr,
+end-code
+
+
+code SP@
+  {{ tos }} push, \ Pushes TOS first so it counts in the SP.
+  sp tos mov,
+end-code
+
+code SP!   tos sp mov,   end-code
+
+code RP@
+  {{ tos }} push,
+  rsp tos mov,
+end-code
+
+code RP!
+  tos rsp mov,
+  {{ tos }} pop,
+end-code
+
+code >R    tos  pushrsp,     {{ tos }} push,   end-code
+code R>    {{ tos }} pop,    tos poprsp,       end-code
+code R@    {{ tos }} push,   rsp [] tos ldr,   end-code
+
+
+label 'sp0   sp0 asm,
+
+\ DEPTH is a bit weird with TOS in register. The bottom value in memory is
+\ actually whatever dummy value was in the TOS register when the first real
+\ value was pushed.
+\ BUT! sp0 if $...7f and not $..80, because that's the right value to  sp0 sp!
+\ in ABORT. So DEPTH actually pushes TOS early to move SP one notch "too far",
+\ then measures the depth from sp0, rather than the real empty SP.
+code DEPTH
+  {{ tos }} push,
+  'sp0        r0  ldr-pc,
+  sp      r0  tos sub,
+  tos 2 # lsr tos mov, \ Convert bytes to cells
+end-code
+
+
+\ Memory =====================================================================
+code @
+  tos [] tos ldr,
+end-code
+
+code !
+  {{ r0 }}  pop,
+  tos [] r0 str,
+  {{ tos }} pop,
+end-code
+
+code C@
+  tos [] tos ldrb,
+end-code
+
+code C!
+  {{ r0 }}  pop,
+  tos [] r0 strb,
+  {{ tos }} pop,
+end-code
+
+\ These store hi, lo in memory, but push as ( lo hi ) double-words.
+code 2@
+  \ hi goes in TOS, lo gets pushed.
+  4 # tos [+] r0  ldr, \ lo -> r0
+  {{ r0 }} push,
+  tos     []  tos ldr, \ hi -> tos
+end-code
+
+code 2! ( lo hi addr -- )
+  {{ r0 r1 }} pop,    \ hi -> r0, lo -> r1
+  4 # tos []+ r0 str, \ Store hi at [tos]; bump tos.
+  tos     []  r1 str, \ Store lo at [tos+4]
+  {{ tos }}   pop,    \ Replace TOS
+end-code
+
+code +!
+  {{ r0 }} pop,  \ delta -> r0
+  tos [] r2 ldr, \ value -> r2
+  r0 r2 r2  add, \ value + delta -> r2
+  tos [] r2 str, \ store value'
+  {{ tos }} pop,
+end-code
+
+\ Leave IP alone. Jump directly into the target's code field.
+\ The EXECUTEd word's NEXT will continue after here (eventually).
+code EXECUTE
+  tos r0 mov,
+  {{ tos }} pop,
+  r0 bx,
+end-code-bare \ The above BX never returns, of course.
+
+code BREAK ( n -- )
+  \ TODO Is there any kind of system monitor I could use?
+  \ This is a no-op for now, just DROP.
+  {{ tos }} pop,
+end-code
+
+
+
+\ Variables and core states ==================================================
+label var_dp          0 asm,
+label var_latest      0 asm,
+label var_base        0 asm,
+label var_state       0 asm,
+label var_handler     0 asm,
+
+label var_last_parse  0 asm, 0 asm,
+label var_source      0 asm, 0 asm,
+label var_in_ptr      0 asm,
+label var_source_id   0 asm,
+label input-buf       128 there +!
+
+code DP
+  var_dp push-nearby,
+end-code
+
+code ,
+label (compile)
+  var_dp r0 nearby,    \ 'dp -> r0
+  r0     []  r1  ldr,  \ dp  -> r1
+  4 # r1 []+ tos str,  \ tos -> [dp], bump dp
+  r0     []  r1  str,  \ Write back dp
+  {{ tos }} pop,
+end-code
+
+\ COMPILE, is identical to , so just jump there.
+code COMPILE, (compile) b, end-code-bare
+
+code C,
+  var_dp r0 nearby,    \ 'dp -> r0
+  r0     []  r1  ldr,  \ dp  -> r1
+  1 # r1 []+ tos strb, \ tos -> [dp], bump dp
+  r0     []  r1  str,  \ Write back dp
+  {{ tos }} pop,
+end-code
+
+
+code HANDLER      var_handler    push-nearby, end-code
+code 'LATEST      var_latest     push-nearby, end-code
+code STATE        var_state      push-nearby, end-code
+code BASE         var_base       push-nearby, end-code
+code 'SOURCE      var_source     push-nearby, end-code
+code 'SOURCE-ID   var_source_id  push-nearby, end-code
+code >IN          var_in_ptr     push-nearby, end-code
+code TIB          input-buf      push-nearby, end-code
+code LAST-PARSE   var_last_parse push-nearby, end-code
+
+
+\ More arithmetic ============================================================
+code 1+      1 # tos     tos add,  end-code
+code CELL+   4 # tos     tos add,  end-code
+code CHAR+   1 # tos     tos add,  end-code
+code 1-      1 # tos     tos sub,  end-code
+code CELLS   tos 2 # lsl tos mov,  end-code
+code CHARS end-code
+
+code CELL    {{ tos }} push,   4 # tos mov,   end-code
+
+
+\ Double-cell arithmetic =====================================================
+code S>D
+  {{ tos }} push,
+  0 # tos cmp,
+  0 # tos pl? mov, \ 0 if positive
+  0 # tos mi? mvn, \ -1 if negative
+end-code
+
+\ D>S is drop
+code D>S  {{ tos }} pop,   end-code
+
+code D+  ( l1 h1 l2 h2 -- l3 h3 )
+  {{ r2 r1 r0 }} pop, \ r2 l1   r1 h1   r0 l2   tos h2
+  r2 r0  r0  add,     \ l1 + l2 = l3 -> r0
+  r1 tos tos adc,     \ h1 + h2 + C = h2 -> tos
+  {{ r0 }} push,
+end-code
+
+code D-  ( l1 h1 l2 h2 -- l3 h3 )
+  {{ r2 r1 r0 }} pop, \ r2 l1   r1 h1   r0 l2   tos h2
+  r2 r0  r0  sub,     \ l1 - l2 = l3 -> r0
+  r1 tos tos sbc,     \ h1 + h2 + C = h2 -> tos
+  {{ r0 }} push,
+end-code
+
+code UDM* ( l1 h1 u2 -- l3 h3 ) \ That is, multiply unsigned double by single.
+  \ ARM supports multiplying two 32-bit integers to produce a 64-bit result!
+  {{ r0 r1 }} pop,   \ l1 -> r1   h2 -> r0   u2 -> tos
+  \ First multiply l1 * u2 -> r4:r3
+  \ This assembler's syntax is rs rm rdhi rdlo umull,
+  r1 tos r4 r3 umull,    \ l1*u2 -> r4:r3; r3 is the low final result.
+  \ Now do a UMLAL h1*u2, into r5:r4. That is, the existing upper result is
+  \ added to the low half of this upper multiply.
+  r0 tos r5 r4 umlal,    \ h1*u2 + r4 -> r5:r4; r4 is the high final result.
+  {{ r3 }} push,
+  r4 tos mov,
+end-code
+
+code UM/MOD ( ulo uhi udiv -- ur uq )
+  \ Dividing a 64-bit unsigned dividend by an unsigned 32-bit divisor to get
+  \ an unsigned 32-bit quotient and unsigned 32-bit remainder.
+  \ This works by successive bit-shifting until we run out of divisor bits.
+  \ The dividend goes into r0:r1, and then r0 becomes the remainder and r1 the
+  \ quotient.
+  \ Each steps shifts this pair left, moving the top bit of the low/quotient
+  \ into the high/remainder.
+  \ We shift in a 0 there, but if the remainder is >= the divisor, we subtract
+  \ the divisor from the remainder and make bit 0 of the quotient 1.
+  \ After cycling for as many bits as the divisor is wide (32), all the dividend
+  \ bits have been shifted out of the quotient, and the remainder holds exactly
+  \ the remainder we want!
+  {{ r1 r0 }} pop, \ r0 = high dividend/remainder; r1 = low dividend/quotient
+  32 # r2 mov,     \ r2 = bit counter
+
+  label UM/MOD-loop
+    \ Shift r0:r1 left as a 64-bit value.
+    r0  1 # lsl r0   mov,  \ hi first
+    r1  1 # lsl r1 S mov,  \ then lo, with flags: C gets the last bit shifted out
+    cs? 1 # r0  r0   add,  \ And a 1 is added to hi if that bit was a 1.
+
+    \ Now if our remainder (r0) is unsigned-lower-or-same as the divisor (TOS)
+    \ we can divide once: subtract divisor from remainder, add a 1 bit to the
+    \ quotient.
+    tos r0 cmp,        \ Checking remainder/r0 U<= divisor/TOS
+    hi? tos r0 r0 sub, \ Only do this if it's unsigned higher, ie. remainder < TOS
+    hi? 1 # r1 r1 orr,
+
+    1 # r2 r2 sub,
+  UM/MOD-loop ne? b, \ Keep looping if it's not 0 yet.
+
+  \ Now r0 is the remainder, r1 the quotient.
+  {{ r0 }} push,
+  r1 tos mov,     ( rem quot )
+end-code
+
+
+\ Branches ===================================================================
+\ Like the DCPU model, ARM uses 32-bit absolute targets in the thread.
+code (BRANCH)
+  ip [] ip ldr,
+end-code
+
+code (0BRANCH)
+  4 # ip []+ r1 ldr, \ Branch dest in r1; bump IP past it.
+  tos tos S mov,     \ Make TOS the flags.
+  eq? r1 ip mov,     \ Make the branch dest the new IP if TOS is 0.
+  \ Otherwise IP is after the branch slot, as intended.
+  {{ tos }} pop,     \ New TOS either way.
+end-code
+
+
+\ Words
+code EXIT
+  \ Get the target XT for EXIT and stash it in a forward reference.
+  here 'EXIT !
+  \ Actual code for an EXIT
+  ip poprsp,
+end-code
+
+code >CFA ( nt -- xt )
+  4 # tos [+] r0 ldrb,  \ Get the length byte -> r0.
+  mask_len # r0 r0 and, \ Mask the length to be just the length.
+  r0 tos       tos add, \ And advance TOS that far.
+  \ Add 4 to skip the link pointer, 1 for the length byte, and 3 for alignment:
+  8 # tos tos    add,   \ Skip over the link pointer and length byte.
+  \ And mask out the low bits to align TOS - this is the xt.
+  3 # tos tos    bic,
+end-code
+
+
+\ MOVEs ======================================================================
+code MOVE< ( src dst u -- ) \ Copies from low addresses to high.
+  \ Length is in TOS
+  {{ r1 r0 }} pop, \ r1 is source, r0 is dest
+
+  0 # tos cmp,
+  fwd b, \ Jump ahead to the loop tail, in case length is 0.
+
+  \ TODO Word-sized copying for speed?
+  label MOVE<-loop
+    1 # r1 []+ r2 ldr,
+    1 # r0 []+ r2 str,
+    1 # tos tos S sub,
+    resolve
+    ne? MOVE<-loop b, \ Loop until it's 0
+
+  \ Pop a new TOS
+  {{ tos }} pop,
+end-code
+
+code MOVE> ( src dst u -- ) \ Copies from high addresses to low.
+  \ Length is in TOS
+  {{ r1 r0 }} pop, \ r1 is source, r0 is dest
+
+  0 # tos cmp,
+  eq? fwd b,   \ Jump ahead to the end if the length is 0.
+
+  label MOVE>-loop
+    1 # tos tos S sub,
+    tos r1 [+] r2 ldr,
+    tos r0 [+] r2 str,
+    ne? MOVE>-loop b, \ Loop until it's 0
+
+  \ Pop a new TOS
+  resolve
+  {{ tos }} pop,
+end-code
+
+
+\ TODO Index in register? ARM has tons to spare, and it'll be faster.
+code (DO) ( limit index --   R: -- limit index )
+  {{ r0 }} pop, \ limit -> r0;   index in TOS
+  r0  pushrsp,
+  tos pushrsp,
+  {{ tos }} pop, \ replace TOS
+end-code
+
+code (LOOP-END) ( delta -- done?   R: limit index -- limit index2 )
+  rsp     []  r3 ldr,     \ index -> r3
+  4 # rsp [+] r4 ldr,     \ limit -> r4
+  r4 r3 r2       sub,     \ i-l   -> r2
+  \ TOS has the delta.
+  r2  tos     r0   add,   \ delta + index - limit -> r0
+
+  \ First check: (delta + index - limit) and (index - limit) have the same sign.
+  \ On XORing them, the top bit will be 0 if they have the same sign, 1 if
+  \ different. A top bit of 1 means negative.
+  0 #         r1   mov,   \ flag defaults to false
+  r2  r0      r0 S eor,   \ d+i-l ^ i-l -> r0
+  pl? 0 # r1 mvn,         \ Same-sign flag -> r1
+
+  \ Then calculate delta XOR index - limit
+  0 #     r0   mov,
+  tos r2  r2 S eor,
+  pl? 0 # r0   mvn,       \ Want-same-sign flag is true if the top bit is 0, ie. same.
+
+  tos r3 r3  add,         \ delta + index -> r3, the new index.
+  rsp [] r3  str,         \ Write that out.
+  r1  r0 r0  orr,         \ OR the two flags
+  r0     tos mvn,         \ and invert the result, into TOS as done? flag
+end-code
+
+code UNLOOP ( --   R: limit index -- )
+  8 # rsp rsp add,
+end-code
+
+code I ( -- index   R: index -- index )
+  {{ tos }}  push,
+  rsp [] tos ldr,
+end-code
+
+code J ( -- index1   R: index1 limit2 index2 -- index1 limit2 index2 )
+  {{ tos }} push,
+  8 # rsp [+] tos ldr,
+end-code
+
+
+
+\ TODO Interrupt handling? The current system doesn't actually use them.
+label interrupt-handler
+  here b,   \ Just spin, we're not really handling these.
+
+
+\ XXX remove me
+label uart0dr $101f1000 asm,
+
+\ Main =======================================================================
+\ Machine code entry point, jumped to be the first instructions.
+label main
+  65 #    r1 mov,
+  uart0dr r0 ldr-pc,
+  r0 []   r1 str,
+
+  \ Starts with interrupts disabled.
+  rp0 # rsp mov,
+  'sp0  sp  ldr-pc,
+
+  entry-point r0 ldr-pc, \ entry-point is a variable holding an xt; xt -> r0
+  r0 bx,                 \ Jump right into that word's code field.
+

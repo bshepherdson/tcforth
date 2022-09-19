@@ -1,18 +1,27 @@
-\ Entry point for metacompiling the portable kernel to Risque-16.
+\ Entry point for metacompiling the portable kernel to ARM 32-bit.
 \ Most of the heavy lifting is done in other files, this is just orchestrating.
 
 REQUIRE ../host/vocabularies.ft
 
 host definitions REQUIRE assembler.ft
 
+\ The QEMU ARM system starts executing user code at $10000.
+\ We need to assemble at that location, then 
+$10000 org!
+
 host REQUIRE ../host/helpers.ft
-host REQUIRE model.ft                      \ Machine-specific model words
+host REQUIRE model.ft
 host REQUIRE ../host/dictionary.ft
 host REQUIRE ../host/mirrors.ft
 
 \ Now we have what we need to metacompile the CODE definitions at the heart of
 \ the new kernel.
-host definitions REQUIRE kernel.ft
+host REQUIRE kernel.ft
+
+\ Overwrite the jump target of the entry point at $10000 to be main.
+there @   $10000 there !
+main b,
+there !
 
 \ The main part of the metacompiler
 host REQUIRE ../host/metacompiler.ft
@@ -28,17 +37,15 @@ host REQUIRE model-target.ft
 host REQUIRE ../shared/input.ft
 host REQUIRE ../shared/core2.ft
 
-\ More Risque-16 code that supplements the core library.
-host REQUIRE lib.ft
-
-\ These DCPU-16 files work for Risque-16 as well since it's the same hardware!
-host definitions REQUIRE ../dcpu16/hardware.ft
-host definitions REQUIRE ../dcpu16/screen.ft
-
+\ Machine-specific files go here
+host REQUIRE serial.ft
+host REQUIRE terminal.ft
 
 \ More shared files
 host definitions REQUIRE ../shared/output.ft
 host definitions REQUIRE ../shared/error-messages.ft
+
+host definitions REQUIRE intro.ft
 
 \ And finally the startup code!
 host definitions REQUIRE ../shared/init.ft
@@ -48,3 +55,4 @@ host definitions REQUIRE ../shared/init.ft
 
 \ Known-missing words ========================================================
 \ Core: ENVIRONMENT? WORD
+

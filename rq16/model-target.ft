@@ -18,7 +18,7 @@ target : ,DOCOL ( -- ) [ host docol tliteral target ] ,CF ;
 target : ,DOSTRING ( c-addr u -- )
   [ host dostring tliteral target ] compile,   \ Compile the codeword first.
   dup >R c,        \ Then the length
-  here R@ cmove    \ And the text
+  here R@ move     \ And the text
   R> chars allot ; \ And make room for it.
 
 \ No alignment on Risque-16 and other wordy machines.
@@ -40,10 +40,6 @@ host T' EXIT    'EXIT !
 
 \ Runs during compilation TARGET : DOES> - compile code into its thread!
 host definitions
-
-\ Moves THERE back by u and pushes the most recently compiled words onto the
-\ stack (low address first).
-: asm-lit ( u -- w ... ) dup negate there +!   0 DO there @ i + t@ LOOP ;
 
 : TDOES,
   [T'] (DOES>) tliteral  [T'] compile, tcompile,

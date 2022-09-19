@@ -441,9 +441,6 @@ label (MOVE>)
   ra ri set, \ Restore IP before NEXT.
 end-code
 
-code CMOVE>   (MOVE>) # pc set,  end-code-bare
-code CMOVE<   (MOVE<) # pc set,  end-code-bare
-
 \ A jsr docol for reference.
 label jsr_docol   docol # jsr,
 

@@ -4,7 +4,7 @@
 \ Canonical ARM:     add r0, r1, r2      ldr r4, [r6, #-12]
 \ This assembler:    r2 r1 r0 add,       -12 # r6 [+] r4 ldr,
 
-CREATE output 256 1024 * allot
+8 1024 * 1024 * allocate drop   CONSTANT output
 VARIABLE there
 0 there !
 VARIABLE max-out
@@ -18,22 +18,32 @@ VARIABLE max-out
 
 \ 32-bit cells are written little-endian.
 : t@ ( t-addr -- w )
-  ta >R
+  dup +max ta >R
   R@     c@
   R@ 1+  c@  8 lshift or
   R@ 2 + c@ 16 lshift or
   R> 3 + c@ 24 lshift or ;
 
 : t! ( w t-addr -- )
-  ta >R
+  dup +max ta >R
   dup           $ff and R@     c!
   dup  8 rshift $ff and R@ 1+  c!
   dup 16 rshift $ff and R@ 2 + c!
       24 rshift $ff and R> 3 + c! ;
 
+: tc@ ( t-addr -- b ) dup +max ta c@ ;
+: tc! ( b t-addr -- ) dup +max ta c! ;
+
+\ Holds the low address of the assembly, manually set. This is the first byte
+\ in a dump. Call org! to set this and THERE properly.
+VARIABLE org-point
+
+: org! ( addr -- ) dup there ! org-point ! ;
+
 4 CONSTANT instr-width
 
-: asm, ( w -- ) there @ t!   instr-width there +! ;
+: asm,      ( w -- ) there @ t!    instr-width there +! ;
+: asm-byte, ( b -- ) there @ tc!   1           there +! ;
 
 : label ( "name" --    X: -- t-addr ) there @ CONSTANT ;
 
@@ -121,9 +131,9 @@ VARIABLE S?   0 S? !
 : (b) ( abs-addr link-mask -- )
   >R
   dup 3 and 0<> ABORT" B and BL addresses must be word-aligned"
-  there @ 8 +   swap - ( delta-bytes ) 2 rshift ( delta-words )
-  dup 24 rshift ( delta upper ) dup $ff =   swap 0= or 0= ABORT" Branch too far"
-  R> or $0a000000 or   +cond asm, ;
+  there @ 8 +   - ( delta-bytes ) 2/ 2/ ( delta-words )
+  dup   -1 $7fffff invert and   $800000   within 0= ABORT" Branch too far"
+  $ffffff and R> or $0a000000 or   +cond asm, ;
 
 : b,   0         (b) ;
 : bl,  $01000000 (b) ;
@@ -290,8 +300,17 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
 : ldrb, ( encoded-addr rd 0 -- ) $00500000 (ldr) ;
 : strb, ( encoded-addr rd 0 -- ) $00400000 (ldr) ;
 
+\ Does a PC-relative load of an absolute address.
+: ldr-pc, ( value rd 0 -- )
+  \ We want ultimately to have:  delta # pc 0 [-]/[+] rd 0 ldr,
+  \ PC counts from 8 bytes ahead.
+  2>R             ( abs )
+  there @ 8 + -   ( delta )
+  dup 0< IF negate # pc [-] ELSE # pc [+] THEN ( +delta # pc 0 [+]/[-] )
+  2R> ldr, ;
 
-\ TODO Halfwords and signed bytes, and SWP, if needed.
+
+\ TODO Halfwords and signed bytes if needed.
 
 \ Block Data Transfer ========================================================
 \ cccc 100P USWL nnnn rrrr rrrr rrrr rrrr
@@ -347,10 +366,21 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
 \ TODO SWI if I need it.
 
 
+\ Control structures =========================================================
+\ Branch ops already take an absolute target; easy enough to use LABEL.
+\ fwd beq, compiles a dummy relative offset and leaves there on the stack.
+: fwd ( -- loc abs-target ) there @ dup 100 + ;
+
+\ Resolve expects a loc on the stack, and resolves it to point to here.
+: resolve ( loc -- ) there @ >R   there !   R@ b,   R> there ! ;
+
+
+
 : dump ( c-addr u -- )
   cr cr ." Assembling to " 2dup type cr
   W/O BIN create-file ABORT" Failed to open output file" >R
-  output   max-out @ 1+ 2*   R@ write-file ABORT" Failed to write"
+  org-point @ output +   max-out @ 1+ instr-width *
+  R@ write-file ABORT" Failed to write"
   R@ flush-file ABORT" Failed to flush"
   R> close-file ABORT" Failed to close" ;
 

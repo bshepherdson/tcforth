@@ -1,0 +1,163 @@
+\ ===================== MACHINE/MODEL DEPENDENT SECTION ======================
+\ DTC, TOS in register.
+\ r13/sp is data stack, r14/lr is used for links.
+\ r12 is IP, r11 is RSP, r10 is tos.
+: ip  r12 ;
+: rsp r11 ;
+: tos r10 ;
+
+\ bl docol, bl dovar, bl dodoes-code can fit into one cell.
+
+
+\ Standard dictionary headers: link, length+immediate+hidden word, len words of
+\ name, code field.
+
+\ This is a little surprising, but it makes sense when you think deeper:
+\ NATIVE HERE pushes the Host's dictionary pointer.
+\ HOST   HERE pushes the Target's dictionary pointer
+\ TARGET HERE is the mirror word that compiles the Target xt for HERE (!)
+HOST DEFINITIONS
+
+\ The assembler defines a THERE pointer for the Target dictionary.
+\ We capture that address as the HOST DP as well.
+there CONSTANT DP
+: here dp @ ;
+
+: t,        ( w -- )  asm, ;
+: tc,       ( b -- )  asm-byte, ;
+
+\ First line of code, the entry point. It'll be a jump to main eventually.
+there @ b,
+
+
+\ Some assembler macros
+: next,    ( -- ) instr-width # ip []+ pc ldr, ;
+: pushrsp, ( r 0 -- ) 2>R {{ 2R> }} rsp !stmdb, ;
+: poprsp,  ( r 0 -- ) 2>R {{ 2R> }} rsp !ldmia, ;
+
+: tchars    ( n -- n2 ) ;
+: tchar+    ( n -- n2 ) 1+ ;
+: tcells    ( n -- n2 ) 2 lshift ;
+: tcell+    ( n -- n2 ) 4 + ;
+: tcompile, t, ;
+: taligned  ( x -- x2 ) 3 + 3 invert and ;
+: talign    ( -- )      here taligned dp ! ;
+
+32 CONSTANT tcellbits  \ 32 bits per cell
+ 8 CONSTANT tbits      \ 8 bits per address unit
+
+VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
+: LATEST ( -- nt ) 'latest @ ;
+0 'latest !
+
+\ This is called with BL, so lr holds the address after the code field, which is
+\ the thread.
+cr cr cr S" DOCOL at " there @ hex.
+label DOCOL
+  ip pushrsp,
+  lr ip mov,
+  next,
+
+docol hex. cr cr
+
+\ DOVAR is the code word for a CREATEd definition without a DOES> - it pushes
+\ the address of the parameter field. The parameter field address is in lr.
+label DOVAR
+  {{ tos }} push,
+  lr tos mov,
+  next,
+
+\ DOES> design for DTC =======================================================
+\ This is different from the original TC-Forth DODOES scheme.
+\ Sequence 1: while eg. : CONSTANT create , DOES> @ ; is being defined.
+\ Sequence 2: while CONSTANT is running, defining a new constant.
+\ Sequence 3: while a particular constant is executing.
+
+\ DOES> is an immediate word, it runs during "Sequence 1".
+\ It compiles   (DOES>) EXIT dodoes-code   at the end of CONSTANT.
+\ Then the Forth code after DOES> is compiled. The final CONSTANT looks like:
+\ link | len | CONSTANT | bl docol | CREATE | , | (DOES>) | EXIT |
+\    dodoes-code | @ | EXIT
+\ Sequence 2 (eg. 7 CONSTANT FOO) CREATEs the new header with the default
+\ bl DOVAR in its code field, but then (DOES>) runs and patches it to
+\ bl &dodoes-code as above, ie. after the EXIT:
+\ link | len | FOO | bl &dodoes-code | 7
+
+\ In DTC, the dodoes-code is entered with the parameter field (pointer to 7)
+\ in lr. So the code pushes that, then does bl docol.
+\ So the dodoes-code is three words.
+
+\ This HOST word is invoked by Host-side DOES> to compile the necessary pieces.
+VARIABLE '(DOES>)
+VARIABLE 'EXIT   \ These get populated later.
+
+: DOES, ( -- xt-does )
+  '(DOES>) @ t,
+  'EXIT    @ t,
+  here
+  {{ tos }} push,
+  lr tos mov,
+  docol bl, ;
+
+
+\ Not really words, just assembler routines.
+\ TODO Maybe these are better as mirror words without Target-side headers?
+label LIT
+  {{ tos }} push,
+  4 # ip []+ tos ldr,
+  next,
+
+label DOSTRING
+  {{ tos }} push, \ Push the old TOS
+  \ Next byte in the thread is the length, then that many characters.
+  1 # ip []+ tos ldrb, \ TOS gets the length
+  {{ ip }} push,  \ Push the string c-addr
+  \ IP points at the start of the string; add the length to point past it, then
+  \ re-align it.
+  tos ip ip add,
+  3 # ip ip add,
+  3 # ip ip bic,
+  next,
+
+
+
+\ Compiles the code field (address) for a colon declaration.
+\ For DTC that means assembling a bl docol.
+: ,docol ( -- ) docol dup ." writing docol " hex. cr bl, ;
+
+\ Compiles the bl DOVAR.
+: ,dovar ( -- ) dovar bl, ;
+
+\ Compiles a string literal into the thread.
+\ In ITC/DTC that's DOSTRING, then the length, then the chars.
+\ NB The length is a byte, not a cell. This errors if it's too big.
+: ,dostring ( c-addr u -- )
+  dup 256 >= ABORT" dostring length exceeds a byte"
+  dostring tcompile,
+  dup tc,
+  ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tc,   1+ R> REPEAT drop
+  talign ;
+
+\ Overwrites the code field (address) of the word at word-xt to point to the
+\ ;CODE or DOES> at does-xt.
+\ On DTC ARM, this compiles bl does-xt.
+: !dodoes ( does-xt word-xt -- )
+  there @ >R   there !   bl,   R> there ! ;
+
+\ Compile a literal. This is in the model because eg. STC doesn't use the two-
+\ cell [LIT|x] pattern.
+: tliteral ( x --    X: -- x ) lit tcompile,   t, ;
+
+\ Branching is easiest with absolute targets, ip [] ip ldr,
+: ,dest ( dest -- ) t, ;
+: !dest ( dest slot -- ) t! ;
+
+: t>body ( target-xt -- target-body ) tcell+ ;
+
+
+\ Entry point at 64KB, stacks at 32MB with 2KB ($800) for the return stack.
+$02000000 CONSTANT rp0
+$01fff7fc CONSTANT sp0 \ Fix main if this is changed.
+
+label entry-point 0 asm,
+

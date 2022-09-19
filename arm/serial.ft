@@ -1,0 +1,11 @@
+\ Interacting with the UART on QEMU's VersatilePB
+\ UART0 (connected by QEMU to stdin/out) is at 0x101f1000.
+\ - UARTDR, the read and write data register, is cell-sized and at offset 0.
+\ I don't think any configuration is really required on QEMU, they just fake the
+\ operation; it should Just Work.
+target definitions
+
+: KEY  ( -- ch ) BEGIN $101f1000 @   $ff and dup UNTIL ;
+
+: EMIT ( ch -- ) $101f1000 ! ;
+

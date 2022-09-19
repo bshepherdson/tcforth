@@ -16,7 +16,7 @@ target : ,DOCOL ( -- ) [ host jsr_docol t@ tliteral target ] , ;
 target : ,DOSTRING ( c-addr u -- )
   [ host dostring tliteral target ] compile,   \ Compile the codeword first.
   dup >R c,        \ Then the length
-  here R@ cmove    \ And the text
+  here R@ move     \ And the text
   R> chars allot ; \ And make room for it.
 
 target : ALIGNED ;

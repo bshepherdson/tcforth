@@ -232,9 +232,9 @@ target : TRUE  ( -- true? )  -1 ;
 \ ; is   LIT EXIT   COMPILE,   smudge   postpone [   EXIT
 
 target : SMUDGE ( -- )
-  latest cell+ dup @
+  latest cell+ dup c@
   [ host f_hidden tliteral target ] xor
-  swap ! ;
+  swap c! ;
 
 
 host dp @ \ Save the old dp

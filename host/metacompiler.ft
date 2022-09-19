@@ -129,13 +129,15 @@ host definitions
       drop 0 THEN ( mirror-body|0 )
   THEN ( mirror-body|0 ) ;
 
+\ TODO It would be good for the forward references to detect a dangling one
+\ that is never resolved.
 
 \ Some host-side actions for CODE words, like @ and !
 'mirror @
 (T') @     'mirror !   act t@
 (T') !     'mirror !   act t!
 (T') ,     'mirror !   act t,
-(T') cells 'mirror !   act chars
+(T') cells 'mirror !   act tcells
 'mirror !
 
 \ Hand-roll the target+mirror definitions for : and ;
@@ -153,5 +155,8 @@ latest tcell+ dup tc@ f_immed or swap tc!
 host here ." Metacompilation starts at " dup hex.  ." (" 2* hex. ." )" cr
 
 host .s cr
+
+\ START HERE: The setup chain is correct, but why is COLD compiled with
+\ bl $4 instead of bl $10004?
 
 \ entry-point should now be set properly for the :main routine.

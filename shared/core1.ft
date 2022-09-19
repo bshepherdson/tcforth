@@ -6,8 +6,8 @@ target definitions
 \ LATEST gives the name token. Skip over the link pointer and check the length.
 target : LATEST 'latest @ ;
   host acts: latest ;
-target : IMMEDIATE latest cell+   dup @   $8000 or   swap ! ;
-  host acts: latest tcell+ dup t@   f_immed or   swap t! ;
+target : IMMEDIATE latest cell+   dup c@   $8000 or   swap c! ;
+  host acts: latest tcell+ dup tc@   f_immed or   swap tc! ;
 
 target : [ 0 state ! ; IMMEDIATE
   host acts: 0 state ! postpone host ; IMPERATIVE
@@ -70,5 +70,4 @@ target : UNTIL  ( ? --     C: top-loc -- ) [0BRANCH] ,dest ; IMMEDIATE
 
 
 target : MOVE  ( src dst u -- ) >R 2dup U< IF R> MOVE> ELSE R> MOVE< THEN ;
-target : CMOVE ( src dst u -- ) MOVE ;
 

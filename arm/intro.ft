@@ -1,0 +1,4 @@
+target definitions
+
+: init-hardware ( -- ) ;
+

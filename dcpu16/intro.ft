@@ -1,9 +1,10 @@
 target definitions
 
-: .intro ( -- ) white fg! light blue bg!
+:noname ( -- ) white fg! light blue bg!
   \  01234567890123456789012345678901
   ."        TC-FORTH version 7       "
   default-colours cr ;
+'.intro !
 
 : init-hardware ( -- ) init-devices init-lem init-serial ;
 

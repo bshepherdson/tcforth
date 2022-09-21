@@ -1,0 +1,30 @@
+\ Filesystem implementation of the CFS - Compliant File System
+\ https://github.com/bshepherdson/TC-Specs/blob/fs/Storage/CFS.md
+target definitions
+
+\ Inode structure ============================================================
+: inode>mode        ( 'inode -- 'mode )              ;
+: inode>links       ( 'inode -- 'links )     cell+   ;
+: inode>blocks      ( 'inode -- 'blocks )  2 cells + ;
+: inode>size        ( 'inode -- 'd-size )  3 cells + ;
+\ reserved word
+: inode>directs     ( 'inode -- 'd-size )  6 cells + ;
+: inode>indirects   ( 'inode -- 'd-size ) 12 cells + ;
+: inode>dblindirect ( 'inode -- 'd-size ) 15 cells + ;
+16 CONSTANT /inode
+
+\ Inodes are 16 words long, so 32 to a block.
+: inode# ( inode# -- offset blk# ) dup 31 and   4 lshift   swap 5 rshift ;
+
+\ Bitmaps ====================================================================
+\ There's a used block bitmap, and a used inode bitmap.
+\ These are contiguous near the start of the disk. Each block contains
+\ 512 words * 16 bits = 8192 bits total.
+\ The low-order bit of a word is the lowest-numbered block, ie. the superblock
+\ in block 0 corresponds to bit 0 of word 0 of the first bitmap block.
+
+\ Given a target inode number or block number, gives the mask, offset and block
+\ *offset* for it. The block offset is 0 for a low block/inode#, but needs
+\ adjusting to be after the superblock and reserved regions (for blocks) or
+\ after the blocks (for inodes).
+: bitmap-addr ( inode#|blk# -- mask offset blk-offset )

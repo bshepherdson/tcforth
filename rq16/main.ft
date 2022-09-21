@@ -40,6 +40,9 @@ host definitions REQUIRE ../dcpu16/screen.ft
 host definitions REQUIRE ../shared/output.ft
 host definitions REQUIRE ../shared/error-messages.ft
 
+\ DCPU-16/Risque-16 hardware setup and LEM1802 intro message format.
+host definitions REQUIRE ../dcpu16/intro.ft
+
 \ And finally the startup code!
 host definitions REQUIRE ../shared/init.ft
 

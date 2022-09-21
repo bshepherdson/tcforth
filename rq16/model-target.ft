@@ -41,6 +41,10 @@ host T' EXIT    'EXIT !
 \ Runs during compilation TARGET : DOES> - compile code into its thread!
 host definitions
 
+\ Moves THERE back by u and pushes the most recently compiled words onto the
+\ stack (low address first).
+: asm-lit ( u -- w ... ) dup negate there +!   0 DO there @ i + t@ LOOP ;
+
 : TDOES,
   [T'] (DOES>) tliteral  [T'] compile, tcompile,
   [T'] EXIT    tliteral  [T'] compile, tcompile,

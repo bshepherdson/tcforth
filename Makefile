@@ -11,10 +11,12 @@ forth-dcpu16.bin: host/*.ft dcpu16/*.ft shared/*.ft
 
 dcpu16: forth-dcpu16.bin
 
-forth-rq16.bin: host/*.ft rq16/*.ft shared/*.ft dcpu16/disks.ft dcpu16/hardware.ft dcpu16/screen.ft
+forth-rq16.bin: host/*.ft rq16/*.ft shared/*.ft dcpu16/*
 	$(FORTH) rq16/main.ft dcpu16/disks.ft rq16/tail.ft
 
 rq16: forth-rq16.bin
+run-rq16: forth-rq16.bin
+	$(EMULATOR) -arch rq -disk /dev/null forth-rq16.bin
 
 forth-arm.bin: host/*.ft arm/*.ft shared/*.ft
 	$(FORTH) arm/main.ft arm/tail.ft

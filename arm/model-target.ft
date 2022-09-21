@@ -11,6 +11,7 @@ target : !CF ( codeword-addr xt -- )
   dup >R \ Save the slot address.
   8 + -    ( delta-bytes )
   2 rshift ( delta-words )
+  $00ffffff and
   $eb000000 or R> ! ;
 
 \ Add ,CF, which expects the address of the codeword on the stack.

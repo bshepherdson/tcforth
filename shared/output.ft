@@ -45,6 +45,16 @@ VARIABLE (picout)
   [ host '$' tliteral target ] emit   U.
   R> base ! ;
 
+\ Intro message ==============================================================
 VARIABLE '.intro
 :noname ." TC-Forth version 7" cr ; '.intro !
+
+\ Stack output ===============================================================
+VARIABLE (.)
+: (.S) ( xt -- )
+  [char] < emit depth (#HOLD) type [char] > emit space
+  0 depth 1- DO i pick (.) @ execute -1 +LOOP ;
+
+: .S    ( -- ) ['] .    (.) ! (.S) ;
+: HEX.S ( -- ) ['] hex. (.) ! (.S) ;
 

@@ -21,3 +21,16 @@ target : .ERROR ( exc# -- )
   err-unexpected-EOF OF ." Disk unexpectedly ended or ejected" ENDOF
   ( exc# ) ." Exception " .
   0 ENDCASE ;
+
+\ Extra debugging utilities and things.
+
+\ Prints the name of a word given its nt (name token).
+: id. ( nt -- )
+  cell+
+  dup char+ swap
+  c@ [ host mask_len tliteral target ] and ( c-addr u )
+  type space ;
+
+\ Prints the names of all words, from LATEST back to the end.
+: words ( -- ) latest BEGIN ?dup WHILE ( nt ) dup id. cr @ REPEAT ;
+

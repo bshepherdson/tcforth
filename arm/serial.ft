@@ -5,7 +5,29 @@
 \ operation; it should Just Work.
 target definitions
 
-: KEY  ( -- ch ) BEGIN $101f1000 @   $ff and dup UNTIL ;
+$101f1000 CONSTANT UART0DR    \ Data register
+$101f1018 CONSTANT UART0FR    \ Flags register
+$101f102c CONSTANT UART0LCR_H \ Data frame format
+$101f1030 CONSTANT UART0CR    \ Control register
 
-: EMIT ( ch -- ) $101f1000 ! ;
+$80 CONSTANT TXFE \ Transmit FIFO empty
+$40 CONSTANT RXFF \ Receive  FIFO full
+$20 CONSTANT TXFF \ Transmit FIFO full
+$10 CONSTANT RXFE \ Receive  FIFO empty
+$08 CONSTANT BUSY \ General BUSY transmitting (1 unless Tx FIFO/reg empty)
+$01 CONSTANT CTS  \ Receive  FIFO empty
+
+\ True if the transmission side can accept another byte; ie. buffer not full.
+: tx-ready? ( -- ? ) UART0FR @   TXFF and 0= ;
+\ True if the receiver side has a byte ready to read, ie. buffer not empty.
+: rx-ready? ( -- ? ) UART0FR @   RXFE and 0<> ;
+
+: EMIT ( ch -- ) BEGIN tx-ready?    UNTIL   UART0DR ! ;
+: KEY  ( -- ch ) BEGIN rx-ready? 0= UNTIL   UART0DR @   $ff and ;
+
+\ Configuration: no parity, no sticky. 8 bits, FIFOs on, 1 stop bit.
+\ LCR_H gets %01110000 = $70
+\ CR gets read out, and then set bits 9 and 8 (RXE, TXE) and 1 (enable)
+: init-serial ( -- )
+  $70 UART0LCR_H c!   UART0CR @   $301 or UART0CR ! ;
 

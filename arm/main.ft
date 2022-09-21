@@ -37,6 +37,8 @@ host REQUIRE model-target.ft
 host REQUIRE ../shared/input.ft
 host REQUIRE ../shared/core2.ft
 
+host REQUIRE lib.ft
+
 \ Machine-specific files go here
 host REQUIRE serial.ft
 host REQUIRE terminal.ft

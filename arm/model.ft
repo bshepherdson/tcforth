@@ -123,7 +123,7 @@ label DOSTRING
 
 \ Compiles the code field (address) for a colon declaration.
 \ For DTC that means assembling a bl docol.
-: ,docol ( -- ) docol dup ." writing docol " hex. cr bl, ;
+: ,docol ( -- ) docol bl, ;
 
 \ Compiles the bl DOVAR.
 : ,dovar ( -- ) dovar bl, ;

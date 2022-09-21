@@ -49,12 +49,12 @@ code NEGATE   0 # tos tos rsb, end-code
 
 \ Comparison operators all have the same shape with different branches.
 : comparison ( xt-true xt-false "name" -- )
-  >R >R
+  >R >R    ( R: xt-false xt-true )
   code
     {{ r0 }} pop,
     tos r0 cmp,   \ Sets the condition flags.
-    0 # tos R> execute mov,
-    0 # tos R> execute mvn,
+    0 # tos R> execute mvn, \ True case:  -1
+    0 # tos R> execute mov, \ False case:  0
   end-code ;
 
 ' eq? ' ne? comparison =
@@ -74,9 +74,9 @@ code SWAP   sp tos tos swp,   end-code
 
 code ROT ( c b a -- b a c )
   {{ r0 r1 }} pop,
-  {{ r1  }} push,
+  {{ r0  }} push,
   {{ tos }} push,
-  r0 tos mov,
+  r1 tos mov,
 end-code
 
 code -ROT ( c b a -- a c b )
@@ -128,7 +128,10 @@ code SP@
   sp tos mov,
 end-code
 
-code SP!   tos sp mov,   end-code
+code SP!
+  tos sp mov,
+  {{ tos }} pop, \ Get the new TOS into tos.
+end-code
 
 code RP@
   {{ tos }} push,
@@ -140,8 +143,8 @@ code RP!
   {{ tos }} pop,
 end-code
 
-code >R    tos  pushrsp,     {{ tos }} push,   end-code
-code R>    {{ tos }} pop,    tos poprsp,       end-code
+code >R    tos  pushrsp,     {{ tos }} pop,    end-code
+code R>    {{ tos }} push,   tos poprsp,       end-code
 code R@    {{ tos }} push,   rsp [] tos ldr,   end-code
 
 
@@ -155,7 +158,7 @@ label 'sp0   sp0 asm,
 \ then measures the depth from sp0, rather than the real empty SP.
 code DEPTH
   {{ tos }} push,
-  'sp0        r0  ldr-pc,
+  'sp0    r0  ldr-pc,
   sp      r0  tos sub,
   tos 2 # lsr tos mov, \ Convert bytes to cells
 end-code
@@ -341,14 +344,14 @@ code UM/MOD ( ulo uhi udiv -- ur uq )
     r1  1 # lsl r1 S mov,  \ then lo, with flags: C gets the last bit shifted out
     cs? 1 # r0  r0   add,  \ And a 1 is added to hi if that bit was a 1.
 
-    \ Now if our remainder (r0) is unsigned-lower-or-same as the divisor (TOS)
+    \ Now if our remainder (r0) is unsigned-higher than the divisor (TOS)
     \ we can divide once: subtract divisor from remainder, add a 1 bit to the
     \ quotient.
-    tos r0 cmp,        \ Checking remainder/r0 U<= divisor/TOS
-    hi? tos r0 r0 sub, \ Only do this if it's unsigned higher, ie. remainder < TOS
-    hi? 1 # r1 r1 orr,
+    tos r0 cmp,        \ Checking remainder/r0 - divisor/TOS
+    cs? tos r0 r0 sub, \ Only do this if it's unsigned higher, ie. remainder < TOS
+    cs? 1 # r1 r1 orr,
 
-    1 # r2 r2 sub,
+    1 # r2 r2 S sub,
   UM/MOD-loop ne? b, \ Keep looping if it's not 0 yet.
 
   \ Now r0 is the remainder, r1 the quotient.
@@ -478,25 +481,52 @@ code J ( -- index1   R: index1 limit2 index2 -- index1 limit2 index2 )
 end-code
 
 
+\ XXX remove me
+label uart0dr $101f1000 asm,
+label 'deadbeef $deadbeef asm,
+
+
+code H. ( x -- )
+  uart0dr r0 ldr-pc,
+
+  $24 # r1 mov,
+  r0 [] r1 str,
+
+  28 # r2 mov,
+
+  label H.-loop
+    tos r2 lsr r1 mov,
+    $f # r1    r1 and,
+    10 # r1 cmp,
+    cc? $30      # r1 r1 add, \ + '0' if < 10
+    cs? $41 10 - # r1 r1 add, \ + 'a' - 10 if >= 10
+    r0 [] r1 str,
+    4 # r2 r2 S sub,
+  pl? H.-loop b,
+  {{ tos }} pop,
+end-code
+
 
 \ TODO Interrupt handling? The current system doesn't actually use them.
 label interrupt-handler
   here b,   \ Just spin, we're not really handling these.
 
 
-\ XXX remove me
-label uart0dr $101f1000 asm,
-
 \ Main =======================================================================
 \ Machine code entry point, jumped to be the first instructions.
 label main
-  65 #    r1 mov,
-  uart0dr r0 ldr-pc,
-  r0 []   r1 str,
+  \ 65 #    r1 mov,
+  \ uart0dr r0 ldr-pc,
+  \ r0 []   r1 str,
 
   \ Starts with interrupts disabled.
   rp0 # rsp mov,
   'sp0  sp  ldr-pc,
+  \ We need to pretend to do SP! which pops the new TOS off the stack.
+  {{ tos }} pop,
+  \ Then we overwrite TOS with a marker $deadbeef that helps indicate where the
+  \ top of the stack is.
+  'deadbeef tos ldr-pc, \ Marker for debugging the stack.
 
   entry-point r0 ldr-pc, \ entry-point is a variable holding an xt; xt -> r0
   r0 bx,                 \ Jump right into that word's code field.

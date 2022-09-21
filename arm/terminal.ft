@@ -1,14 +1,17 @@
 \ Terminal
 target definitions
 
-: BACKSPACE ( c-addr -- c-addr' )      1 chars - ;
-: ACCEPT-CHAR ( c-addr ch -- c-addr' ) over c!   char+ ;
+: BACKSPACE ( c-addr min-addr -- c-addr' )
+  swap 1 chars - max
+  8 emit 32 emit 8 emit ;
+
+: ACCEPT-CHAR ( c-addr ch -- c-addr' ) dup emit   over c!   char+ ;
+
+: CR ( -- ) $0a emit ;
 
 : ACCEPT ( c-addr max -- len )
   drop dup >R  \ TODO Ignores the max length!
-  BEGIN key   dup $0a <> WHILE \ ( c-addr key )
-    dup $08 = IF drop R@ backspace ELSE accept-char THEN
+  BEGIN key   dup $0d <> WHILE \ ( c-addr key )
+    dup $7f = IF drop R@ backspace ELSE accept-char THEN
   REPEAT ( end newline   R: start ) drop R> - ( len ) ;
-
-: CR ( -- ) $0a emit ;
 

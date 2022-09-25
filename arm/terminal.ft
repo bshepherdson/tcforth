@@ -5,13 +5,15 @@ target definitions
   swap 1 chars - max
   8 emit 32 emit 8 emit ;
 
+: newline? ( ch -- ? ) dup $0a =   swap $0d =   or ;
+
 : ACCEPT-CHAR ( c-addr ch -- c-addr' ) dup emit   over c!   char+ ;
 
 : CR ( -- ) $0a emit ;
 
 : ACCEPT ( c-addr max -- len )
   drop dup >R  \ TODO Ignores the max length!
-  BEGIN key   dup $0d <> WHILE \ ( c-addr key )
+  BEGIN key   dup newline? 0= WHILE \ ( c-addr key )
     dup $7f = IF drop R@ backspace ELSE accept-char THEN
   REPEAT ( end newline   R: start ) drop R> - ( len ) ;
 

@@ -2,3 +2,11 @@ target definitions
 
 : init-hardware ( -- ) init-serial ;
 
+\ There's no shutdown hardware signal on the VersatilePB board!
+\ This approximates it by sending "(bye) - C-a x to quit QEMU" and spinning.
+: bye ( -- )
+  cr cr
+  ." *** (bye) ***" cr
+  ." Type  C-a x  to quit QEMU" cr
+  begin again ;
+

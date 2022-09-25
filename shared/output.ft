@@ -53,7 +53,7 @@ VARIABLE '.intro
 VARIABLE (.)
 : (.S) ( xt -- )
   [char] < emit depth (#HOLD) type [char] > emit space
-  0 depth 1- DO i pick (.) @ execute -1 +LOOP ;
+  depth ?dup IF 1- 0 swap DO i pick (.) @ execute -1 +LOOP THEN ;
 
 : .S    ( -- ) ['] .    (.) ! (.S) ;
 : HEX.S ( -- ) ['] hex. (.) ! (.S) ;

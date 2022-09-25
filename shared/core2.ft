@@ -4,15 +4,11 @@ target definitions
 : HEX 16 base ! ;
 : DECIMAL 10 base ! ;
 
-host presume .S presume cr target
-
 \ (CREATE) builds a blank header, no code field.
 \ link | len | name... |
 target : (CREATE) ( "name" -- ) here latest ,   'latest !
     parse-name dup c,
-    here swap ( src dst u ) dup >R
-    \ base @ >R hex .s cr R> base !
-    move> R> ( len ) allot ;
+    here swap ( src dst u ) dup >R move> R> ( len ) allot ;
 
 host definitions
 \ Host-side CREATE, used by eg. : CONSTANT ... HOST ACTS: CREATE ... ;

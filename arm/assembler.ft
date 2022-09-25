@@ -111,7 +111,7 @@ al?
 
 : ?reg  ( 0 -- ) 0<>  ABORT" Expected register" ;
 
-: +cond ( opcode -- opcode' ) condition @ 28 lshift or   al? ;
+: +cond ( opcode -- opcode' ) $0fffffff and   condition @ 28 lshift or   al? ;
 
 \ Many opcodes have an S bit at bit 20
 VARIABLE S?   0 S? !
@@ -372,7 +372,14 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
 : fwd ( -- loc abs-target ) there @ dup 100 + ;
 
 \ Resolve expects a loc on the stack, and resolves it to point to here.
-: resolve ( loc -- ) there @ >R   there !   R@ b,   R> there ! ;
+\ We need to retain the condition code of the existing branch opcode.
+: resolve ( loc -- )
+  there @ >R
+  dup t@ $f0000000 and >R  ( loc   R: real-there cond )
+  there !
+  R> condition !   ( R: real-there )
+  R@ b,
+  R> there ! ;
 
 
 

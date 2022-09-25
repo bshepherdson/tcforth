@@ -395,6 +395,10 @@ end-code
 
 
 \ MOVEs ======================================================================
+\ XXX remove me
+label uart0dr $101f1000 asm,
+label 'deadbeef $deadbeef asm,
+
 code MOVE< ( src dst u -- ) \ Copies from low addresses to high.
   \ Length is in TOS
   {{ r1 r0 }} pop, \ r1 is source, r0 is dest
@@ -404,8 +408,8 @@ code MOVE< ( src dst u -- ) \ Copies from low addresses to high.
 
   \ TODO Word-sized copying for speed?
   label MOVE<-loop
-    1 # r1 []+ r2 ldr,
-    1 # r0 []+ r2 str,
+    1 # r1 []+ r2 ldrb,
+    1 # r0 []+ r2 strb,
     1 # tos tos S sub,
     resolve
     ne? MOVE<-loop b, \ Loop until it's 0
@@ -418,13 +422,16 @@ code MOVE> ( src dst u -- ) \ Copies from high addresses to low.
   \ Length is in TOS
   {{ r1 r0 }} pop, \ r1 is source, r0 is dest
 
+  tos r1 r1 add,
+  tos r0 r0 add,
+
   0 # tos cmp,
-  eq? fwd b,   \ Jump ahead to the end if the length is 0.
+  fwd eq? b,   \ Jump ahead to the end if the length is 0.
 
   label MOVE>-loop
     1 # tos tos S sub,
-    tos r1 [+] r2 ldr,
-    tos r0 [+] r2 str,
+    1 # r1 [-]! r2 ldrb,
+    1 # r0 [-]! r2 strb,
     ne? MOVE>-loop b, \ Loop until it's 0
 
   \ Pop a new TOS
@@ -480,10 +487,6 @@ code J ( -- index1   R: index1 limit2 index2 -- index1 limit2 index2 )
   8 # rsp [+] tos ldr,
 end-code
 
-
-\ XXX remove me
-label uart0dr $101f1000 asm,
-label 'deadbeef $deadbeef asm,
 
 
 code H. ( x -- )

@@ -4,6 +4,8 @@ default: dcpu16
 FORTH ?= gforth
 EMULATOR ?= tc-dcpu
 
+ARM_QEMU ?= qemu-system-arm -M versatilepb -m 128M -nographic
+
 ARM_PREFIX ?= arm-none-eabi-
 
 forth-dcpu16.bin: host/*.ft dcpu16/*.ft shared/*.ft
@@ -18,18 +20,39 @@ rq16: forth-rq16.bin
 run-rq16: forth-rq16.bin
 	$(EMULATOR) -arch rq -disk /dev/null forth-rq16.bin
 
-forth-arm.bin: host/*.ft arm/*.ft shared/*.ft
-	$(FORTH) arm/main.ft arm/tail.ft
-	$(ARM_PREFIX)-as -mcpu=arm926ej-s -g startup.s
-
-test: forth-dcpu16.bin forth-rq16.bin test/*.ft
+test.disk: test/*.ft
 	cat test/harness.ft test/basics.ft test/comparisons.ft test/arithmetic.ft \
 		test/rest.ft > test.disk
+
+test-dcpu16: forth-dcpu16.bin test.disk test.dcs FORCE
 	$(EMULATOR) -turbo -disk test.disk -script test.dcs forth-dcpu16.bin
+
+test-rq16: forth-rq16.bin test.disk test.dcs FORCE
 	$(EMULATOR) -arch rq -turbo -disk test.disk -script test.dcs forth-rq16.bin
 
+forth-arm.bin: host/*.ft arm/*.ft shared/*.ft
+	$(FORTH) arm/main.ft arm/tail.ft
+	arm-none-eabi-objdump -b binary -m armv4t -D forth-arm.bin > forth.disasm
+
+arm: forth-arm.bin
+run-arm: forth-arm.bin
+	$(ARM_QEMU) -kernel forth-arm.bin
+
+test-arm: forth-arm.bin test.disk FORCE
+	cp test.disk test.disk2
+	$(ARM_QEMU) -kernel forth-arm.bin -serial file:test.disk2 &
+	export PID_QEMU=$$!
+	echo $$PID_QEMU
+	#export PID_OUT=$$!
+	sleep 3
+	kill $$PID_QEMU
+	cat test.disk2
+	rm test.disk2
+
+test: test-dcpu16 test-rq16 FORCE
+
 clean: FORCE
-	rm -f *.bin test.disk
+	rm -f *.bin test.disk serial.in serial.out
 
 FORCE:
 

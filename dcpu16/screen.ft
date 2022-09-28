@@ -165,12 +165,12 @@ VARIABLE key-xt
 \ Input sources ==============================================================
 \ : SERIAL   ( -- ) ['] (key-serial) key-xt ! ;
 : KEYBOARD ( -- ) ['] (key-kb)     key-xt ! ;
-host T' (key-kb) T' key-xt t>body t! target
 
 \ Initialization =============================================================
 
 : init-lem ( -- )
   dev-lem1802 @ -1 = IF EXIT THEN \ No such device, just bail.
+  keyboard
 
   \ Send an HWI with A=0, B=vram; no response regs. So that's a mask of 3.
   0 vram 3   dev-lem1802 @ >device

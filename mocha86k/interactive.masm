@@ -1,7 +1,0 @@
-.include "kernel.masm"
-
-brk ; Catch any attempt to run down here.
-:forth_main lw 0
-:initial_dsp ; Must be right at the bottom
-.dat 0
-

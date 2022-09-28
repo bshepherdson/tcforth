@@ -7,7 +7,7 @@ target definitions
 target : LATEST 'latest @ ;
   host acts: latest ;
 target : IMMEDIATE
-    latest cell+   dup c@   [ host f_immed tliteral target ] or   swap c! ;
+    latest cell+   dup c@   f_immed or   swap c! ;
   host acts: latest tcell+ dup tc@   f_immed or   swap tc! ;
 
 target : [ 0 state ! ; IMMEDIATE

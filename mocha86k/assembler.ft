@@ -20,7 +20,7 @@ VARIABLE max-out
                255 and R> 1+ c! ;
 
 : t@  ( t-addr -- lw ) dup tc@   swap 1+ tc@ 16 lshift or ;
-: t!  ( lw t-addr -- ) over $ffff and   over tc!   >R 16 rshift R> 1+ tc! ;
+: t!  ( lw t-addr -- ) 2dup ." t! " swap hex. hex. cr   over $ffff and   over tc!   >R 16 rshift R> 1+ tc! ;
 
 : asm,  ( w -- ) there @ tc!   1 there +! ;
 
@@ -256,9 +256,7 @@ $6 (2short) xorw,   $e (2short) xorl,
 
 : resolve ( resolve-token -- )
   dup 1+    ( slot base )
-  hex.s
   there @ - ( slot delta )
-  hex.s cr
   dup ?11bit
   5 lshift >R
   dup tc@ 31 and R> or   swap tc! ;

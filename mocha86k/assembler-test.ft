@@ -88,7 +88,7 @@ T{ ra      rc      ifew, -> $7080 $fff2 }T
 T{  652   900 [#]   20 [b+]   brel, -> $f878 $5152 900 20 }T
 T{ -648   900 [#]   20 [b+]   brel, -> $f878 $aed2 900 20 }T
 \ o=12 s=0 d=2   $7080 $fff2
-T{ 652    ra        rc        brew, -> $7080 $5152 }T
+T{  652   ra        rc        brew, -> $7080 $5152 }T
 
 : tests-done cr error? @ IF ." Tests failed!" ELSE ." Tests complete" THEN cr ;
 tests-done bye

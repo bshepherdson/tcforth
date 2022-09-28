@@ -45,6 +45,6 @@ host definitions
 : TDOES,
   [T'] (DOES>) tliteral  [T'] compile, tcompile,
   [T'] EXIT    tliteral  [T'] compile, tcompile,
-  $817b        tliteral  [T'] c,       tcompile, ;
+  $817b        tliteral  [T'] c,       tcompile,
   docol        tliteral  [T'] c,       tcompile, ;
 

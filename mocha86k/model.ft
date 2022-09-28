@@ -33,7 +33,6 @@ there CONSTANT DP
 \ First line of code, the entry point. It'll be a jump to main eventually.
 $deadbeef # pc setl, \ Forcing an unsigned-long jump. Target will get adjusted.
 
-
 \ These are pseudooperands that hide what registers are used for what.
 : rsp     ( -- op ) rj   ;
 : [rsp]   ( -- op ) [j]  ;
@@ -73,13 +72,11 @@ VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
 \ lit_uw
 
 \ This is called by JSRL, so the parameter field address is on the data stack.
-hex.s cr bye
 label DOCOL
   ip pushrsp,
   pop ip setl,
   next,
 
-hex.s cr bye
 
 \ DOVAR is the code word for a CREATEd definition without a DOES> - it pushes
 \ the address of the parameter field. In order to support DOES>, however, a
@@ -153,11 +150,10 @@ label DOSTRING
 \ For DTC that means assembling a JSRL docol.
 : ,docol ( -- ) docol # jsrl, ;
 
-\ Compiles the JSRL DOVAR. This compiles a regular JSRL lit_uw + DOVAR, but then
-\ compiles an extra 0. That makes DOVAR calls a bit faster but leaves room for
-\ a 32-bit dodoes target address.
-\ 1000 oooo ooss ssss with o=$05 and s=$3a: $817a
-: ,dovar ( -- ) $817a tc, dovar tc, 0 tc, ;
+\ Compiles the JSRL DOVAR. This must be encoded as a lit_ul even though DOVAR
+\ fits into a lit_uw. There needs to be room for a 32-bit DOES target.
+\ 1000 oooo ooss ssss with o=$05 and s=$3b: $817b
+: ,dovar ( -- ) $817b tc, dovar t, ;
 
 \ Compiles a string literal into the thread.
 \ In ITC/DTC that's DOSTRING, then the length, then the chars.
@@ -170,7 +166,7 @@ label DOSTRING
 \ ;CODE or DOES> at does-xt.
 \ On DTC Mocha 86k this compiles JSRL does-xt as a lit_ul, so three words:
 \ $1000 oooo ooss ssss with o=$05 and s=$3b: $817b + does-xt
-: !dodoes ( does-xt word-xt -- ) $8a7b over tc!   tchar+ t! ;
+: !dodoes ( does-xt word-xt -- ) $817b over tc!   tchar+ t! ;
 
 \ Compile a literal. This is in the model because eg. STC doesn't use the two-
 \ cell [LIT|x] pattern.

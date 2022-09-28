@@ -272,6 +272,7 @@ code 'SOURCE-ID   var_source_id  lit, end-code
 code >IN          var_in_ptr     lit, end-code
 code TIB          input-buf      lit, end-code
 code LAST-PARSE   var_last_parse lit, end-code
+code F_IMMED      f_immed        lit, end-code
 
 
 \ More arithmetic ============================================================

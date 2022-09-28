@@ -63,7 +63,7 @@ $7 COLOUR grey
 : reverse ( -- ) (colours) @ reversed (colours) ! ;
 
 \ Wipes u cells from start index (not an address!) with blank spaces.
-: wipe ( start u -- ) >R vram + R> over + swap DO bl coloured i ! LOOP ;
+: wipe ( start u -- ) >R vram + R> over + swap DO bl coloured i c! LOOP ;
 
 \ Cursor handling ============================================================
 VARIABLE cursor \ Index into the VRAM
@@ -79,8 +79,8 @@ VARIABLE cursor \ Index into the VRAM
 : >cursor ( -- addr ) cursor @ vram + ;
 
 VARIABLE (cur-ch)
-: vacate ( -- ) (cur-ch) @ >cursor ! ;
-: arrive ( -- ) >cursor @  dup (cur-ch) !   reversed >cursor ! ;
+: vacate ( -- ) (cur-ch) @ >cursor c! ;
+: arrive ( -- ) >cursor c@  dup (cur-ch) !   reversed >cursor c! ;
 
 : at-xy ( col row -- ) vacate   /row * + cursor !   arrive ;
 
@@ -121,7 +121,7 @@ host presume scroll target
 
 \ Emites the given *screen* character word (colours etc. added) at the current
 \ cursor. See also EMIT.
-: (DISPLAY) ( screen-ch -- ) >cursor ! ;
+: (DISPLAY) ( screen-ch -- ) >cursor c! ;
 : DISPLAY   ( screen-ch -- ) vacate   (DISPLAY)   1 +cursor   arrive ;
 
 \ Emits the given ASCII character at the current cursor.

@@ -1,0 +1,10 @@
+\ Extra Target library words for eg. division.
+\ Mocha 86k has instructions for /MOD and U/MOD combined, so here we split the
+\ parts to provide / and MOD.
+target definitions
+
+: /     ( n n -- q )    /MOD  nip  ;
+: MOD   ( n n -- r )    /MOD  drop ;
+: U/    ( u u -- uq )   U/MOD nip  ;
+: UMOD  ( u u -- uq )   U/MOD drop ;
+

@@ -271,6 +271,7 @@ code 'SOURCE-ID   var_source_id  push-nearby, end-code
 code >IN          var_in_ptr     push-nearby, end-code
 code TIB          input-buf      push-nearby, end-code
 code LAST-PARSE   var_last_parse push-nearby, end-code
+code F_IMMED      f_immed # tos mov, end-code
 
 
 \ More arithmetic ============================================================

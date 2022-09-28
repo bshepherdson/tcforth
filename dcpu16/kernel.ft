@@ -236,6 +236,7 @@ code 'SOURCE-ID   var_source_id  # push set, end-code
 code >IN          var_in_ptr     # push set, end-code
 code TIB          input-buf      # push set, end-code
 code LAST-PARSE   var_last_parse # push set, end-code
+code F_IMMED      f_immed        # push set, end-code
 
 
 code 2DUP

@@ -168,7 +168,8 @@ code C@
 end-code
 
 code C!
-  pop  [tos] setw, \ Write the low word of NOS at [TOS]
+  pop  ra    setl, \ Pop the entire value from the stack!
+  ra   [tos] setw, \ Write its low word at [TOS]
   pop  tos   setl, \ And replace TOS
 end-code
 
@@ -222,7 +223,7 @@ label var_last_parse  0 t, 0 t,
 label var_source      0 t, 0 t,
 label var_in_ptr      0 t,
 label var_source_id   0 t,
-label input-buf       128 there +!
+label input-buf       : (buf) 128 0 DO 0 tc, LOOP ; (buf)
 
 : (var) ( var-label "name" -- )
   >R
@@ -262,6 +263,8 @@ var_source_id  (var) 'SOURCE-ID
 var_in_ptr     (var) >IN
 input-buf      (var) TIB
 var_last_parse (var) LAST-PARSE
+
+code F_IMMED   tos push setl,   f_immed # tos setl,   end-code
 
 
 code 2DUP ( b a -- b a b a )
@@ -436,7 +439,7 @@ code MOVE> ( src dst u -- )
   pop ra setl, \ src in A
   tos ra addl, \ src+len in A
 
-  fwd pc set, \ Jump ahead to the loop tail.
+  fwd pc setl, \ Jump ahead to the loop tail.
 
   label MOVE>-loop
     -[a] -[b] setw, \ Copy a word.
@@ -466,7 +469,7 @@ code (LOOP-END)  ( delta -- done?    R: limit index1 -- limit index2 )
   0 #     rb setl,
   $80000000 # ra ifcl, \ True when top bit is clear.
     1 # rb subl,
-  rb      ra set,      \ Keep the first flag in A.
+  rb      ra setl,     \ Keep the first flag in A.
 
   \ Then calculate delta XOR index - limit
   tos     rc xorl,

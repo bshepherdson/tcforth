@@ -32,17 +32,20 @@ host REQUIRE model-target.ft
 host REQUIRE ../shared/input.ft
 host REQUIRE ../shared/core2.ft
 
+\ More Mocha 86k code that supplements the core library.
+host REQUIRE lib.ft
+
 \ We can borrow the DCPU-16's screen.ft, but not its hardware.ft because the
 \ details of HWQ are different here (couple of 32-bit values that can be treated
 \ directly on Mocha 86k).
 host definitions REQUIRE hardware.ft
-host definitions REQUIRE ../dcpu/screen.ft
+host definitions REQUIRE ../dcpu16/screen.ft
 
 \ More shared files
 host definitions REQUIRE ../shared/output.ft
 host definitions REQUIRE ../shared/error-messages.ft
 
-host definitions REQUIRE ../dcpu/intro.ft
+host definitions REQUIRE ../dcpu16/intro.ft
 
 \ And finally the startup code!
 host definitions REQUIRE ../shared/init.ft

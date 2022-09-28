@@ -3,6 +3,9 @@ default: dcpu16
 
 FORTH ?= gforth
 EMULATOR ?= tc-dcpu
+DCPU_HW ?= keyboard,lem1802,m35fd,clock,rng,hsdp-1d
+EMU_FLAGS ?= -hw $(DCPU_HW)
+
 
 ARM_QEMU ?= qemu-system-arm -M versatilepb -m 128M -nographic
 
@@ -26,7 +29,7 @@ forth-mocha86k.bin: host/*.ft mocha86k/*.ft shared/*.ft dcpu16/*.ft
 mocha86k: forth-mocha86k.bin
 
 run-mocha86k: forth-mocha86k.bin
-	$(EMULATOR) -arch mocha -disk /dev/null forth-mocha86k.bin
+	$(EMULATOR) $(EMU_FLAGS) -arch mocha -disk /dev/null forth-mocha86k.bin
 
 test.disk: test/*.ft
 	cat test/harness.ft test/basics.ft test/comparisons.ft test/arithmetic.ft \

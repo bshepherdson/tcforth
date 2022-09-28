@@ -1,0 +1,50 @@
+\ Target words to get metacompiled, that hide the details of the machine and the
+\ Forth model (eg. ITC vs. DTC vs. STC)
+\ This file: DTC on the Mocha 86k
+
+\ >CFA is already defined, so is ,DOCOL.
+target definitions
+
+\ Add ,CF, which expects the address to jump to on the stack.
+\ A code field here is jsrl lit_ul, $7c20 + the literal.
+\ L000 oooo ooss ssss   o=5 s=3b, so $817b plus the 32-bit address.
+target : ,CF ( codeword-addr -- ) $817b c, , ;
+
+\ jsrl lit_uw, docol
+\ L000 oooo ooss ssss   o=5 s=3a
+target : ,DOCOL ( -- )
+  [ host $817a tliteral target ] c,
+  [ host docol tliteral target ] c, ;
+
+\ Compiles a string literal into a thread.
+\ On ITC/DTC that means the address of DOSTRING, the length, then the words.
+target : ,DOSTRING ( c-addr u -- )
+  [ host dostring tliteral target ] compile,   \ Compile the codeword first.
+  dup >R c,        \ Then the length
+  here R@ move     \ And the text
+  R> chars allot ; \ And make room for it.
+
+target : ALIGNED ;
+target : ALIGN ;
+
+target : PAD ( -- addr ) $fb00 ;
+
+\ DOES> ======================================================================
+\ Implementing sequence 2
+\ (DOES>) runs in eg. CONSTANT to properly compile a particular constant.
+\ Inside target (DOES>), TORS points at the EXIT. Just after it is the
+\ dodoes-code that should become the new codeword's jump location.
+\ $817a is JSRL lit_ul on DCPU.
+target : (DOES>) latest >cfa   $817b over c!    char+ R@ cell+ swap ! ;
+
+host T' (DOES>) '(DOES>) !
+host T' EXIT    'EXIT    !
+
+\ Runs during compilation TARGET : DOES> - compile code into its thread!
+host definitions
+: TDOES,
+  [T'] (DOES>) tliteral  [T'] compile, tcompile,
+  [T'] EXIT    tliteral  [T'] compile, tcompile,
+  $817b        tliteral  [T'] c,       tcompile, ;
+  docol        tliteral  [T'] c,       tcompile, ;
+

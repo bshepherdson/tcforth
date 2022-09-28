@@ -1,0 +1,94 @@
+VARIABLE start-depth
+
+VARIABLE error?
+error? off
+
+: error error? on   type source type cr ;
+
+: T{ 0 there !   depth start-depth ! ;
+
+: -> depth start-depth @ <> IF S" Stack not clean during assembly " error THEN ;
+
+: }T depth start-depth @ <= IF S" Empty expectation " error THEN
+  there @ BEGIN instr-width - dup 0>= WHILE ( ... exp tgt-addr )
+    tuck tc@ <> IF S" Mismatch " error THEN ( ... tgt-addr )
+  REPEAT drop
+  depth start-depth @ swap - IF S" Expectation longer than actual " error THEN ;
+
+
+\ 0 arg: L000 0000 00oo oooo
+T{ nop, -> $0000 }T
+T{ rfi, -> $0001 }T
+T{ brk, -> $0002 }T
+T{ hlt, -> $0003 }T
+T{ ulk, -> $0004 }T
+
+\ 1 arg: L000 oooo ooss ssss
+T{ ra            notw, -> $00c0 }T
+T{ ra            notl, -> $80c0 }T
+T{ [x]           notl, -> $80cb }T
+T{ [b]           notw, -> $00c9 }T
+T{ [b]+          notl, -> $80d1 }T
+T{ -[c]          notw, -> $00da }T
+T{  6 [c+]       notl, -> $80e2 6 }T
+T{ -6 [c+]       notl, -> $80e2   -6 $ffff and }T
+T{ rx [c,]       notw, -> $00ea 3 }T
+T{ pc            notl, -> $80f0 }T
+T{ sp            notl, -> $80f1 }T
+T{ ex            notl, -> $80f2 }T
+T{ ia            notw, -> $00f3 }T
+T{ peek          notl, -> $80f4 }T
+T{ push          notl, -> $80f5 }T
+T{ pop           notl, -> $80f5 }T
+T{ 0         #   notl, -> $80f6 }T
+T{ 1         #   notw, -> $00f7 }T
+T{ 7        [#]  notw, -> $00f8 7 }T
+T{ -7       [#]  notw, -> $00f9 -7 $ffff and   -7 16 rshift $ffff and }T
+T{ 7         #   notw, -> $00fa 7 }T
+T{ $deadface #   notl, -> $80fb $face $dead }T
+T{ -7        #   notw, -> $00fc -7 $ffff and }T
+T{ rx    [pc,]   notw, -> $00fe 3 }T
+T{  6    [sp+]   notl, -> $80ff 6 }T
+T{ -6    [sp+]   notl, -> $80ff -6 $ffff and }T
+
+
+\ Unary branches =============================================================
+\ L000 oooo ooss ssss o=$21 s=01  $0841
+T{ 90  rb     bnzw, -> $0841 88 }T
+T{ -90 rb     bnzl, -> $8841 -92 $ffff and }T
+T{ 90  8 [c+] bnzl, -> $8862 88 8 }T
+
+\ Binary short form ==========================================================
+\ Looo dddd ddss ssss   o=2 d=a s=0   $a280
+T{ ra [c] subl, -> $b280 }T
+T{ ra [c] addw, -> $2280 }T
+
+\ Binary long form ===========================================================
+\ L111 dddd ddss ssss
+\ bbbb bbbb bbbo oooo   o=5 d=4 s=9 b=0   $f109 $0005
+T{    [b]  ry     mull, -> $f109 $0005 }T
+T{  7 [b+] ry     mull, -> $f121 $0005 7 }T
+T{ -7 [b+] ry     mull, -> $f121 $0005 -7 $ffff and }T
+\ o=5 s=101001 d=100011 -> 0111 1000 1110 1001 -> $78e9
+T{ rx [b,] 7 [x+] mulw, -> $78e9 $0005 3 7 }T
+
+
+\ Binary IFx =================================================================
+\ L111 dddd ddss ssss
+\ 1111 1111 111o oooo  o=12 s=$38 [lit_uw] d=$21 [b+]  $f878 $fff2
+T{ 900 [#] 20 [b+] ifel, -> $f878 $fff2 900 20 }T
+\ o=12 s=0 d=2   $7080 $fff2
+T{ ra      rc      ifew, -> $7080 $fff2 }T
+
+\ Binary BRx =================================================================
+\ L111 dddd ddss ssss
+\ bbbb bbbb bbbo oooo  o=12 s=$38 [lit_uw] d=$21 [b+]  b=650=$28a
+\ $f878 $5152
+\ aed2 = 1101 0111 0110  1 0010 = o=$12 b=
+T{  652   900 [#]   20 [b+]   brel, -> $f878 $5152 900 20 }T
+T{ -648   900 [#]   20 [b+]   brel, -> $f878 $aed2 900 20 }T
+\ o=12 s=0 d=2   $7080 $fff2
+T{ 652    ra        rc        brew, -> $7080 $5152 }T
+
+: tests-done cr error? @ IF ." Tests failed!" ELSE ." Tests complete" THEN cr ;
+tests-done bye

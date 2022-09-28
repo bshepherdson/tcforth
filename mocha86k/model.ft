@@ -1,0 +1,190 @@
+\ ===================== MACHINE/MODEL DEPENDENT SECTION ======================
+\ Trying to keep the system as portable across both machines and Forth models
+\ as possible. model.ft implements a few key routines (eg. DOCOL) and assembler
+\ macros (eg. pushrsp,) to hide the details of the model as much as possible.
+
+\ Design:
+\ - Direct threading, jumping to code words (jsrl lit_uw = 2w 4c)
+\ - Return stack: RSP in J; top 128 cells of memory, $ff80 to $ffff.
+\ - Data stack: PSP is SP; TOS in Z
+\ - IP is I
+\ - A B C X Y are free to use.
+
+\ Standard dictionary headers: link, length+immediate+hidden word, len words of
+\ name, code field.
+
+\ This is a little surprising, but it makes sense when you think deeper:
+\ NATIVE HERE pushes the Host's dictionary pointer.
+\ HOST   HERE pushes the Target's dictionary pointer
+\ TARGET HERE is the mirror word that compiles the Target xt for HERE (!)
+HOST DEFINITIONS
+
+\ The assembler defines a THERE pointer for the Target dictionary.
+\ We capture that address as the HOST DP as well.
+there CONSTANT DP
+: here dp @ ;
+0 dp !   \ Mocha 86k execution starts at $0000 by default.
+
+: tc, ( w -- )  asm, ;   \ Unit-width assemble. That's just asm, here.
+\ Cell size compile - low word first, then high.
+: t,  ( l -- )  dup asm,   16 rshift asm, ;
+
+
+\ First line of code, the entry point. It'll be a jump to main eventually.
+$deadbeef # pc setl, \ Forcing an unsigned-long jump. Target will get adjusted.
+
+
+\ These are pseudooperands that hide what registers are used for what.
+: rsp     ( -- op ) rj   ;
+: [rsp]   ( -- op ) [j]  ;
+: [rsp+]  ( -- op ) [j+] ;
+: ip      ( -- op ) ri   ;
+: [ip]    ( -- op ) [i]  ;
+: [ip]+   ( -- op ) [i]+ ;
+: tos     ( -- op ) rz   ;
+: [tos]   ( -- op ) [z]  ;
+: [tos+]  ( -- op ) [z+] ;
+: [tos]+  ( -- op ) [z]+ ;
+
+\ Some assembler macros
+: next,    ( -- ) [ip]+ pc setl, ;
+: pushrsp, ( rhs -- ) -[j]      setl, ;
+: poprsp,  ( lhs -- ) [j]+ swap setl, ;
+
+: tchars    ( n -- n2 ) ;
+: tchar+    ( n -- n2 ) 1+ ;
+: tcells    ( n -- n2 ) 2* ;
+: tcell+    ( n -- n2 ) 2 + ;
+: tcompile, t, ;
+
+\ There's no longword-alignment on Mocha 86k, so alignment is a no-op.
+: taligned  ( x -- x2 ) ;
+: talign    ( -- ) ;
+
+32 CONSTANT tcellbits  \ 32 bits per cell
+16 CONSTANT tbits      \ 16 bits per address unit
+
+VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
+: LATEST ( -- nt ) 'latest @ ;
+0 'latest !
+
+
+\ DOCOL and DODOES right at the top so they can be JSRL DOCOL'd with a one-word
+\ lit_uw
+
+\ This is called by JSRL, so the parameter field address is on the data stack.
+hex.s cr bye
+label DOCOL
+  ip pushrsp,
+  pop ip setl,
+  next,
+
+hex.s cr bye
+
+\ DOVAR is the code word for a CREATEd definition without a DOES> - it pushes
+\ the address of the parameter field. In order to support DOES>, however, a
+\ three-word code field is needed. CREATE assembles JSRL DOVAR, which fits in
+\ two words since DOVAR is at the very top of memory and fits in lit_uw.
+\ So CREATE "wastes" one word, but we don't want a "gotcha" for dictionaries
+\ outside the lowest 64KW.
+\ See the DOES> design below.
+
+label DOVAR
+  \ TOS is in Z, and the PFA actually got pushed to the hardware stack.
+  pop ra   setl,
+  tos push setl,
+  ra  tos  setl,
+  next,
+
+\ DOES> design for DTC =======================================================
+\ This is different from the original TC-Forth DODOES scheme.
+\ Sequence 1: while eg. : CONSTANT create , DOES> @ ; is being defined.
+\ Sequence 2: while CONSTANT is running, defining a new constant.
+\ Sequence 3: while a particular constant is executing.
+
+\ DOES> is an immediate word, it runs during "Sequence 1".
+\ It compiles   (DOES>) EXIT dodoes-asm   at the end of CONSTANT.
+\ Then the Forth code after DOES> is compiled. The final CONSTANT looks like:
+\ link | len | CONSTANT | jsrl docol | (blank) | CREATE | , | (DOES>) | EXIT |
+\ dodoes-code | @ | EXIT
+\ Sequence 2 (eg. 7 CONSTANT FOO) CREATEs the new header with the default
+\ JSRL DOVAR in its code field, but then (DOES>) runs and patches it to
+\ JSRL &dodoes-code as above, ie. after the EXIT:
+\ link | len | FOO | jsrl lit_ul | &dodoes-code | 7
+
+\ In DTC, the dodoes-code is entered with the parameter field (pointer to 7)
+\ already on the hardware stack, because that's what's after the code field
+\ of FOO and was pushed by the JSRL. It needs swapping into TOS register though.
+
+\ So the dodoes-code needs to juggle TOS and the PFA to the right places, then
+\ JSRL docol. That will enter the thread with IP pointing to the right place.
+
+\ This HOST word is invoked by Host-side DOES> to compile the necessary pieces.
+VARIABLE '(DOES>)
+VARIABLE 'EXIT   \ These get populated later.
+
+: DOES, ( -- xt-does )
+  '(DOES>) @ t,   'EXIT @ t,
+  here
+  \ 5w 11c total
+  pop ra setl,   tos push setl,   ra tos setl, \ Swap the TOS and PFA.
+  DOCOL # jsrl, ;
+
+
+\ Not really words, just assembler routines.
+\ TODO Maybe these are better as mirror words without Target-side headers?
+label LIT
+  tos   push setl,
+  [ip]+ tos  setl,
+  next,
+
+label DOSTRING
+  \ Next word in the thread is the length, then that many characters.
+  tos   push setl,  \ Push old TOS
+  tos        clrl,  \ Then clear it
+  [ip]+ tos  setw,  \ Length into TOS, IP now points at the string.
+  ip    push setl,  \ Push IP, ie. the string address.
+  tos   ip   addl,  \ Add TOS into IP to jump past the string.
+  next,
+
+
+
+\ Compiles the code field (address) for a colon declaration.
+\ For DTC that means assembling a JSRL docol.
+: ,docol ( -- ) docol # jsrl, ;
+
+\ Compiles the JSRL DOVAR. This compiles a regular JSRL lit_uw + DOVAR, but then
+\ compiles an extra 0. That makes DOVAR calls a bit faster but leaves room for
+\ a 32-bit dodoes target address.
+\ 1000 oooo ooss ssss with o=$05 and s=$3a: $817a
+: ,dovar ( -- ) $817a tc, dovar tc, 0 tc, ;
+
+\ Compiles a string literal into the thread.
+\ In ITC/DTC that's DOSTRING, then the length, then the chars.
+: ,dostring ( c-addr u -- )
+  dostring tcompile,
+  dup tc,
+  ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tc,   1+ R> REPEAT drop ;
+
+\ Overwrites the code field (address) of the word at word-xt to point to the
+\ ;CODE or DOES> at does-xt.
+\ On DTC Mocha 86k this compiles JSRL does-xt as a lit_ul, so three words:
+\ $1000 oooo ooss ssss with o=$05 and s=$3b: $817b + does-xt
+: !dodoes ( does-xt word-xt -- ) $8a7b over tc!   tchar+ t! ;
+
+\ Compile a literal. This is in the model because eg. STC doesn't use the two-
+\ cell [LIT|x] pattern.
+: tliteral ( x --    X: -- x ) lit tcompile,   t, ;
+
+: ,dest ( dest -- ) t, ;
+: !dest ( dest slot -- ) t! ;
+
+\ 3 words in the code field of a CREATEd word.
+: t>body ( target-xt -- target-body ) 3 + ;
+
+
+$10000 CONSTANT rp0
+$0ff7f CONSTANT sp0 \ See discussion under DEPTH in kernel.ft
+
+label entry-point 0 t,
+

@@ -1,0 +1,54 @@
+\ Entry point for metacompiling the portable kernel to Mocha 86k
+\ Most of the heavy lifting is done in other files, this is just orchestrating.
+
+REQUIRE ../host/vocabularies.ft
+
+host definitions REQUIRE assembler.ft
+
+host REQUIRE ../host/helpers.ft
+host REQUIRE model.ft
+host REQUIRE ../host/dictionary.ft
+host REQUIRE ../host/mirrors.ft
+
+\ Now we have what we need to metacompile the CODE definitions at the heart of
+\ the new kernel.
+host REQUIRE kernel.ft
+
+\ Overwrite the jump target of the entry code to be main.
+\ The instruction is at $0000 and its target argument at $0001-2.
+main 1 t!
+
+\ The main part of the metacompiler
+host REQUIRE ../host/metacompiler.ft
+
+\ Now the first chunk of Target Forth code!
+host REQUIRE ../shared/core1.ft
+host REQUIRE ../shared/exceptions.ft
+
+\ Load the target-side model words.
+host REQUIRE model-target.ft
+
+\ And back to the universal code.
+host REQUIRE ../shared/input.ft
+host REQUIRE ../shared/core2.ft
+
+\ We can borrow the DCPU-16's screen.ft, but not its hardware.ft because the
+\ details of HWQ are different here (couple of 32-bit values that can be treated
+\ directly on Mocha 86k).
+host definitions REQUIRE hardware.ft
+host definitions REQUIRE ../dcpu/screen.ft
+
+\ More shared files
+host definitions REQUIRE ../shared/output.ft
+host definitions REQUIRE ../shared/error-messages.ft
+
+host definitions REQUIRE ../dcpu/intro.ft
+
+\ And finally the startup code!
+host definitions REQUIRE ../shared/init.ft
+
+\ NB: You should always include tail.ft as the last stage of your build.
+\ It actually emits the assembled image.
+
+\ Known-missing words ========================================================
+\ Core: ENVIRONMENT? WORD

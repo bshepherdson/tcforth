@@ -1,0 +1,274 @@
+\ Assembler for Mocha 86k: https://github.com/bshepherdson/mocha86k
+
+\ Output words are big-endian, longwords are little-endian.
+\ This is confusing on a byte machine but makes sense on a 16-bit word machine.
+\ For clarity: the 32-bit word $deadbeef is written to disk as $beef $dead.
+
+CREATE output 65536 2* allot
+VARIABLE there
+0 there !
+VARIABLE max-out
+0 max-out !
+
+: +max ( t-addr -- ) max-out @ max max-out ! ;
+
+: ta  ( t-addr -- c-addr ) 2* output + ;
+: tc@ ( t-addr -- w ) ta   dup c@ 8 lshift   swap 1+ c@ or ;
+: tc! ( w t-addr -- )
+  dup +max ta >R
+  dup 8 rshift 255 and R@    c!
+               255 and R> 1+ c! ;
+
+: t@  ( t-addr -- lw ) dup tc@   swap 1+ tc@ 16 lshift or ;
+: t!  ( lw t-addr -- ) over $ffff and   over tc!   >R 16 rshift R> 1+ tc! ;
+
+: asm,  ( w -- ) there @ tc!   1 there +! ;
+
+1 CONSTANT instr-width
+
+\ Handling the extra words after the opcode.
+\ These are 4 cells in case of long-word arguments.
+CREATE extras 4 cells allot
+VARIABLE #extras
+: +extra  ( w -- ) #extras @ cells extras + !   1 #extras +! ;
+: +extra2 ( l -- ) dup $ffff and +extra   16 rshift +extra ;
+
+: extras, ( -- )
+  #extras @ 0 ?DO i cells extras + @ asm, LOOP 0 #extras ! ;
+
+\ Addressing modes
+\ ================
+\ These all are two cells wide on the stack, ( value mode )
+\ Lots of them don't need the value, and it's just 0.
+\ But then you always know how they sit on the stack.
+
+\ Register:          ra         ( 0 r )
+\ Register indirect: ra []      ( 0 r+8 )
+\ Register indexed:  20 ra []+  ( 20 r+$10 )
+: ra    0 ;   : rb    1 ;   : rc    2 ;   : rx    3 ;
+: ry    4 ;   : rz    5 ;   : ri    6 ;   : rj    7 ;
+: [a]   8 ;   : [b]   9 ;   : [c]  10 ;   : [x]  11 ;
+: [y]  12 ;   : [z]  13 ;   : [i]  14 ;   : [j]  15 ;
+: [a]+ 16 ;   : [b]+ 17 ;   : [c]+ 18 ;   : [x]+ 19 ;
+: [y]+ 20 ;   : [z]+ 21 ;   : [i]+ 22 ;   : [j]+ 23 ;
+: -[a] 24 ;   : -[b] 25 ;   : -[c] 26 ;   : -[x] 27 ;
+: -[y] 28 ;   : -[z] 29 ;   : -[i] 30 ;   : -[j] 31 ;
+
+: ([r+]) ( n -- operand ) create , DOES> @ swap +extra ;
+32 ([r+]) [a+]   33 ([r+]) [b+]   34 ([r+]) [c+]   35 ([r+]) [x+]
+36 ([r+]) [y+]   37 ([r+]) [z+]   38 ([r+]) [i+]   39 ([r+]) [j+]
+
+\ These are assembled like rb [a,] to get [a,b]
+\ So that's ( 0 offset-reg -- offset-reg reg-bits )
+: ([r,]) ( reg -- operand ) create , DOES> @ swap +extra ;
+40 ([r,]) [a,]   41 ([r,]) [b,]   42 ([r,]) [c,]   43 ([r,]) [x,]
+44 ([r,]) [y,]   45 ([r,]) [z,]   46 ([r,]) [i,]   47 ([r,]) [j,]
+
+
+\ Misc special regs
+: pc   $30 ;
+: sp   $31 ;
+: ex   $32 ;
+: ia   $33 ;
+: peek $34 ;
+: push $35 ;
+: pop  push  ;
+
+\ [lit_uw] / [lit_ul]     77 [u]
+: [#] ( n -- operand ) dup $ffff0000 and IF +extra2 $39 ELSE +extra $38 THEN ;
+
+\ lit-uw lit-ul lit-sw
+: #   ( n -- operand )
+  dup 0=   IF drop $36 EXIT THEN
+  dup 1 =  IF drop $37 EXIT THEN
+  dup $ffff0000 and  ( n upper )
+  dup 0=          IF drop +extra $3a EXIT THEN
+      $ffff0000 = IF      +extra $3c EXIT THEN
+  +extra2 $3b ;
+
+
+: [pc+] ( sw  -- operand ) +extra $3d ;
+: [pc,] ( reg -- operand ) +extra $3e ;
+: [sp+] ( sw  -- operand ) +extra $3f ;
+
+
+\ Nullary operations have the form
+\ L0000000 00oooooo
+: (0op) ( opcode --    X: -- ) create , DOES> @ asm, ;
+0 (0op) nop,
+1 (0op) rfi,
+2 (0op) brk,
+3 (0op) hlt,
+4 (0op) ulk,
+
+\ Unary operations have the form
+\ L000oooo oossssss
+: (1op) ( opcode "name" --    X: operand -- )
+  create , DOES> @ 6 lshift or asm,   extras, ;
+
+$001 (1op) swpw,   $201 (1op) swpl,
+$002 (1op) peaw,   $202 (1op) peal,
+$003 (1op) notw,   $203 (1op) notl,
+$004 (1op) negw,   $204 (1op) negl,
+$005 (1op) jsrw,   $205 (1op) jsrl,
+$006 (1op) logw,   $206 (1op) logl,
+$007 (1op) lnkw,   $207 (1op) lnkl,
+$009 (1op) hwnw,   $209 (1op) hwnl,
+$00a (1op) hwqw,   $20a (1op) hwql,
+$00b (1op) hwiw,   $20b (1op) hwil,
+$00c (1op) intw,   $20c (1op) intl,
+$00d (1op) iaqw,   $20d (1op) iaql,
+$00e (1op) extw,   $20e (1op) extl,
+$00f (1op) clrw,   $20f (1op) clrl,
+
+\ You'll want to call this generally with {{ ra rc pc }} popl,
+\ {{ ... }} is a fancy way of spelling a # literal word of bits.
+$010 (1op) pshw,   $210 (1op) pshl,
+$011 (1op) popw,   $211 (1op) popl,
+
+
+\ Push and pop ===============================================================
+: {{ ( -- marker ) -1 ;
+
+: (stack-reg) ( reg mask -- mask' )
+  over $30 = IF nip $200 or EXIT THEN \ pc
+  over $32 = IF nip $100 or EXIT THEN \ ex
+  swap   1 swap lshift   or ;
+
+: }} ( marker regs... -- mask-lit )
+  \ PC is $30 and EX is $32; A-J are 0-7.
+  0 BEGIN over -1 <> WHILE (stack-reg) REPEAT ( marker mask )
+  nip # ;
+
+
+\ Unary branches are assembled as   target operand bnzw,
+: (1br) ( L+opcode "name" --    X: target operand -- ) create , DOES>
+  @ 6 lshift or asm,   ( target )
+  there @ 1+ -  asm,   ( )
+  extras, ;
+
+$020 (1br) bzrw,   $220 (1br) bzrl,
+$021 (1br) bnzw,   $221 (1br) bnzl,
+$022 (1br) bpsw,   $222 (1br) bpsl,
+$023 (1br) bngw,   $223 (1br) bngl,
+$024 (1br) bzrdw,  $224 (1br) bzrdl,
+$025 (1br) bnzdw,  $225 (1br) bnzdl,
+$026 (1br) bpsdw,  $226 (1br) bpsdl,
+$027 (1br) bngdw,  $227 (1br) bngdl,
+
+\ Short-form binary operations have the form:
+\ Looodddd ddssssss
+: (2short) ( L+opcode "name" --    X: rhs lhs -- ) create , DOES>
+  @ 12 lshift >R 6 lshift R> or or asm, extras, ;
+
+$1 (2short) setw,   $9 (2short) setl,
+$2 (2short) addw,   $a (2short) addl,
+$3 (2short) subw,   $b (2short) subl,
+$4 (2short) andw,   $c (2short) andl,
+$5 (2short) borw,   $d (2short) borl,
+$6 (2short) xorw,   $e (2short) xorl,
+
+
+\ Long-form binary ===========================================================
+\ L111dddd ddssssss
+\ bbbbbbbb bbbooooo  b=reserved (IFx, BRx only) and o is opcode.
+
+\ The basic, common op:
+: (2long) ( rhs lhs bbbb o L -- )
+  $7000 or ( rhs lhs bbbb o L111 )
+  -rot 2>R ( rhs lhs L111    R: bbbb o )
+      swap 6 lshift or or asm, ( R: bbbb o )
+  2R> swap 5 lshift or    asm, ( )
+  extras, ;
+
+: (2op) ( L opcode bbbb "name" --    X: rhs lhs -- ) create , , , DOES>
+  dup >R @   R@ cell+ @   R> 2 cells + @   (2long) ;
+
+0 $00  0 (2op) adxw,   $8000 $00  0 (2op) adxl,
+0 $01  0 (2op) sbxw,   $8000 $01  0 (2op) sbxl,
+0 $02  0 (2op) shrw,   $8000 $02  0 (2op) shrl,
+0 $03  0 (2op) asrw,   $8000 $03  0 (2op) asrl,
+0 $04  0 (2op) shlw,   $8000 $04  0 (2op) shll,
+0 $05  0 (2op) mulw,   $8000 $05  0 (2op) mull,
+0 $06  0 (2op) mliw,   $8000 $06  0 (2op) mlil,
+0 $07  0 (2op) divw,   $8000 $07  0 (2op) divl,
+0 $08  0 (2op) dviw,   $8000 $08  0 (2op) dvil,
+0 $09  0 (2op) leaw,   $8000 $09  0 (2op) leal,
+0 $0a  0 (2op) btxw,   $8000 $0a  0 (2op) btxl,
+0 $0b  0 (2op) btsw,   $8000 $0b  0 (2op) btsl,
+0 $0c  0 (2op) btcw,   $8000 $0c  0 (2op) btcl,
+0 $0d  0 (2op) btmw,   $8000 $0d  0 (2op) btml,
+
+\ IFx are binary ops with -1 in the bbbb field.
+0 $10 -1 (2op) ifbw,   $8000 $10 -1 (2op) ifbl,
+0 $11 -1 (2op) ifcw,   $8000 $11 -1 (2op) ifcl,
+0 $12 -1 (2op) ifew,   $8000 $12 -1 (2op) ifel,
+0 $13 -1 (2op) ifnw,   $8000 $13 -1 (2op) ifnl,
+0 $14 -1 (2op) ifgw,   $8000 $14 -1 (2op) ifgl,
+0 $15 -1 (2op) ifaw,   $8000 $15 -1 (2op) ifal,
+0 $16 -1 (2op) iflw,   $8000 $16 -1 (2op) ifll,
+0 $17 -1 (2op) ifuw,   $8000 $17 -1 (2op) iful,
+
+
+\ Binary branches and ifs ====================================================
+\ These have the form of long-format binary ops. If the bbbbb field is all 1s,
+\ they skip the next instruction like DCPU-16 IFx instructions.
+\ If it's not all 1s, then it's a branch by that signed 11-bit offset in words.
+
+: ?11bit ( n -- )
+  -2048 2048 within 0= IF ." branch delta too big" 6 throw THEN ;
+
+\ This gets an absolute destination, and converts it to be a signed offset from
+\ the value of PC after the second word but before the operands. That's there+2
+\ for right now.
+: (2branch) ( L opcode "name" --    X: dest rhs lhs -- )
+  CREATE , , DOES>
+  >R rot there @ 2 + - ( rhs lhs delta   R: 'opcode )
+  dup ?11bit
+  R@ @   R> cell+ @ ( rhs lhs delta/bbbb opcode L )
+  (2long) ;
+
+0 $10 (2branch) brbw,   $8000 $10 (2branch) brbl,
+0 $11 (2branch) brcw,   $8000 $11 (2branch) brcl,
+0 $12 (2branch) brew,   $8000 $12 (2branch) brel,
+0 $13 (2branch) brnw,   $8000 $13 (2branch) brnl,
+0 $14 (2branch) brgw,   $8000 $14 (2branch) brgl,
+0 $15 (2branch) braw,   $8000 $15 (2branch) bral,
+0 $16 (2branch) brlw,   $8000 $16 (2branch) brll,
+0 $17 (2branch) bruw,   $8000 $17 (2branch) brul,
+
+
+: label ( "name" --    X: -- t-addr ) there @ CONSTANT ;
+
+\ Control structures =========================================================
+\ Hand-rolled using the BRx family, with the help of forward references.
+
+\ This is called at the spot where the jump address would go. It contrives to
+\ compile a branch instruction, noting the address as a newly defined word.
+\ A later resolve will write it back.
+\ NB: Only works for the abs-dest slot of a brx instruction!
+: fwd     ( -- resolve-token dest ) there @ 1+   there @ 40 + ;
+
+\ The resolve token is the address where the second opcode word
+\ bbbbbbbb bbbooooo
+\ is found. This adjusts the delta to be from the next word after it.
+: hex.s base @ >R hex .s R> base ! ;
+
+: resolve ( resolve-token -- )
+  dup 1+    ( slot base )
+  hex.s
+  there @ - ( slot delta )
+  hex.s cr
+  dup ?11bit
+  5 lshift >R
+  dup tc@ 31 and R> or   swap tc! ;
+
+
+
+: dump ( c-addr u -- )
+  cr cr ." Assembling to " 2dup type cr
+  W/O BIN create-file ABORT" Failed to open output file" >R
+  output   max-out @ 1+ 2*   R@ write-file ABORT" Failed to write"
+  R@ flush-file ABORT" Failed to flush"
+  R> close-file ABORT" Failed to close" ;
+

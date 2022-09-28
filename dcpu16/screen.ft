@@ -17,8 +17,8 @@ VARIABLE (colours)
 
 VARIABLE (light)
 : LIGHT   8 (light) ! ;
-: COLOUR ( c "name" --   X: -- c ) create , DOES> @ (light) @ +   0 (light) ! ;
-  host acts: create t, DOES> t@ ;
+: COLOUR ( c "name" --   X: -- c ) create c, DOES> c@ (light) @ +   0 (light) ! ;
+  host acts: create tc, DOES> tc@ ;
 target
 
 $0 COLOUR black

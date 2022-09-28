@@ -1,0 +1,53 @@
+\ Metacompiled code for the Mocha 68k hardware devices and instructions.
+\ The kernel provides:
+\ - #DEVICES ( -- n ) to get the number of devices
+\ - DEVINFO  ( dev-num -- version maker ID )
+\ - >DEVICE  ( regs... mask dev-num -- regs... ) for doing hardware interrupts
+
+\ The devices we care about here are the keyboard, disk and LEM1802:
+\ Keyboard: 1       $1c6c8b36   $30c17406
+\ LEM1802:  $1802   $1c6c8b36   $734df615
+\ M35FD:    $b      $1eb37e91   $4fd524c5
+
+target definitions
+
+VARIABLE dev-lem1802
+VARIABLE dev-keyboard
+VARIABLE dev-m35fd
+VARIABLE dev-serial
+
+: lem? ( dev-num -- lem? )
+  devinfo ( version maker ID )
+       $734df615 =
+  swap $1c6c8b36 = and
+  swap $1802     = and ;
+
+: m35fd? ( dev-num -- lem? )
+  devinfo ( version maker ID )
+       $4fd524c5 =
+  swap $1eb37e91 = and
+  swap $b        = and ;
+
+: serial? ( dev-num -- serial? )
+  devinfo ( version maker ID )
+       $e57d9027 =
+  swap $a87c900e = and
+  swap $0103     = and ;
+
+: keyboard? ( dev-num -- keyboard? )
+  devinfo ( version maker ID )
+       $30c17406 =
+  >R 2drop R> ; \ Skip the maker and version for a generic device.
+
+
+: identify ( dev-num -- )
+  dup lem?      IF dev-lem1802  ! EXIT THEN
+  dup m35fd?    IF dev-m35fd    ! EXIT THEN
+  dup keyboard? IF dev-keyboard ! EXIT THEN
+  dup serial?   IF dev-serial   ! EXIT THEN
+  drop ;
+
+: init-devices ( -- )
+  -1 dup dev-lem1802 !   dup dev-keyboard !   dup dev-m35fd !   dev-serial !
+  #devices BEGIN ?dup WHILE 1- dup identify REPEAT ;
+

@@ -142,7 +142,7 @@ host presume scroll target
   vacate   -1 +cursor   bl coloured (display)   arrive
   1- ( c-addr' ) ;
 
-: ACCEPT-CHAR ( c-addr ch -- c-addr' ) dup emit   over c! 1+ ;
+: ACCEPT-CHAR ( c-addr ch -- c-addr' ) dup emit   over c! char+ ;
 
 \ : (KEY-SERIAL) ( -- key )
 \   dev-serial   @ (key-ssi)

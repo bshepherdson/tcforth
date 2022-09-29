@@ -20,7 +20,7 @@ VARIABLE max-out
                255 and R> 1+ c! ;
 
 : t@  ( t-addr -- lw ) dup tc@   swap 1+ tc@ 16 lshift or ;
-: t!  ( lw t-addr -- ) 2dup ." t! " swap hex. hex. cr   over $ffff and   over tc!   >R 16 rshift R> 1+ tc! ;
+: t!  ( lw t-addr -- ) over $ffff and   over tc!   >R 16 rshift R> 1+ tc! ;
 
 : asm,  ( w -- ) there @ tc!   1 there +! ;
 
@@ -247,7 +247,8 @@ $6 (2short) xorw,   $e (2short) xorl,
 \ compile a branch instruction, noting the address as a newly defined word.
 \ A later resolve will write it back.
 \ NB: Only works for the abs-dest slot of a brx instruction!
-: fwd     ( -- resolve-token dest ) there @ 1+   there @ 40 + ;
+: fwd         ( -- resolve-token dest ) there @ 1+   there @ 40 + ;
+: fwd-always, ( -- resolve-token )      fwd 0 # 0 # brew, ;
 
 \ The resolve token is the address where the second opcode word
 \ bbbbbbbb bbbooooo
@@ -255,8 +256,8 @@ $6 (2short) xorw,   $e (2short) xorl,
 : hex.s base @ >R hex .s R> base ! ;
 
 : resolve ( resolve-token -- )
-  dup 1+    ( slot base )
-  there @ - ( slot delta )
+  dup 1+         ( slot base )
+  there @ swap - ( slot delta )
   dup ?11bit
   5 lshift >R
   dup tc@ 31 and R> or   swap tc! ;

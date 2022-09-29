@@ -307,7 +307,8 @@ code S>D
   0 #     ra   setl,
   $80000000 # tos ifbl, \ Bit in common
     1  # ra    subl,
-  ra   push  setl,
+  tos    push  setl,
+  ra     tos   setl,
 end-code
 
 \ D>S is DROP
@@ -331,12 +332,12 @@ end-code
 code UDM* ( l1 h1 n2 -- l3 h3 )
   pop  ra   setl, \ h1 -> A
   pop  rb   setl, \ l1 -> B
-  tos  ra   mull, \ A is lo*n, EX is the carry
+  tos  rb   mull, \ B is lo*n, EX is the carry
   ex   push setl, \ Save EX
-  tos  rb   mull, \ B is h1*n
-  pop  rb   addl, \ Add the old carry from lo to h3
-  ra   push setl, \ Push l3
-  rb   tos  setl, \ h3 -> TOS
+  tos  ra   mull, \ A is h1*n
+  pop  ra   addl, \ Add the old carry from lo to h3
+  rb   push setl, \ Push l3
+  ra   tos  setl, \ h3 -> TOS
 end-code
 
 
@@ -421,13 +422,14 @@ end-code
 code MOVE< ( src dst u -- )
   pop rb setl, \ Dest in B
   pop ra setl, \ Src  in A
+  \ brk,
 
-  fwd pc setl, \ Jump ahead to the loop tail.
+  fwd-always,  \ Jump ahead to the loop tail.
 
   label MOVE<-loop
     [a]+ [b]+ setw, \ Copy a word
     resolve         \ Resolve the above fwd reference.
-    MOVE<-loop   tos bzrdl, \ If length nonzero, decrement and loop.
+    MOVE<-loop   tos bnzdl, \ If length nonzero, decrement and loop.
 
   pop tos setl,
 end-code
@@ -438,13 +440,14 @@ code MOVE> ( src dst u -- )
   tos rb addl, \ dst+len in B
   pop ra setl, \ src in A
   tos ra addl, \ src+len in A
+  \ brk,
 
-  fwd pc setl, \ Jump ahead to the loop tail.
+  fwd-always,  \ Jump ahead to the loop tail.
 
   label MOVE>-loop
     -[a] -[b] setw, \ Copy a word.
     resolve         \ Resolve the above fwd reference.
-    MOVE>-loop rc bzrdl, \ Loop and decrement if nonzero.
+    MOVE>-loop rc bnzdl, \ Loop and decrement if nonzero.
 
   pop tos setl,
 end-code
@@ -522,7 +525,7 @@ end-code
 \ outputs.
 label >DEVICE-saved-i 0 t,
 label >DEVICE-saved-j 0 t,
-label >DEVICE-saved-z 0 t,
+\ label >DEVICE-saved-z 0 t,
 label >DEVICE-dev     0 t,
 
 code >DEVICE
@@ -531,7 +534,6 @@ code >DEVICE
 
   \ Save the meaningful registers.
   1 # iaqw, \ Queue incoming interrupts - they'll break our saving!
-  rz  >DEVICE-saved-z [#] setl,
   ri  >DEVICE-saved-i [#] setl,
   rj  >DEVICE-saved-j [#] setl,
 
@@ -562,8 +564,8 @@ code >DEVICE
   \ Now restore our registers.
   >DEVICE-saved-j [#]  rj  setl,
   >DEVICE-saved-i [#]  ri  setl,
-  >DEVICE-saved-z [#]  rz  setl,
-  0 # iaqw,
+  pop tos setl, \ Need to replace TOS with whatever was pushed last.
+  0 #     iaqw,
 end-code
 
 
@@ -573,6 +575,7 @@ end-code
 code (KEY) ( dev-num -- key )
 label (key)-loop
   1 # ra  setl, \ Read next key
+  rc      clrl, \ Clear C
   tos     hwil,
   (key)-loop   0 #   rc brew,
   rc  tos setl, \ Overwrite the device number on top.
@@ -598,6 +601,7 @@ label main
   \ interrupt_handler # ias, \ Set up interrupt handler
   rp0 # rsp setl,           \ Initial RSP
   sp0 # sp  setl,           \ Initial SP
+  pop   tos setl,           \ And pop into TOS, fixing the off-by-one-cell SP0
   0 # iaqw,                 \ Enable interrupts again
   entry-point [#] pc setl,  \ Jump to the code field of the starter word COLD.
 

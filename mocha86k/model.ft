@@ -27,7 +27,7 @@ there CONSTANT DP
 
 : tc, ( w -- )  asm, ;   \ Unit-width assemble. That's just asm, here.
 \ Cell size compile - low word first, then high.
-: t,  ( l -- )  dup asm,   16 rshift asm, ;
+: t,  ( l -- )  ." t, at " there @ hex.   dup hex. cr  dup tc,   16 rshift tc, ;
 
 
 \ First line of code, the entry point. It'll be a jump to main eventually.
@@ -180,7 +180,7 @@ label DOSTRING
 
 
 $10000 CONSTANT rp0
-$0ff7f CONSTANT sp0 \ See discussion under DEPTH in kernel.ft
+$0ff7e CONSTANT sp0 \ See discussion under DEPTH in kernel.ft
 
 label entry-point 0 t,
 

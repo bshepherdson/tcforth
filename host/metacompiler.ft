@@ -143,10 +143,10 @@ host definitions
 \ Hand-roll the target+mirror definitions for : and ;
 \ They don't work on the target yet, just making space.
 target definitions host
-code : end-code 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, \ 7 cells since overwriting NEXT
+code : end-code 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, \ 9 cells
   host acts: ?forward   (TCREATE)   ?!forward   ,docol   meta] ;
 
-code ; end-code 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, \ Likewise, 7 cells.
+code ; end-code 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, \ Likewise, 9 cells.
 \ Mark ; as IMMEDIATE
 latest tcell+ dup tc@ f_immed or swap tc!
   host acts: 0 state !   'EXIT @ tcompile, ; IMPERATIVE

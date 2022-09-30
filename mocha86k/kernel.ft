@@ -447,7 +447,7 @@ code MOVE> ( src dst u -- )
   label MOVE>-loop
     -[a] -[b] setw, \ Copy a word.
     resolve         \ Resolve the above fwd reference.
-    MOVE>-loop rc bnzdl, \ Loop and decrement if nonzero.
+    MOVE>-loop tos bnzdl, \ Loop and decrement if nonzero.
 
   pop tos setl,
 end-code

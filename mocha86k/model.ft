@@ -27,7 +27,7 @@ there CONSTANT DP
 
 : tc, ( w -- )  asm, ;   \ Unit-width assemble. That's just asm, here.
 \ Cell size compile - low word first, then high.
-: t,  ( l -- )  ." t, at " there @ hex.   dup hex. cr  dup tc,   16 rshift tc, ;
+: t,  ( l -- )  dup tc,   16 rshift tc, ;
 
 
 \ First line of code, the entry point. It'll be a jump to main eventually.

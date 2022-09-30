@@ -4,7 +4,9 @@ default: dcpu16
 FORTH ?= gforth
 EMULATOR ?= tc-dcpu
 DCPU_HW ?= keyboard,lem1802,m35fd,clock,rng,hsdp-1d
-EMU_FLAGS ?= -hw $(DCPU_HW)
+DCPU_FLAGS ?=
+EMU_FLAGS ?= -hw $(DCPU_HW) $(DCPU_FLAGS)
+DCPU_DISK ?= /dev/null
 
 
 ARM_QEMU ?= qemu-system-arm -M versatilepb -m 128M -nographic
@@ -29,7 +31,7 @@ forth-mocha86k.bin: host/*.ft mocha86k/*.ft shared/*.ft dcpu16/*.ft
 mocha86k: forth-mocha86k.bin
 
 run-mocha86k: forth-mocha86k.bin
-	$(EMULATOR) $(EMU_FLAGS) -arch mocha -disk /dev/null forth-mocha86k.bin
+	$(EMULATOR) $(EMU_FLAGS) -arch mocha -disk $(DCPU_DISK) forth-mocha86k.bin
 
 test.disk: test/*.ft
 	cat test/harness.ft test/basics.ft test/comparisons.ft test/arithmetic.ft \
@@ -41,8 +43,9 @@ test-dcpu16: forth-dcpu16.bin test.disk test.dcs FORCE
 test-rq16: forth-rq16.bin test.disk test.dcs FORCE
 	$(EMULATOR) -arch rq -turbo -disk test.disk -script test.dcs forth-rq16.bin
 
-test-mocha86k: forth-mocha86k.bin test.disk test.dcs FORCE
-	$(EMULATOR) -arch mocha -turbo -disk test.disk -script test.dcs forth-mocha86k.bin
+test-mocha86k: forth-mocha86k.bin test.disk test-long.dcs FORCE
+	$(EMULATOR) -arch mocha -turbo -disk test.disk -script test-long.dcs \
+		forth-mocha86k.bin
 
 forth-arm.bin: host/*.ft arm/*.ft shared/*.ft
 	$(FORTH) arm/main.ft arm/tail.ft
@@ -63,7 +66,7 @@ test-arm: forth-arm.bin test.disk FORCE
 	cat test.disk2
 	rm test.disk2
 
-test: test-dcpu16 test-rq16 FORCE
+test: test-dcpu16 test-rq16 test-mocha86k FORCE
 
 clean: FORCE
 	rm -f *.bin test.disk serial.in serial.out

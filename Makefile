@@ -23,7 +23,7 @@ forth-rq16.bin: host/*.ft rq16/*.ft shared/*.ft dcpu16/*
 
 rq16: forth-rq16.bin
 run-rq16: forth-rq16.bin
-	$(EMULATOR) -arch rq -disk /dev/null forth-rq16.bin
+	$(EMULATOR) -arch rq -disk $(DCPU_DISK) forth-rq16.bin
 
 forth-mocha86k.bin: host/*.ft mocha86k/*.ft shared/*.ft dcpu16/*.ft
 	$(FORTH) mocha86k/main.ft dcpu16/disks.ft mocha86k/tail.ft
@@ -35,7 +35,7 @@ run-mocha86k: forth-mocha86k.bin
 
 test.disk: test/*.ft
 	cat test/harness.ft test/basics.ft test/comparisons.ft test/arithmetic.ft \
-		test/rest.ft > test.disk
+		test/parsing.ft test/rest.ft > test.disk
 
 test-dcpu16: forth-dcpu16.bin test.disk test.dcs FORCE
 	$(EMULATOR) -turbo -disk test.disk -script test.dcs forth-dcpu16.bin
@@ -57,14 +57,14 @@ run-arm: forth-arm.bin
 
 test-arm: forth-arm.bin test.disk FORCE
 	cp test.disk test.disk2
-	$(ARM_QEMU) -kernel forth-arm.bin -serial file:test.disk2 &
-	export PID_QEMU=$$!
-	echo $$PID_QEMU
-	#export PID_OUT=$$!
-	sleep 3
-	kill $$PID_QEMU
-	cat test.disk2
-	rm test.disk2
+	$(ARM_QEMU) -kernel forth-arm.bin -serial pipe:serial
+	#export PID_QEMU=$$!
+	#echo $$PID_QEMU
+	##export PID_OUT=$$!
+	#sleep 3
+	#kill $$PID_QEMU
+	#cat test.disk2
+	#rm test.disk2
 
 test: test-dcpu16 test-rq16 test-mocha86k FORCE
 

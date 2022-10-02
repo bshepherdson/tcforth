@@ -15,9 +15,9 @@ VARIABLE error-xt
       DO 0 LOOP THEN
     depth start-depth @ > IF
       depth start-depth @
-    DO drop LOOP THEN ;
+      DO drop LOOP THEN ;
 
-: error1 type source type cr ;
+: error1 type source type cr   empty-stack ;
 ' error1 error-xt !
 
 \ Test words

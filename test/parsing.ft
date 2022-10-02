@@ -1,0 +1,16 @@
+\ Tests for parsing, tick, etc.
+
+here
+VARIABLE GP1
+here ( before after )
+swap CONSTANT GP1-before
+     CONSTANT GP1-after
+
+T{ ' GP1 GP1-before -   ->   1 cells 4 chars + }T
+T{ ' GP1 GP1 <          ->   <TRUE> }T
+T{ GP1-after GP1 -      ->   1 cells }T
+
+T{ : GP2 ['] GP1 ; ->       }T
+T{ GP2             -> ' GP1 }T
+T{ GP2 execute     -> GP1   }T
+

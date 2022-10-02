@@ -8,7 +8,7 @@ target definitions
 \ link | len | name... |
 target : (CREATE) ( "name" -- ) here latest ,   'latest !
     parse-name dup c,
-    here swap ( src dst u ) dup >R move> R> ( len ) allot ;
+    here swap ( src dst u ) dup >R move> R> ( len ) allot align ;
 
 host definitions
 \ Host-side CREATE, used by eg. : CONSTANT ... HOST ACTS: CREATE ... ;

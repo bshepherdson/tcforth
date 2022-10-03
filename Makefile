@@ -55,18 +55,13 @@ arm: forth-arm.bin
 run-arm: forth-arm.bin
 	$(ARM_QEMU) -kernel forth-arm.bin
 
-test-arm: forth-arm.bin test.disk FORCE
-	cp test.disk test.disk2
-	$(ARM_QEMU) -kernel forth-arm.bin -serial pipe:serial
-	#export PID_QEMU=$$!
-	#echo $$PID_QEMU
-	##export PID_OUT=$$!
-	#sleep 3
-	#kill $$PID_QEMU
-	#cat test.disk2
-	#rm test.disk2
+forth-arm-tests.bin: host/*.ft arm/*.ft shared/*.ft test.disk
+	$(FORTH) arm/main.ft arm/embedding.ft arm/tail.ft
 
-test: test-dcpu16 test-rq16 test-mocha86k FORCE
+test-arm: forth-arm-tests.bin test.disk FORCE
+	$(ARM_QEMU) -kernel forth-arm-tests.bin
+
+test: test-dcpu16 test-rq16 test-mocha86k test-arm FORCE
 
 clean: FORCE
 	rm -f *.bin test.disk serial.in serial.out

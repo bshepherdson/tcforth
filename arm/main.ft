@@ -52,6 +52,10 @@ host definitions REQUIRE intro.ft
 \ And finally the startup code!
 host definitions REQUIRE ../shared/init.ft
 
+host definitions
+VARIABLE output-file-xt
+:noname S" forth-arm.bin" ; output-file-xt !
+
 \ NB: You should always include tail.ft as the last stage of your build.
 \ It actually emits the assembled image.
 

@@ -1,0 +1,47 @@
+\ Embeds a (target) file as a string, and feeds it in as input.
+\ Gives a cleaner input without the need to juggle serial devices and FIFOs.
+
+target definitions
+create embedded-tests
+
+host definitions
+
+: embed ( c-addr u1 -- )
+  r/o open-file abort" Failed to open test disk" ( fid ) >R
+  there @ ta   100000   R@ read-file   ABORT" Failed to read test disk" ( u2 )
+  there +! talign
+  R> close-file ABORT" Failed to close test disk" ;
+
+S" test.disk" embed
+
+target definitions
+here CONSTANT embedded-top
+VARIABLE embedding-ptr
+
+: next-line ( -- c-addr u )
+  embedding-ptr @ BEGIN dup c@ $0a <> WHILE char+ REPEAT ( c-addr-nl )
+  embedded-top min  ( c-addr-nl/min )
+  embedding-ptr @ - ( u )
+  embedding-ptr @ swap ( c-addr u ) ;
+
+\ Loads the next line into TIB ready for input.
+: refill-embed ( -- ready? )
+  next-line ( c-addr u )
+  dup char+ embedding-ptr +! \ Gotta skip over the newline
+  'source 2!   -2 'source-id !   0 >IN !
+  source drop embedded-top < ; \ Still more if the line start if before the end.
+
+: refill-2 ( -- ready? ) source-id -2 = IF refill-embed ELSE refill THEN ;
+' refill-2 refill-xt !
+
+
+: run-tests ( -- )
+  init-hardware
+  10 base !   -2 'source-id !    \ embedding!
+  embedded-tests embedding-ptr ! \ start of the embedded region
+  (quit) ;
+
+host definitions
+T' run-tests   entry-point t!
+:noname S" forth-arm-tests.bin" ; output-file-xt !
+

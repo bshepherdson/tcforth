@@ -8,5 +8,6 @@ host here   var_dp     t!
 
 \ At this point the assembler's output region should be complete. Dump the
 \ resulting binary.
-S" forth-arm.bin" dump
+
+output-file-xt @ execute dump
 bye

@@ -298,8 +298,8 @@ code D>S  {{ tos }} pop,   end-code
 
 code D+  ( l1 h1 l2 h2 -- l3 h3 )
   {{ r2 r1 r0 }} pop, \ r2 l1   r1 h1   r0 l2   tos h2
-  r2 r0  r0  add,     \ l1 + l2 = l3 -> r0
-  r1 tos tos adc,     \ h1 + h2 + C = h2 -> tos
+  r2 r0  r0  S add,   \ l1 + l2 = l3 -> r0
+  r1 tos tos   adc,   \ h1 + h2 + C = h2 -> tos
   {{ r0 }} push,
 end-code
 
@@ -519,10 +519,6 @@ label interrupt-handler
 \ Main =======================================================================
 \ Machine code entry point, jumped to be the first instructions.
 label main
-  \ 65 #    r1 mov,
-  \ uart0dr r0 ldr-pc,
-  \ r0 []   r1 str,
-
   \ Starts with interrupts disabled.
   rp0 # rsp mov,
   'sp0  sp  ldr-pc,

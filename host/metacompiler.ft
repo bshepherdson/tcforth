@@ -138,6 +138,7 @@ host definitions
 (T') !     'mirror !   act t!
 (T') ,     'mirror !   act t,
 (T') cells 'mirror !   act tcells
+(T') dup   'mirror !   act dup
 'mirror !
 
 \ Hand-roll the target+mirror definitions for : and ;

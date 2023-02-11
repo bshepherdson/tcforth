@@ -1,0 +1,340 @@
+\ Addressing modes:
+\ - Implied (none)
+\ - Accumulator only, non memory (ASL, LSR, ROL, ROR)
+\ - Immediate: 1-byte literal, spelled #nn or #$nn
+\ - Absolute: 2-byte literal address, spelled $nnnn
+\ - X-indexed absolute: 2-byte literal address plus X, spelled $nnnn,X
+\ - Y-indexed absolute: same, but Y
+\ - Absolute Indirect: 2-byte abs addr, doubly indirected (JMP ($nnnn) only)
+\ - Zero page: 1-byte zero page offset, spelled $nn
+\ - X-indexed zero page: 1-byte offset with X, spelled $nn,X
+\ - Y-indexed zero page: 1-byte offset with Y, spelled $nn,Y (LDX and STX only)
+\ - X-indexed ZP indirect: 1-byte offset added to X, then indirected "($nn,X)"
+\ - ZP indirect Y-indexed: 1-byte offset, looked up and *then* added to Y "($nn),Y"
+\ - (Relative: 2-byte PC-relative offset, only branches)
+
+\ Relative and Implied are special and don't need to be in the table.
+\ Likewise Absolute Indirect is only allowed for the jump.
+
+\ All 16-bit values are stored little-endian.
+
+\ START HERE: Adjust the above to STC with the system stack for return stack and
+\ zero page for data stack.
+
+CREATE output 64 1024 * allot
+VARIABLE there
+0 there !
+VARIABLE min-there   1000000 min-there !
+VARIABLE max-there   0       max-there !
+
+: clean-output ( -- ) 64 1024 * 0 DO 0   i output +   c! LOOP ;
+clean-output
+
+: endpoints! ( t-addr -- )
+  dup max-there @ max max-there !
+      min-there @ min min-there ! ;
+
+: b@ ( t-addr -- b ) output + c@ ;
+: w@ ( t-addr -- w ) output + dup c@   swap 1+ c@   8 lshift or ;
+
+: b! ( b t-addr -- ) dup endpoints!   output + c! ;
+: w! ( w t-addr -- ) over 255 and over b!   1+ >R 8 rshift R> b! ;
+: assemble   ( b -- )    there @ b!   1 there +! ;
+: assemble16 ( word -- ) there @ w!   2 there +! ;
+
+: implied ( opcode "name" -- ) CREATE , DOES> @ assemble ;
+$00 implied brk,
+$18 implied clc, $d8 implied cld, $58 implied cli, $b8 implied clv,
+$ca implied dex, $88 implied dey, $e8 implied inx, $c8 implied iny,
+$ea implied nop,
+$48 implied pha, $08 implied php, $68 implied pla, $28 implied plp,
+$40 implied rti,
+$60 implied rts,
+$38 implied sec, $f8 implied sed, $78 implied sei,
+$aa implied tax, $a8 implied tay, $ba implied tsx,
+$8a implied txa, $9a implied txs, $98 implied tya,
+
+
+\ Arbitrary indexes for the opcodes.
+0  CONSTANT acc
+1  CONSTANT #      \ Immediate
+2  CONSTANT $      \ Absolute
+3  CONSTANT $,x    \ X-indexed Absolute
+4  CONSTANT $,y    \ Y-indexed Absolute
+5  CONSTANT zp     \ Zero page
+6  CONSTANT zp,x   \ X-indexed zero page
+7  CONSTANT zp,y   \ Y-indexed zero page
+8  CONSTANT (zp,x) \ Y-indexed zero page
+9  CONSTANT (zp),y \ Y-indexed zero page
+10 CONSTANT #modes
+
+23 CONSTANT #addressed
+CREATE opcode-table #modes #addressed * allot align
+
+: nop ( -- ) ;
+CREATE arg-assemblers #modes cells allot
+
+' nop          acc    cells arg-assemblers + !
+' assemble     #      cells arg-assemblers + !
+' assemble16   $      cells arg-assemblers + !
+' assemble16   $,x    cells arg-assemblers + !
+' assemble16   $,y    cells arg-assemblers + !
+' assemble     zp     cells arg-assemblers + !
+' assemble     zp,x   cells arg-assemblers + !
+' assemble     zp,y   cells arg-assemblers + !
+' assemble     (zp,x) cells arg-assemblers + !
+' assemble     (zp),y cells arg-assemblers + !
+
+: assemble-arg ( ... mode -- ) cells arg-assemblers + @ execute ;
+
+\ Arbitrary labels for the opcodes with address modes.
+: addressed ( tag "name" -- ) CREATE , DOES>
+  @ ( ... mode tag )
+  2dup #modes * + opcode-table + c@ ( ... mode tag opcode )
+  ?dup IF assemble drop assemble-arg ELSE
+    ." Illegal tag + mode pair: " . . cr
+    abort
+  THEN ;
+
+ 0 addressed adc,
+ 1 addressed and,
+ 2 addressed asl,
+ 3 addressed bit,
+ 4 addressed cmp,
+ 5 addressed cpx,
+ 6 addressed cpy,
+ 7 addressed dec,
+ 8 addressed eor,
+ 9 addressed inc,
+10 addressed jmp,
+11 addressed jsr,
+12 addressed lda,
+13 addressed ldx,
+14 addressed ldy,
+15 addressed lsr,
+16 addressed ora,
+17 addressed rol,
+18 addressed ror,
+19 addressed sbc,
+20 addressed sta,
+21 addressed stx,
+22 addressed sty,
+
+: encode ( op-xt mode opcode -- )
+  >R swap ( mode op-xt    R: opcode )
+  >body @ #modes * + opcode-table + ( addr   R: opcode )
+  R> swap c! ;
+
+' lda,
+dup #      $a9 encode
+dup $      $ad encode
+dup $,x    $bd encode
+dup $,y    $b9 encode
+dup zp     $a5 encode
+dup zp,x   $b5 encode
+dup (zp,x) $a1 encode
+    (zp),y $b1 encode
+
+' ldx,
+dup #      $a2 encode
+dup $      $ae encode
+dup $,y    $be encode
+dup zp     $a6 encode
+    zp,y   $b6 encode
+
+' ldy,
+dup #      $a0 encode
+dup $      $ac encode
+dup $,x    $bc encode
+dup zp     $a4 encode
+    zp,x   $b4 encode
+
+' sta,
+dup $      $8d encode
+dup $,x    $9d encode
+dup $,y    $99 encode
+dup zp     $85 encode
+dup zp,x   $95 encode
+dup (zp,x) $81 encode
+    (zp),y $91 encode
+
+' stx,
+dup $      $8e encode
+dup zp     $86 encode
+    zp,y   $96 encode
+
+' sty,
+dup $      $8c encode
+dup zp     $84 encode
+    zp,x   $94 encode
+
+: shifties ( xt base -- )
+  >R
+  dup acc  R@      encode
+  dup $    R@  4 + encode
+  dup $,x  R@ 20 + encode
+  dup zp   R@  4 - encode
+      zp,x R> 12 + encode ;
+
+' asl, $0a shifties
+' lsr, $4a shifties
+' rol, $2a shifties
+' ror, $6a shifties
+
+
+' bit,
+dup $      $2c encode
+    zp     $24 encode
+
+' cpx,
+dup #      $e0 encode
+dup $      $ec encode
+    zp     $e4 encode
+' cpy,
+dup #      $c0 encode
+dup $      $cc encode
+    zp     $c4 encode
+
+\ Group 1 logic and arithmetic
+: group1 ( xt base -- )
+  >R
+  dup #      R@      encode
+  dup $      R@  4 + encode
+  dup $,x    R@ 20 + encode
+  dup $,y    R@ 16 + encode
+  dup zp     R@  4 - encode
+  dup zp,x   R@ 12 + encode
+  dup (zp,x) R@  8 - encode
+      (zp),y R>  8 + encode ;
+
+' and, $29 group1
+' eor, $49 group1
+' ora, $09 group1
+' adc, $69 group1
+' cmp, $c9 group1
+' sbc, $e9 group1
+
+
+' dec,
+dup $     $ce encode
+dup $,x   $de encode
+dup zp    $c6 encode
+    zp,x  $d6 encode
+' inc,
+dup $     $ee encode
+dup $,x   $fe encode
+dup zp    $e6 encode
+    zp,x  $f6 encode
+
+\ And finally some special opcodes: JMP, JSR, and the Bxx branches.
+
+\ These accept only Absolute addressing.
+: jumper ( opcode "name" -- ) CREATE , DOES>
+  ( addr16 mode addr )
+  swap $ <> ABORT" jmp, jsr, and (jmp), can only be called with $ absolute"
+  @ assemble assemble16 ;
+
+$4c jumper jmp,
+$6c jumper (jmp),
+$20 jumper jsr,
+
+
+\ The branches all have a unique relative addressing mode that adjusts PC by a
+\ signed byte delta. They take a raw target address and the assembler computes
+\ the gap.
+: brancher ( op "name" -- ) CREATE , DOES>
+  ( addr16 addr ) @ assemble ( addr16 )
+  \ The delta is relative to the PC *after* the branch delta, which is there 1+
+  there @ 1+ - ( delta8 )
+  255 and assemble ;
+
+$90 brancher bcc,
+$b0 brancher bcs,
+$f0 brancher beq,
+$30 brancher bmi,
+$d0 brancher bne,
+$10 brancher bpl,
+$50 brancher bvc,
+$70 brancher bvs,
+
+
+\ Control structures
+\ eq? if, ... then, compiles a forward reference (0 relative jump) and resolves.
+\ Since the branches go the other way, these condition flags are reversed.
+: cc? ['] bcs, ;   : cs? ['] bcc, ;
+: eq? ['] bne, ;   : ne? ['] beq, ;
+: mi? ['] bpl, ;   : pl? ['] bmi, ;
+: vc? ['] bvs, ;   : vs? ['] bvc, ;
+
+: if,   ( xt-branch -- a-slot )
+  there @   dup 1+ >R   swap execute   R> ;
+
+\ Resolves a forward branch. It's relative to a-slot+2.
+: then, ( a-slot -- )
+  there @   over 1+ -   ( a-slot delta )   swap b! ;
+
+
+\ TODO Labels, forward and backward
+\ I'll fill these in as their requirements are made clear in trying to write the
+\ Forth for this system.
+
+: high-water ( -- max-offset ) max-there @ ;
+
+: c64-open ( c-addr u -- fileid )
+  W/O bin create-file ABORT" Failed to open output file" ;
+: c64-close ( fileid -- ) close-file ABORT" Failed to close output file" ;
+
+: c64-emit ( fileid -- )
+  >R   min-there @ output +   max-there @ 1+ min-there @ -   R> write-file
+  ABORT" Failed to write to output file" ;
+
+CREATE cart-header
+\ The first row is "C64 CARTRIDGE   "
+( 10 ) $00 c, $00 c, $00 c, $40 c, \ Header length: $40
+( 14 ) $01 c, $00 c,               \ Cart version v2.00 - actually v1.00
+( 16 ) $00 c, $00 c,               \ Cart hardware type, 0 for generic
+( 18 ) $00 c,                      \ EXROM setting
+( 19 ) $01 c,                      \ Game setting   0+1 = 8K ROM
+( 1a ) $00 c,                      \ Cart hardware revision/subtype
+( 1b ) $00 c, $00 c, $00 c, $00 c, $00 c, \ Padding
+
+CREATE cart-zeroes 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 ,
+
+CREATE chip-header
+( 00 ) $43 c, $48 c, $49 c, $50 c, \ Segment signature "CHIP"
+( 04 ) $00 c, $00 c, $20 c, $10 c, \ Segment length: ROM size + $10 = $2010
+( 08 ) $00 c, $00 c,               \ Chip type: 0 = ROM
+( 0a ) $00 c, $00 c,               \ Bank number ($0000 normal cart)
+( 0c ) $80 c, $00 c,               \ Load address $8000
+( 0e ) $20 c, $00 c,               \ ROM length $2000
+
+
+\ Given the label for the cart
+: c64-cart-header ( c-addr u fileid -- )
+  >R
+  S" C64 CARTRIDGE   "         R@ write-file drop
+  cart-header $10              R@ write-file drop
+  tuck                         R@ write-file drop ( u )
+  32 swap -   cart-zeroes swap R@ write-file drop
+  chip-header $10              R> write-file drop ;
+
+
+\ There are three forms of output useful.
+\ - Raw and unadorned.
+\ - Simple location word, then the raw form.
+\ - CRT ROM format
+: emit-raw ( c-addr u -- ) c64-open dup c64-emit c64-close ;
+: emit-binary ( c-addr u -- )
+  c64-open >R
+  \ Write a 2-byte little-endian origin as a header, then the bytes starting
+  \ from there. This is the format expected by emulators etc.
+  min-there 2 R@ write-file ABORT" Failed to write header to output file"
+  R@ c64-emit R> c64-close ;
+: emit-cart ( a-label u-label a-filename u-filename -- )
+  c64-open   dup >R c64-cart-header
+  max-there @ $a000 >= ABORT" Too big for an 8K ROM"
+  $8000 min-there !   $a000 max-there !
+  R> dup c64-emit
+  c64-close ;
+
+

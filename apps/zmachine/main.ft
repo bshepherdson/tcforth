@@ -1,0 +1,5 @@
+\ Z-machine interpreter, targeting v3, v4 and v5.
+host REQUIRE core.ft
+host REQUIRE disk.ft
+host REQUIRE memory.ft
+\ REQUIRE strings.ft

@@ -63,6 +63,12 @@ test-arm: forth-arm-tests.bin test.disk FORCE
 
 test: test-dcpu16 test-rq16 test-mocha86k test-arm FORCE
 
+zmachine.bin: forth-rq16.bin apps/zmachine/*
+	$(FORTH) rq16/main.ft dcpu16/disks.ft apps/zmachine/main.ft rq16/tail.ft
+
+run-zm: zmachine.bin FORCE
+	$(EMULATOR) -arch rq -disk apps/zmachine/Zork1.z5 zmachine.bin
+
 clean: FORCE
 	rm -f *.bin test.disk serial.in serial.out
 

@@ -18,44 +18,87 @@ Forth.
 
 | Machine | CPU | Label | Model | Status |
 | :--- | :--- | :--- | :--- | :--- |
+| Hosted ARM      | ARM v7+ | `arm`    | DTC | Working |
 | [DCPU-16](https://github.com/techcompliant/TC-Specs/blob/master/CPU/DCPU.md) | DCPU-16 | `dcpu16` | DTC | Working |
 | [Risque-16](https://github.com/bshepherdson/risque16) | Risque-16 | `rq16` | ITC | Working |
+| Commodore 64    | 6502    | `c64`    | TBD | In progress |
 | [Mocha 86k](https://github.com/bshepherdson/mocha86k) | Mocha 86k | `mocha` | TBD | Planned |
 | Apple \]\[      | 6502    | `apple2` | TBD | Planned |
-| Commodore 64    | 6502    | `c64`    | TBD | Planned |
-| Hosted ARM      | ARM v7+ | `arm`    | TBD | Planned |
 | Gameboy Advance | ARM v7  | `gba`    | TBD | Planned |
 
 ### Models
 
-For clarity, what I mean by the "model" is this:
+For clarity, what I mean by the "model" is the fundamental mechanism that
+executes a Forth colon definition.
 
-- ITC is **indirect threaded code**. A Forth colon definition is a **thread**,
-  where each cell-sized entry is a *pointer to a pointer to the codeword*.
-    - For words written in machine code, the codeword points to that code.
-    - ITC is the traditional Forth from the 80s.
-    - ITC is generally more compact but slower, since `NEXT` must doubly
-      indirect. Some processors do this so fast it's nearly identical.
-- DTC is **direct threaded code**. A Forth colon definition is a **thread**,
-  where each cell-sized entry is a *pointer to machine code*.
-    - For machine code words, this is a pointer to the code itself.
-    - High-level words begin with a machine code fragment that implements the
-      code word. That might be inlined, or the fragment might eg. jump to a
-      subroutine.
-    - DTC is generally faster than ITC but takes a bit more space.
-- STC is **subroutine threaded code**. A Forth colon definition is a machine
-  code subroutine, that consists of a sequence of jump-to-subroutine
-  instructions, jumping to each word.
-    - There is no *inner interpreter* (`NEXT`) in STC; or put differently, the
-      processor is the inner interpreter.
-    - This requires that the hardware stack be the return stack; on some
-      machines that's no problem, on others it practically makes STC impossible.
-    - Note that STC is not really native code compilation of Forth! Each word's
-      code is still a separate routine, and executing a Forth word jumps in and
-      out of these definitions.
-    - STC tends to be fast, but bulky, since `JTS absolute address` instructions
-      are bigger than just a thread of addresses.
+For an excellent discussion with nice diagrams of the structures in memory, see
+[Moving Forth - part 1](https://www.bradrodriguez.com/papers/moving1.htm). For
+a mediocre explanation without nice diagrams, keep reading.
 
+#### ITC - Indirect Threaded Code
+
+A Forth colon definition is a **thread**, a contiguous array of cells where each
+cell-sized entry is a *pointer to a pointer to a codeword*.
+
+The codeword is the fragment of machine code that executes a Forth definition
+(traditionally called `ENTER` or `DOCOL` for colon definitions). For words
+written in machine code, the codeword is that code.
+
+ITC is the traditional way to implement Forth. ITC is generally fairly compact
+but not very fast, since `NEXT` must doubly indirect. Some processors do this
+so fast the impact is negligible, especially older CPUs where the CPU and memory
+run at comparable speeds. On powerful modern machines with gigs of memory and
+where a cache miss to RAM can cost thousands of CPU cycles, the extra
+indirection is very wasteful and other techniques are generally faster.
+
+One advantage of ITC worth noting is that it can aid debuggability. The code
+of a definition contains pointers into the dictionary, so each word's name (and
+any extra info the compiler cares to add to the dictionary) is handy.
+
+#### DTC - Direct Threaded Code
+
+A Forth colon definition is again a **thread**, but each cell-sized entry is a
+*pointer to the codeword*.
+
+For machine code words, this is simply a pointer to the code. For high-level
+words, the word begins with a machine code fragment, followed by the thread.
+The code fragment might be fully inline, or it might call a subroutine.
+
+DTC is generally faster than ITC on modern machines because it avoids an extra
+indirection through memory. But it also takes more space since the code
+fragments are duplicated rather than appearing just once.
+
+#### STC - Subroutine Threaded Code
+
+A Forth colon definition is a machine code subroutine, that consists of a
+sequence of jump-to-subroutine instructions, jumping to each word's code.
+
+STC is quite different from a traditional "threaded" Forth. There's no
+*inner interpreter* (`NEXT`) in STC. Or, putting it differently, the processor's
+fetch-execute cycle is the inner interpreter.
+
+STC requires that the hardware stack be the return stack. On some machines
+that's no problem, but on others it practically makes STC impossible.
+
+Note that STC is **not** native code compilation of Forth! Each high-level
+word's code is still a separate routine, and executing a Forth word jumps in
+and out of the various definitions.
+
+STC tends to be fast, but bulky -- a sequence of `JTS absolute_address`
+instructions are bigger than a sequence of just the addresses.
+
+#### TTC - Token Threaded Code
+
+For desperately memory-poor applications, token threaded code is an option. TTC
+works similarly to ITC, except that the thread is composed not of cell-sized
+pointers but (typically) byte-sized tokens.
+
+The tokens can be thought of as indexes into an array of primitive operations.
+(That might in fact be how it is implemented!)
+
+The advantage of this approach is of course how compact the threads become. The
+downsides are the complex encoding for eg. including a large literal value in a
+thread of bytes; and it tends to be slower than ITC.
 
 ## Building
 

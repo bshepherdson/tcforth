@@ -1,0 +1,654 @@
+VARIABLE start-depth
+
+VARIABLE error?
+error? off
+
+: error error? on   type source type cr ;
+
+: T{ 0 there !   depth start-depth ! ;
+
+: -> depth start-depth @ <> IF S" Stack not clean during assembly " error THEN ;
+
+: }T depth start-depth @ <= IF S" Empty expectation " error THEN
+  there @ BEGIN 1- dup 0>= WHILE ( ... exp tgt-addr )
+    tuck b@ <> IF S" Mismatch " error THEN ( ... tgt-addr )
+  REPEAT drop
+  depth start-depth @ swap - IF S" Expectation longer than actual " error THEN ;
+
+\ 8-bit Loads ================================================================
+T{ a a    ld-r,r -> $7f }T
+T{ a b    ld-r,r -> $78 }T
+T{ a c    ld-r,r -> $79 }T
+T{ a d    ld-r,r -> $7a }T
+T{ a e    ld-r,r -> $7b }T
+T{ a h    ld-r,r -> $7c }T
+T{ a l    ld-r,r -> $7d }T
+T{ a (hl) ld-r,r -> $7e }T
+
+T{ b a    ld-r,r -> $47 }T
+T{ b b    ld-r,r -> $40 }T
+T{ b c    ld-r,r -> $41 }T
+T{ b d    ld-r,r -> $42 }T
+T{ b e    ld-r,r -> $43 }T
+T{ b h    ld-r,r -> $44 }T
+T{ b l    ld-r,r -> $45 }T
+T{ b (hl) ld-r,r -> $46 }T
+
+T{ c a    ld-r,r -> $4f }T
+T{ c b    ld-r,r -> $48 }T
+T{ c c    ld-r,r -> $49 }T
+T{ c d    ld-r,r -> $4a }T
+T{ c e    ld-r,r -> $4b }T
+T{ c h    ld-r,r -> $4c }T
+T{ c l    ld-r,r -> $4d }T
+T{ c (hl) ld-r,r -> $4e }T
+
+T{ d a    ld-r,r -> $57 }T
+T{ d b    ld-r,r -> $50 }T
+T{ d c    ld-r,r -> $51 }T
+T{ d d    ld-r,r -> $52 }T
+T{ d e    ld-r,r -> $53 }T
+T{ d h    ld-r,r -> $54 }T
+T{ d l    ld-r,r -> $55 }T
+T{ d (hl) ld-r,r -> $56 }T
+
+T{ e a    ld-r,r -> $5f }T
+T{ e b    ld-r,r -> $58 }T
+T{ e c    ld-r,r -> $59 }T
+T{ e d    ld-r,r -> $5a }T
+T{ e e    ld-r,r -> $5b }T
+T{ e h    ld-r,r -> $5c }T
+T{ e l    ld-r,r -> $5d }T
+T{ e (hl) ld-r,r -> $5e }T
+
+T{ h a    ld-r,r -> $67 }T
+T{ h b    ld-r,r -> $60 }T
+T{ h c    ld-r,r -> $61 }T
+T{ h d    ld-r,r -> $62 }T
+T{ h e    ld-r,r -> $63 }T
+T{ h h    ld-r,r -> $64 }T
+T{ h l    ld-r,r -> $65 }T
+T{ h (hl) ld-r,r -> $66 }T
+
+T{ l a    ld-r,r -> $6f }T
+T{ l b    ld-r,r -> $68 }T
+T{ l c    ld-r,r -> $69 }T
+T{ l d    ld-r,r -> $6a }T
+T{ l e    ld-r,r -> $6b }T
+T{ l h    ld-r,r -> $6c }T
+T{ l l    ld-r,r -> $6d }T
+T{ l (hl) ld-r,r -> $6e }T
+
+T{ (hl) a    ld-r,r -> $77 }T
+T{ (hl) b    ld-r,r -> $70 }T
+T{ (hl) c    ld-r,r -> $71 }T
+T{ (hl) d    ld-r,r -> $72 }T
+T{ (hl) e    ld-r,r -> $73 }T
+T{ (hl) h    ld-r,r -> $74 }T
+T{ (hl) l    ld-r,r -> $75 }T
+\ T{ (hl) (hl) ld-r,r -> $66 }T - this one doesn't exist
+
+
+\ Register indirect
+T{ (bc) ld-a,(rr) -> $0a }T
+T{ (de) ld-a,(rr) -> $1a }T
+T{ (bc) ld-(rr),a -> $02 }T
+T{ (de) ld-(rr),a -> $12 }T
+
+\ Indexed indirect
+T{ a -7 ix ld-r,(i+#) -> $dd $7e -7 255 and }T
+
+T{ a  7 ix ld-r,(i+#) -> $dd $7e 7 }T
+T{ a  7 iy ld-r,(i+#) -> $fd $7e 7 }T
+T{ b  7 ix ld-r,(i+#) -> $dd $46 7 }T
+T{ b  7 iy ld-r,(i+#) -> $fd $46 7 }T
+T{ c  7 ix ld-r,(i+#) -> $dd $4e 7 }T
+T{ c  7 iy ld-r,(i+#) -> $fd $4e 7 }T
+T{ d  7 ix ld-r,(i+#) -> $dd $56 7 }T
+T{ d  7 iy ld-r,(i+#) -> $fd $56 7 }T
+T{ e  7 ix ld-r,(i+#) -> $dd $5e 7 }T
+T{ e  7 iy ld-r,(i+#) -> $fd $5e 7 }T
+T{ h  7 ix ld-r,(i+#) -> $dd $66 7 }T
+T{ h  7 iy ld-r,(i+#) -> $fd $66 7 }T
+T{ l  7 ix ld-r,(i+#) -> $dd $6e 7 }T
+T{ l  7 iy ld-r,(i+#) -> $fd $6e 7 }T
+
+T{  7 ix b ld-(i+#),r -> $dd $70 7 }T
+T{  7 iy b ld-(i+#),r -> $fd $70 7 }T
+T{  7 ix c ld-(i+#),r -> $dd $71 7 }T
+T{  7 iy c ld-(i+#),r -> $fd $71 7 }T
+T{  7 ix d ld-(i+#),r -> $dd $72 7 }T
+T{  7 iy d ld-(i+#),r -> $fd $72 7 }T
+T{  7 ix e ld-(i+#),r -> $dd $73 7 }T
+T{  7 iy e ld-(i+#),r -> $fd $73 7 }T
+T{  7 ix h ld-(i+#),r -> $dd $74 7 }T
+T{  7 iy h ld-(i+#),r -> $fd $74 7 }T
+T{  7 ix l ld-(i+#),r -> $dd $75 7 }T
+T{  7 iy l ld-(i+#),r -> $fd $75 7 }T
+T{  7 ix a ld-(i+#),r -> $dd $77 7 }T
+T{  7 iy a ld-(i+#),r -> $fd $77 7 }T
+
+
+\ Immediate loads
+T{ a    $9a ld-r,# -> $3e $9a }T
+T{ b    $9a ld-r,# -> $06 $9a }T
+T{ c    $9a ld-r,# -> $0e $9a }T
+T{ d    $9a ld-r,# -> $16 $9a }T
+T{ e    $9a ld-r,# -> $1e $9a }T
+T{ h    $9a ld-r,# -> $26 $9a }T
+T{ l    $9a ld-r,# -> $2e $9a }T
+T{ (hl) $9a ld-r,# -> $36 $9a }T
+
+\ Immediate load to indexed
+T{ 7 ix $9a ld-(i+#),# -> $dd $36 7 $9a }T
+T{ 7 iy $9a ld-(i+#),# -> $fd $36 7 $9a }T
+
+\ Absolutes
+T{ $1234 ld-a,$ -> $3a $34 $12 }T
+T{ $1234 ld-$,a -> $32 $34 $12 }T
+
+\ 16-bit Loads ===============================================================
+\ POP
+T{ bc pop, -> $c1 }T
+T{ de pop, -> $d1 }T
+T{ hl pop, -> $e1 }T
+T{ af pop, -> $f1 }T
+\ PUSH
+T{ bc push, -> $c6 }T
+T{ de push, -> $d6 }T
+T{ hl push, -> $e6 }T
+T{ af push, -> $f6 }T
+
+\ Immediates
+T{ bc $1234 ld-rr,## -> $01 $34 $12 }T
+T{ de $1234 ld-rr,## -> $11 $34 $12 }T
+T{ hl $1234 ld-rr,## -> $21 $34 $12 }T
+T{ sp $1234 ld-rr,## -> $31 $34 $12 }T
+T{ ix $1234 ld-rr,## -> $dd $21 $34 $12 }T
+T{ iy $1234 ld-rr,## -> $fd $21 $34 $12 }T
+
+\ Absolutes
+T{ bc $1234 ld-rr,$ -> $ed $4b $34 $12 }T
+T{ de $1234 ld-rr,$ -> $ed $5b $34 $12 }T
+T{ hl $1234 ld-rr,$ ->     $2a $34 $12 }T
+T{ sp $1234 ld-rr,$ -> $ed $7b $34 $12 }T
+T{ ix $1234 ld-rr,$ -> $dd $2a $34 $12 }T
+T{ iy $1234 ld-rr,$ -> $fd $2a $34 $12 }T
+
+T{ $1234 bc ld-$,rr -> $ed $43 $34 $12 }T
+T{ $1234 de ld-$,rr -> $ed $53 $34 $12 }T
+T{ $1234 hl ld-$,rr ->     $22 $34 $12 }T
+T{ $1234 sp ld-$,rr -> $ed $73 $34 $12 }T
+T{ $1234 ix ld-$,rr -> $dd $22 $34 $12 }T
+T{ $1234 iy ld-$,rr -> $fd $22 $34 $12 }T
+
+\ Regs to SP
+T{ hl ld-sp,rr ->     $f9 }T
+T{ ix ld-sp,rr -> $dd $f9 }T
+T{ iy ld-sp,rr -> $fd $f9 }T
+
+
+\ Exchanges ==================================================================
+T{ ex-af,   -> $08 }T
+T{ exx,     -> $d9 }T
+T{ ex-de,hl -> $eb }T
+T{ hl ex-(sp),rr ->     $e3 }T
+T{ ix ex-(sp),rr -> $dd $e3 }T
+T{ iy ex-(sp),rr -> $fd $e3 }T
+
+\ Block transfer =============================================================
+T{ ldi,  -> $ed $a0 }T
+T{ ldir, -> $ed $b0 }T
+T{ ldd,  -> $ed $a8 }T
+T{ lddr, -> $ed $b8 }T
+T{ cpi,  -> $ed $a1 }T
+T{ cpir, -> $ed $b1 }T
+T{ cpd,  -> $ed $a9 }T
+T{ cpdr, -> $ed $b9 }T
+
+\ 8-bit Arithmetic ===========================================================
+T{ b    add-r, -> $80 }T
+T{ c    add-r, -> $81 }T
+T{ d    add-r, -> $82 }T
+T{ e    add-r, -> $83 }T
+T{ h    add-r, -> $84 }T
+T{ l    add-r, -> $85 }T
+T{ (hl) add-r, -> $86 }T
+T{ a    add-r, -> $87 }T
+
+T{ b    adc-r, -> $88 }T
+T{ c    adc-r, -> $89 }T
+T{ d    adc-r, -> $8a }T
+T{ e    adc-r, -> $8b }T
+T{ h    adc-r, -> $8c }T
+T{ l    adc-r, -> $8d }T
+T{ (hl) adc-r, -> $8e }T
+T{ a    adc-r, -> $8f }T
+
+T{ b    sub-r, -> $90 }T
+T{ c    sub-r, -> $91 }T
+T{ d    sub-r, -> $92 }T
+T{ e    sub-r, -> $93 }T
+T{ h    sub-r, -> $94 }T
+T{ l    sub-r, -> $95 }T
+T{ (hl) sub-r, -> $96 }T
+T{ a    sub-r, -> $97 }T
+
+T{ b    sbc-r, -> $98 }T
+T{ c    sbc-r, -> $99 }T
+T{ d    sbc-r, -> $9a }T
+T{ e    sbc-r, -> $9b }T
+T{ h    sbc-r, -> $9c }T
+T{ l    sbc-r, -> $9d }T
+T{ (hl) sbc-r, -> $9e }T
+T{ a    sbc-r, -> $9f }T
+
+T{ b    and-r, -> $a0 }T
+T{ c    and-r, -> $a1 }T
+T{ d    and-r, -> $a2 }T
+T{ e    and-r, -> $a3 }T
+T{ h    and-r, -> $a4 }T
+T{ l    and-r, -> $a5 }T
+T{ (hl) and-r, -> $a6 }T
+T{ a    and-r, -> $a7 }T
+
+T{ b    xor-r, -> $a8 }T
+T{ c    xor-r, -> $a9 }T
+T{ d    xor-r, -> $aa }T
+T{ e    xor-r, -> $ab }T
+T{ h    xor-r, -> $ac }T
+T{ l    xor-r, -> $ad }T
+T{ (hl) xor-r, -> $ae }T
+T{ a    xor-r, -> $af }T
+
+T{ b     or-r, -> $b0 }T
+T{ c     or-r, -> $b1 }T
+T{ d     or-r, -> $b2 }T
+T{ e     or-r, -> $b3 }T
+T{ h     or-r, -> $b4 }T
+T{ l     or-r, -> $b5 }T
+T{ (hl)  or-r, -> $b6 }T
+T{ a     or-r, -> $b7 }T
+
+T{ b     cp-r, -> $b8 }T
+T{ c     cp-r, -> $b9 }T
+T{ d     cp-r, -> $ba }T
+T{ e     cp-r, -> $bb }T
+T{ h     cp-r, -> $bc }T
+T{ l     cp-r, -> $bd }T
+T{ (hl)  cp-r, -> $be }T
+T{ a     cp-r, -> $bf }T
+
+T{ b    inc-r, -> $04 }T
+T{ c    inc-r, -> $0c }T
+T{ d    inc-r, -> $14 }T
+T{ e    inc-r, -> $1c }T
+T{ h    inc-r, -> $24 }T
+T{ l    inc-r, -> $2c }T
+T{ (hl) inc-r, -> $34 }T
+T{ a    inc-r, -> $3c }T
+
+T{ b    dec-r, -> $05 }T
+T{ c    dec-r, -> $0d }T
+T{ d    dec-r, -> $15 }T
+T{ e    dec-r, -> $1d }T
+T{ h    dec-r, -> $25 }T
+T{ l    dec-r, -> $2d }T
+T{ (hl) dec-r, -> $35 }T
+T{ a    dec-r, -> $3d }T
+
+
+\ Indexed
+T{ 7 ix add-(i+#), -> $dd $86 7 }T
+T{ 7 iy add-(i+#), -> $fd $86 7 }T
+T{ 7 ix adc-(i+#), -> $dd $8e 7 }T
+T{ 7 iy adc-(i+#), -> $fd $8e 7 }T
+T{ 7 ix sub-(i+#), -> $dd $96 7 }T
+T{ 7 iy sub-(i+#), -> $fd $96 7 }T
+T{ 7 ix sbc-(i+#), -> $dd $9e 7 }T
+T{ 7 iy sbc-(i+#), -> $fd $9e 7 }T
+T{ 7 ix and-(i+#), -> $dd $a6 7 }T
+T{ 7 iy and-(i+#), -> $fd $a6 7 }T
+T{ 7 ix xor-(i+#), -> $dd $ae 7 }T
+T{ 7 iy xor-(i+#), -> $fd $ae 7 }T
+T{ 7 ix  or-(i+#), -> $dd $b6 7 }T
+T{ 7 iy  or-(i+#), -> $fd $b6 7 }T
+T{ 7 ix  cp-(i+#), -> $dd $be 7 }T
+T{ 7 iy  cp-(i+#), -> $fd $be 7 }T
+T{ 7 ix inc-(i+#), -> $dd $34 7 }T
+T{ 7 iy inc-(i+#), -> $fd $34 7 }T
+T{ 7 ix dec-(i+#), -> $dd $35 7 }T
+T{ 7 iy dec-(i+#), -> $fd $35 7 }T
+
+\ Immediate
+T{ 7 add-#, -> $c6 7 }T
+T{ 7 adc-#, -> $ce 7 }T
+T{ 7 sub-#, -> $d6 7 }T
+T{ 7 sbc-#, -> $de 7 }T
+T{ 7 and-#, -> $e6 7 }T
+T{ 7 xor-#, -> $ee 7 }T
+T{ 7  or-#, -> $f6 7 }T
+T{ 7  cp-#, -> $fe 7 }T
+
+\ Misc
+T{ daa, -> $27 }T
+T{ cpl, -> $2f }T
+T{ neg, -> $ed $44 }T
+T{ ccf, -> $3f }T
+T{ scf, -> $37 }T
+
+
+\ 16-bit Arithmetic ==========================================================
+T{ hl bc add-rr,rr ->     $09 }T
+T{ hl de add-rr,rr ->     $19 }T
+T{ hl hl add-rr,rr ->     $29 }T
+T{ hl sp add-rr,rr ->     $39 }T
+T{ ix bc add-rr,rr -> $dd $09 }T
+T{ ix de add-rr,rr -> $dd $19 }T
+T{ ix hl add-rr,rr -> $dd $29 }T
+T{ ix sp add-rr,rr -> $dd $39 }T
+T{ iy bc add-rr,rr -> $fd $09 }T
+T{ iy de add-rr,rr -> $fd $19 }T
+T{ iy hl add-rr,rr -> $fd $29 }T
+T{ iy sp add-rr,rr -> $fd $39 }T
+
+T{ bc adc-hl,rr -> $ed $4a }T
+T{ de adc-hl,rr -> $ed $5a }T
+T{ hl adc-hl,rr -> $ed $6a }T
+T{ sp adc-hl,rr -> $ed $7a }T
+T{ bc sbc-hl,rr -> $ed $42 }T
+T{ de sbc-hl,rr -> $ed $52 }T
+T{ hl sbc-hl,rr -> $ed $62 }T
+T{ sp sbc-hl,rr -> $ed $72 }T
+
+T{ bc inc-rr, ->     $03 }T
+T{ de inc-rr, ->     $13 }T
+T{ hl inc-rr, ->     $23 }T
+T{ sp inc-rr, ->     $33 }T
+T{ ix inc-rr, -> $dd $23 }T
+T{ iy inc-rr, -> $fd $23 }T
+
+T{ bc dec-rr, ->     $0b }T
+T{ de dec-rr, ->     $1b }T
+T{ hl dec-rr, ->     $2b }T
+T{ sp dec-rr, ->     $3b }T
+T{ ix dec-rr, -> $dd $2b }T
+T{ iy dec-rr, -> $fd $2b }T
+
+
+
+\ Rotates and Shifts =========================================================
+T{ b    rlc-r, -> $cb $00 }T
+T{ c    rlc-r, -> $cb $01 }T
+T{ d    rlc-r, -> $cb $02 }T
+T{ e    rlc-r, -> $cb $03 }T
+T{ h    rlc-r, -> $cb $04 }T
+T{ l    rlc-r, -> $cb $05 }T
+T{ (hl) rlc-r, -> $cb $06 }T
+T{ a    rlc-r, -> $cb $07 }T
+
+T{ b    rrc-r, -> $cb $08 }T
+T{ c    rrc-r, -> $cb $09 }T
+T{ d    rrc-r, -> $cb $0a }T
+T{ e    rrc-r, -> $cb $0b }T
+T{ h    rrc-r, -> $cb $0c }T
+T{ l    rrc-r, -> $cb $0d }T
+T{ (hl) rrc-r, -> $cb $0e }T
+T{ a    rrc-r, -> $cb $0f }T
+
+T{ b    rl-r,  -> $cb $10 }T
+T{ c    rl-r,  -> $cb $11 }T
+T{ d    rl-r,  -> $cb $12 }T
+T{ e    rl-r,  -> $cb $13 }T
+T{ h    rl-r,  -> $cb $14 }T
+T{ l    rl-r,  -> $cb $15 }T
+T{ (hl) rl-r,  -> $cb $16 }T
+T{ a    rl-r,  -> $cb $17 }T
+
+T{ b    rr-r,  -> $cb $18 }T
+T{ c    rr-r,  -> $cb $19 }T
+T{ d    rr-r,  -> $cb $1a }T
+T{ e    rr-r,  -> $cb $1b }T
+T{ h    rr-r,  -> $cb $1c }T
+T{ l    rr-r,  -> $cb $1d }T
+T{ (hl) rr-r,  -> $cb $1e }T
+T{ a    rr-r,  -> $cb $1f }T
+
+T{ b    sla-r, -> $cb $20 }T
+T{ c    sla-r, -> $cb $21 }T
+T{ d    sla-r, -> $cb $22 }T
+T{ e    sla-r, -> $cb $23 }T
+T{ h    sla-r, -> $cb $24 }T
+T{ l    sla-r, -> $cb $25 }T
+T{ (hl) sla-r, -> $cb $26 }T
+T{ a    sla-r, -> $cb $27 }T
+
+T{ b    sra-r, -> $cb $28 }T
+T{ c    sra-r, -> $cb $29 }T
+T{ d    sra-r, -> $cb $2a }T
+T{ e    sra-r, -> $cb $2b }T
+T{ h    sra-r, -> $cb $2c }T
+T{ l    sra-r, -> $cb $2d }T
+T{ (hl) sra-r, -> $cb $2e }T
+T{ a    sra-r, -> $cb $2f }T
+
+T{ b    srl-r, -> $cb $38 }T
+T{ c    srl-r, -> $cb $39 }T
+T{ d    srl-r, -> $cb $3a }T
+T{ e    srl-r, -> $cb $3b }T
+T{ h    srl-r, -> $cb $3c }T
+T{ l    srl-r, -> $cb $3d }T
+T{ (hl) srl-r, -> $cb $3e }T
+T{ a    srl-r, -> $cb $3f }T
+
+\ Indexed
+T{ 7 ix rlc-(i+#), -> $dd $cb $07 $06 }T
+T{ 7 iy rlc-(i+#), -> $fd $cb $07 $06 }T
+T{ 7 ix rrc-(i+#), -> $dd $cb $07 $0e }T
+T{ 7 iy rrc-(i+#), -> $fd $cb $07 $0e }T
+T{ 7 ix  rl-(i+#), -> $dd $cb $07 $16 }T
+T{ 7 iy  rl-(i+#), -> $fd $cb $07 $16 }T
+T{ 7 ix  rr-(i+#), -> $dd $cb $07 $1e }T
+T{ 7 iy  rr-(i+#), -> $fd $cb $07 $1e }T
+T{ 7 ix sla-(i+#), -> $dd $cb $07 $26 }T
+T{ 7 iy sla-(i+#), -> $fd $cb $07 $26 }T
+T{ 7 ix sra-(i+#), -> $dd $cb $07 $2e }T
+T{ 7 iy sra-(i+#), -> $fd $cb $07 $2e }T
+T{ 7 ix srl-(i+#), -> $dd $cb $07 $3e }T
+T{ 7 iy srl-(i+#), -> $fd $cb $07 $3e }T
+
+
+
+
+\ Bit Manipulation ===========================================================
+: bits-test ( r xt -- ) 8 0 DO 2dup i swap execute LOOP 2drop ;
+
+: bit-r,-test ( r -- ) ['] bit-r, bits-test ;
+: res-r,-test ( r -- ) ['] res-r, bits-test ;
+: set-r,-test ( r -- ) ['] set-r, bits-test ;
+
+T{ b    bit-r,-test -> $cb $40 $cb $48 $cb $50 $cb $58 $cb $60 $cb $68 $cb $70 $cb $78 }T
+T{ c    bit-r,-test -> $cb $41 $cb $49 $cb $51 $cb $59 $cb $61 $cb $69 $cb $71 $cb $79 }T
+T{ d    bit-r,-test -> $cb $42 $cb $4a $cb $52 $cb $5a $cb $62 $cb $6a $cb $72 $cb $7a }T
+T{ e    bit-r,-test -> $cb $43 $cb $4b $cb $53 $cb $5b $cb $63 $cb $6b $cb $73 $cb $7b }T
+T{ h    bit-r,-test -> $cb $44 $cb $4c $cb $54 $cb $5c $cb $64 $cb $6c $cb $74 $cb $7c }T
+T{ l    bit-r,-test -> $cb $45 $cb $4d $cb $55 $cb $5d $cb $65 $cb $6d $cb $75 $cb $7d }T
+T{ (hl) bit-r,-test -> $cb $46 $cb $4e $cb $56 $cb $5e $cb $66 $cb $6e $cb $76 $cb $7e }T
+T{ a    bit-r,-test -> $cb $47 $cb $4f $cb $57 $cb $5f $cb $67 $cb $6f $cb $77 $cb $7f }T
+
+T{ b    res-r,-test -> $cb $80 $cb $88 $cb $90 $cb $98 $cb $a0 $cb $a8 $cb $b0 $cb $b8 }T
+T{ c    res-r,-test -> $cb $81 $cb $89 $cb $91 $cb $99 $cb $a1 $cb $a9 $cb $b1 $cb $b9 }T
+T{ d    res-r,-test -> $cb $82 $cb $8a $cb $92 $cb $9a $cb $a2 $cb $aa $cb $b2 $cb $ba }T
+T{ e    res-r,-test -> $cb $83 $cb $8b $cb $93 $cb $9b $cb $a3 $cb $ab $cb $b3 $cb $bb }T
+T{ h    res-r,-test -> $cb $84 $cb $8c $cb $94 $cb $9c $cb $a4 $cb $ac $cb $b4 $cb $bc }T
+T{ l    res-r,-test -> $cb $85 $cb $8d $cb $95 $cb $9d $cb $a5 $cb $ad $cb $b5 $cb $bd }T
+T{ (hl) res-r,-test -> $cb $86 $cb $8e $cb $96 $cb $9e $cb $a6 $cb $ae $cb $b6 $cb $be }T
+T{ a    res-r,-test -> $cb $87 $cb $8f $cb $97 $cb $9f $cb $a7 $cb $af $cb $b7 $cb $bf }T
+
+T{ b    set-r,-test -> $cb $c0 $cb $c8 $cb $d0 $cb $d8 $cb $e0 $cb $e8 $cb $f0 $cb $f8 }T
+T{ c    set-r,-test -> $cb $c1 $cb $c9 $cb $d1 $cb $d9 $cb $e1 $cb $e9 $cb $f1 $cb $f9 }T
+T{ d    set-r,-test -> $cb $c2 $cb $ca $cb $d2 $cb $da $cb $e2 $cb $ea $cb $f2 $cb $fa }T
+T{ e    set-r,-test -> $cb $c3 $cb $cb $cb $d3 $cb $db $cb $e3 $cb $eb $cb $f3 $cb $fb }T
+T{ h    set-r,-test -> $cb $c4 $cb $cc $cb $d4 $cb $dc $cb $e4 $cb $ec $cb $f4 $cb $fc }T
+T{ l    set-r,-test -> $cb $c5 $cb $cd $cb $d5 $cb $dd $cb $e5 $cb $ed $cb $f5 $cb $fd }T
+T{ (hl) set-r,-test -> $cb $c6 $cb $ce $cb $d6 $cb $de $cb $e6 $cb $ee $cb $f6 $cb $fe }T
+T{ a    set-r,-test -> $cb $c7 $cb $cf $cb $d7 $cb $df $cb $e7 $cb $ef $cb $f7 $cb $ff }T
+
+\ Indexed
+T{ 7 ix 0 bit-(i+#), -> $dd $cb $07 $46 }T
+T{ 7 iy 0 bit-(i+#), -> $fd $cb $07 $46 }T
+T{ 7 ix 1 bit-(i+#), -> $dd $cb $07 $4e }T
+T{ 7 iy 1 bit-(i+#), -> $fd $cb $07 $4e }T
+T{ 7 ix 2 bit-(i+#), -> $dd $cb $07 $56 }T
+T{ 7 iy 2 bit-(i+#), -> $fd $cb $07 $56 }T
+T{ 7 ix 3 bit-(i+#), -> $dd $cb $07 $5e }T
+T{ 7 iy 3 bit-(i+#), -> $fd $cb $07 $5e }T
+T{ 7 ix 4 bit-(i+#), -> $dd $cb $07 $66 }T
+T{ 7 iy 4 bit-(i+#), -> $fd $cb $07 $66 }T
+T{ 7 ix 5 bit-(i+#), -> $dd $cb $07 $6e }T
+T{ 7 iy 5 bit-(i+#), -> $fd $cb $07 $6e }T
+T{ 7 ix 6 bit-(i+#), -> $dd $cb $07 $76 }T
+T{ 7 iy 6 bit-(i+#), -> $fd $cb $07 $76 }T
+T{ 7 ix 7 bit-(i+#), -> $dd $cb $07 $7e }T
+T{ 7 iy 7 bit-(i+#), -> $fd $cb $07 $7e }T
+
+T{ 7 ix 0 res-(i+#), -> $dd $cb $07 $86 }T
+T{ 7 iy 0 res-(i+#), -> $fd $cb $07 $86 }T
+T{ 7 ix 1 res-(i+#), -> $dd $cb $07 $8e }T
+T{ 7 iy 1 res-(i+#), -> $fd $cb $07 $8e }T
+T{ 7 ix 2 res-(i+#), -> $dd $cb $07 $96 }T
+T{ 7 iy 2 res-(i+#), -> $fd $cb $07 $96 }T
+T{ 7 ix 3 res-(i+#), -> $dd $cb $07 $9e }T
+T{ 7 iy 3 res-(i+#), -> $fd $cb $07 $9e }T
+T{ 7 ix 4 res-(i+#), -> $dd $cb $07 $a6 }T
+T{ 7 iy 4 res-(i+#), -> $fd $cb $07 $a6 }T
+T{ 7 ix 5 res-(i+#), -> $dd $cb $07 $ae }T
+T{ 7 iy 5 res-(i+#), -> $fd $cb $07 $ae }T
+T{ 7 ix 6 res-(i+#), -> $dd $cb $07 $b6 }T
+T{ 7 iy 6 res-(i+#), -> $fd $cb $07 $b6 }T
+T{ 7 ix 7 res-(i+#), -> $dd $cb $07 $be }T
+T{ 7 iy 7 res-(i+#), -> $fd $cb $07 $be }T
+
+T{ 7 ix 0 set-(i+#), -> $dd $cb $07 $c6 }T
+T{ 7 iy 0 set-(i+#), -> $fd $cb $07 $c6 }T
+T{ 7 ix 1 set-(i+#), -> $dd $cb $07 $ce }T
+T{ 7 iy 1 set-(i+#), -> $fd $cb $07 $ce }T
+T{ 7 ix 2 set-(i+#), -> $dd $cb $07 $d6 }T
+T{ 7 iy 2 set-(i+#), -> $fd $cb $07 $d6 }T
+T{ 7 ix 3 set-(i+#), -> $dd $cb $07 $de }T
+T{ 7 iy 3 set-(i+#), -> $fd $cb $07 $de }T
+T{ 7 ix 4 set-(i+#), -> $dd $cb $07 $e6 }T
+T{ 7 iy 4 set-(i+#), -> $fd $cb $07 $e6 }T
+T{ 7 ix 5 set-(i+#), -> $dd $cb $07 $ee }T
+T{ 7 iy 5 set-(i+#), -> $fd $cb $07 $ee }T
+T{ 7 ix 6 set-(i+#), -> $dd $cb $07 $f6 }T
+T{ 7 iy 6 set-(i+#), -> $fd $cb $07 $f6 }T
+T{ 7 ix 7 set-(i+#), -> $dd $cb $07 $fe }T
+T{ 7 iy 7 set-(i+#), -> $fd $cb $07 $fe }T
+
+
+\ Control Flow ===============================================================
+\ JP nn
+T{ $1234       jp,    -> $c3 $34 $12 }T
+T{ $1234 +c    jp-cc, -> $da $34 $12 }T
+T{ $1234 -c    jp-cc, -> $d2 $34 $12 }T
+T{ $1234 +z    jp-cc, -> $ca $34 $12 }T
+T{ $1234 -z    jp-cc, -> $c2 $34 $12 }T
+T{ $1234 +even jp-cc, -> $ea $34 $12 }T
+T{ $1234 +odd  jp-cc, -> $e2 $34 $12 }T
+T{ $1234 +n    jp-cc, -> $fa $34 $12 }T
+T{ $1234 -n    jp-cc, -> $f2 $34 $12 }T
+
+\ JR nn
+T{ $34       jr,    -> $18 $32 }T
+T{ $34 +c    jr-cc, -> $38 $32 }T
+T{ $34 -c    jr-cc, -> $30 $32 }T
+T{ $34 +z    jr-cc, -> $28 $32 }T
+T{ $34 -z    jr-cc, -> $20 $32 }T
+
+T{ -6        jr,    -> $18 $f8 }T
+T{ -6  +c    jr-cc, -> $38 $f8 }T
+T{ -6  -c    jr-cc, -> $30 $f8 }T
+T{ -6  +z    jr-cc, -> $28 $f8 }T
+T{ -6  -z    jr-cc, -> $20 $f8 }T
+
+\ Reg indirect
+T{ (hl) jp-(rr), ->     $e9 }T
+T{ ix   jp-(rr), -> $dd $e9 }T
+T{ iy   jp-(rr), -> $fd $e9 }T
+
+\ CALL nn
+T{ $1234       call,    -> $cd $34 $12 }T
+T{ $1234 +c    call-cc, -> $dc $34 $12 }T
+T{ $1234 -c    call-cc, -> $d4 $34 $12 }T
+T{ $1234 +z    call-cc, -> $cc $34 $12 }T
+T{ $1234 -z    call-cc, -> $c4 $34 $12 }T
+T{ $1234 +even call-cc, -> $ec $34 $12 }T
+T{ $1234 +odd  call-cc, -> $e4 $34 $12 }T
+T{ $1234 +n    call-cc, -> $fc $34 $12 }T
+T{ $1234 -n    call-cc, -> $f4 $34 $12 }T
+
+\ DJNZ
+T{ $34 djnz, -> $10 $32 }T
+T{ -6  djnz, -> $10 $f8 }T
+
+\ RET cc
+T{       ret,    -> $c9 }T
+T{ +c    ret-cc, -> $d8 }T
+T{ -c    ret-cc, -> $d0 }T
+T{ +z    ret-cc, -> $c8 }T
+T{ -z    ret-cc, -> $c0 }T
+T{ +even ret-cc, -> $e8 }T
+T{ +odd  ret-cc, -> $e0 }T
+T{ +n    ret-cc, -> $f8 }T
+T{ -n    ret-cc, -> $f0 }T
+
+\ RETI/RETN
+T{ reti, -> $ed $4d }T
+T{ retn, -> $ed $45 }T
+
+
+\ Input/Output ===============================================================
+\ IN A,#
+T{ 7    in-A,#   -> $db $07 }T
+T{ b    in-r,(c) -> $ed $40 }T
+T{ c    in-r,(c) -> $ed $48 }T
+T{ d    in-r,(c) -> $ed $50 }T
+T{ e    in-r,(c) -> $ed $58 }T
+T{ h    in-r,(c) -> $ed $60 }T
+T{ l    in-r,(c) -> $ed $68 }T
+
+\ Block IN
+T{  ini-(hl),(c) -> $ed $a2 }T
+T{ inir-(hl),(c) -> $ed $b2 }T
+T{  ind-(hl),(c) -> $ed $aa }T
+T{ indr-(hl),(c) -> $ed $ba }T
+
+\ OUT
+T{ 7 out-($),A -> $d3 $07 }T
+T{ b out-(c),r -> $ed $41 }T
+T{ c out-(c),r -> $ed $49 }T
+T{ d out-(c),r -> $ed $51 }T
+T{ e out-(c),r -> $ed $59 }T
+T{ h out-(c),r -> $ed $61 }T
+T{ l out-(c),r -> $ed $69 }T
+
+\ OUT indirect
+T{ outi-(c),(hl) -> $ed $a3 }T
+T{ otir-(c),(hl) -> $ed $b3 }T
+T{ outd-(c),(hl) -> $ed $ab }T
+T{ otdr-(c),(hl) -> $ed $bb }T
+
+
+\ CPU Control ================================================================
+T{ nop,  -> $00 }T
+T{ halt, -> $76 }T
+T{ di,   -> $f3 }T
+T{ ei,   -> $fb }T
+T{ im0,  -> $ed $46 }T
+T{ im1,  -> $ed $56 }T
+T{ im2,  -> $ed $5e }T
+
+: tests-done cr error? @ IF ." Tests failed!" ELSE ." Tests complete" THEN cr ;
+tests-done bye
+

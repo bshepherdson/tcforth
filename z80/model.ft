@@ -1,0 +1,228 @@
+\ ===================== MACHINE/MODEL DEPENDENT SECTION ======================
+\ Trying to keep the system as portable across both machines and Forth models
+\ as possible. model.ft implements a few key routines (eg. DOCOL) and assembler
+\ macros (eg. pushrsp,) to hide the details of the model as much as possible.
+
+
+\ Experimenting with size and speed for the different execution models.
+
+\ Z80 hardware SP is a full 16-bit register and can point anywhere at all.
+
+\ PUSH rr is 1 byte and 11 t-states; POP rr is 1 byte and 10 t-states.
+\ They work on BC DE HL (and AF)
+\ PUSH IX/IY is 2 bytes and 15 t-states; POP IX/IY is 2 bytes and 14 t-states.
+
+\ There is EX DE,HL (1B, 4t) that may be really handy for juggling stacks?
+\ TOS in HL seems likely, it's very powerful and flexible.
+
+\ BC and DE make good working registers, especially DE with EX DE,HL.
+
+\ Registers (16-bit):
+\ Brad Rodriguez in Moving Forth gives the example of:
+\ W=DE, IP=BC, PSP=SP, RSP=IX, TOS=memory
+
+\ First crack:
+\ W    DE, with BC as X for further scratch area
+\ IP   IY
+\ PSP  SP?
+\ RSP  IX?
+
+\ First the inner interpreter: NEXT, ENTER, EXIT
+\ DTC ========================================================================
+\ NEXT - jump to (IP++), post-incrementing
+\ With IP in IY, that's punishingly slow to increment.
+\ So let's try with IP=BC as BJR suggested:
+bc push,   \ 1B 11c
+bc inc-rr, \ 1B  6c
+bc inc-rr, \ 1B  6c
+ret,       \ 1B 10c  = 4B 33c
+
+\ ENTER - push IP to return stack, set IP to data area
+ix dec,           \ 2B 10c
+0 ix b ld-(i+#),r \ 3B 19c
+ix dec,           \ 2B 10c
+0 ix b ld-(i+#),r \ 3B 19c
+bc $1234 ld-rr,## \ 3B 10c = 13B 68c
+
+\ EXIT - pop return stack into IP
+c 0 ix ld-r,(i+#) \ 3B 19c
+ix inc,           \ 2B 10c
+c 0 ix ld-r,(i+#) \ 3B 19c
+ix inc,           \ 2B 10c = 10B 58c
+
+
+\ ITC ========================================================================
+\ NEXT - Load (IP) to W or X, increment IP, jump to (X)
+
+\ START HERE and figure out a good combination
+
+
+
+
+
+\ Design:
+\ - Direct threading
+\ - Return stack: RSP in Z; top 128 cells of memory, $ff80 to $ffff.
+\ - Data stack: PSP is SP; TOS on stack (PUSH, PEEK etc. are super fast)
+\ - IP is I (so STI can be used in NEXT)
+\ - A B C X Y are free; J is reserved (it gets clobbered by STI)
+\   - (No STI, STD aside from that use.)
+
+\ Standard dictionary headers: link, length+immediate+hidden word, len words of
+\ name, code field.
+
+\ This is a little surprising, but it makes sense when you think deeper:
+\ NATIVE HERE pushes the Host's dictionary pointer.
+\ HOST   HERE pushes the Target's dictionary pointer
+\ TARGET HERE is the mirror word that compiles the Target xt for HERE (!)
+HOST DEFINITIONS
+
+\ The assembler defines a THERE pointer for the Target dictionary.
+\ We capture that address as the HOST DP as well.
+there CONSTANT DP
+: here dp @ ;
+0 dp !   \ DCPU execution starts at $0000 by default.
+
+: t,        ( w -- )  asm, ;
+: tc,       ( b -- )  asm, ;   \ Byte-width assemble. That's just t, here.
+: tc@ t@ ;
+: tc! t! ;
+
+
+\ First line of code, the entry point. It'll be a jump to COLD eventually.
+$8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
+
+
+\ These are pseudooperands that hide what registers are used for what.
+: rsp     ( -- op ) rz  ;
+: [rsp]   ( -- op ) [z] ;
+: ip      ( -- op ) ri  ;
+: [ip]    ( -- op ) [i] ;
+
+: <[ip]+, ( lhs -- ) [i] 2swap sti, ;
+
+\ Some assembler macros
+: next,    ( -- ) [ip] pc sti, ;
+: pushrsp, ( rhs -- ) 1 # rsp sub,   ( rhs ) [rsp] set, ;
+: poprsp,  ( lhs -- ) [rsp] 2swap ( rhs lhs ) set,   1 # rsp add, ;
+
+: tchars    ( n -- n2 ) ;
+: tchar+    ( n -- n2 ) 1+ ;
+: tcells    ( n -- n2 ) ;
+: tcell+    ( n -- n2 ) 1+ ;
+: tcompile, t, ;
+: taligned  ( x -- x2 ) ;
+: talign    ( -- ) ;
+
+16 CONSTANT tcellbits  \ 16 bits per cell
+16 CONSTANT tbits      \ 16 bits per address unit
+
+VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
+: LATEST ( -- nt ) 'latest @ ;
+0 'latest !
+
+
+\ DOCOL and DODOES right at the top so they can be JSR DOCOL'd with the inline
+\ literal from the code fields!
+
+\ This is called by JSR, so the parameter field address is on the data stack.
+label DOCOL
+  ip pushrsp,
+  pop ip set,
+  next,
+
+\ DOVAR is the code word for a CREATEd definition without a DOES> - it pushes
+\ the address of the parameter field. In order to support DOES>, however, a two-
+\ word code field is needed. CREATE assembles JSR DOVAR, which fits in one word
+\ since DOVAR is at the very top of memory (circa $0007) and fits inline.
+\ So CREATE "wastes" one word.
+\ See the DOES> design below.
+
+label DOVAR
+  \ 1 # peek add,
+  next,
+
+\ DOES> design for DTC =======================================================
+\ This is different from the original TC-Forth DODOES scheme.
+\ Sequence 1: while eg. : CONSTANT create , DOES> @ ; is being defined.
+\ Sequence 2: while CONSTANT is running, defining a new constant.
+\ Sequence 3: while a particular constant is executing.
+
+\ DOES> is an immediate word, it runs during "Sequence 1".
+\ It compiles   (DOES>) EXIT dodoes-asm   at the end of CONSTANT.
+\ Then the Forth code after DOES> is compiled. The final CONSTANT looks like:
+\ link | len | CONSTANT | jsr docol | (blank) | CREATE | , | (DOES>) | EXIT |
+\ dodoes-code | @ | EXIT
+\ Sequence 2 (eg. 7 CONSTANT FOO) CREATEs the new header with the default
+\ JSR DOVAR in its code field, but then (DOES>) runs and patches it to
+\ JSR &dodoes-code as above, ie. after the EXIT:
+\ link | len | FOO | jsr lit | &dodoes-code | 7
+
+\ In DTC, the dodoes-code is entered with the parameter field (pointer to 7)
+\ conveniently already on the stack, because that's what's after the code field
+\ of FOO and was pushed by the JSR.
+
+\ The actual dodoes-code can be simply JSR DOCOL as well in this system, since
+\ that will enter the thread with IP pointing at the right place! That's nice
+\ because it's fast and compact (1 word).
+
+\ This HOST word is invoked by Host-side DOES> to compile the necessary pieces.
+VARIABLE '(DOES>)
+VARIABLE 'EXIT   \ These get populated later.
+
+: DOES, ( -- xt-does ) '(DOES>) @ t,   'EXIT @ t,   here   DOCOL # jsr, ;
+
+
+\ Not really words, just assembler routines.
+\ TODO Maybe these are better as mirror words without Target-side headers?
+label LIT
+  [i] push sti,
+  next,
+
+label DOSTRING
+  \ Next word in the thread is the length, then that many characters.
+  [i] ra   sti, \ Length into TOS, I now points at the string.
+  ri  push set, \ Push the string address as NOS
+  ra  push set, \ And the length above that.
+  ra  ri   add, \ Advance I past the string.
+  next,
+
+
+
+\ Compiles the code field (address) for a colon declaration.
+\ For DTC that means assembling a JSR docol.
+: ,docol ( -- ) docol # jsr, ;
+
+\ Compiles the JSR DOVAR. This deliberately uses the long form JSR lit + DOVAR
+\ So that the pushed PC is exactly the data region.
+\ The code for DODOES can't use the inline literal, so it needs this space for
+\ a long JSR lit.
+: ,dovar ( -- ) $7c20 t, dovar t, ;
+
+\ Compiles a string literal into the thread.
+\ In ITC/DTC that's DOSTRING, then the length, then the chars.
+: ,dostring ( c-addr u -- )
+  dostring tcompile,
+  dup tc,
+  ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tc,   1+ R> REPEAT drop ;
+
+\ Overwrites the code field (address) of the word at word-xt to point to the
+\ ;CODE or DOES> at does-xt.
+\ On DTC DCPU-16, this compiles JSR does-xt as two words: $7c20 does-xt
+: !dodoes ( does-xt word-xt -- ) $7c20 over t!   tcell+ t! ;
+
+\ Compile a literal. This is in the model because eg. STC doesn't use the two-
+\ cell [LIT|x] pattern.
+: tliteral ( x --    X: -- x ) lit tcompile,   t, ;
+
+: ,dest ( dest -- ) t, ;
+: !dest ( dest slot -- ) t! ;
+
+: t>body ( target-xt -- target-body ) 2 tcells + ;
+
+
+0     CONSTANT rp0
+$ff80 CONSTANT sp0
+
+label entry-point 0 asm,
+

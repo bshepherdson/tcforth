@@ -1,0 +1,358 @@
+\ All 16-bit values are stored little-endian.
+
+\ Register set:
+\ 16-bit: PC, SP, IX and IY
+\ 8-bit:  A, F, B, C, D, E, H, L
+\   16-bit pairs: AF, BC, DE, HL
+\ Hardware control: I and R
+\ Flags: SZ-H-PNC
+
+\ Also the AFBCDEHL set have A', F' etc. counterparts, with a fast instruction to swap.
+\ This facilitates interrupt handlers.
+
+CREATE output 64 1024 * allot
+VARIABLE there
+0 there !
+VARIABLE min-there   1000000 min-there !
+VARIABLE max-there   0       max-there !
+
+: clean-output ( -- ) 64 1024 * 0 DO 0   i output +   c! LOOP ;
+clean-output
+
+: endpoints! ( t-addr -- )
+  dup max-there @ max max-there !
+      min-there @ min min-there ! ;
+
+: b@ ( t-addr -- b ) output + c@ ;
+: w@ ( t-addr -- w ) output + dup c@   swap 1+ c@   8 lshift or ;
+
+: b! ( b t-addr -- ) dup endpoints!   output + c! ;
+: w! ( w t-addr -- ) over 255 and over b!   1+ >R 8 rshift R> b! ;
+: assemble   ( b -- )    there @ b!   1 there +! ;
+: assemble16 ( word -- ) there @ w!   2 there +! ;
+
+
+\ Registers by number
+\ The sequence of opcodes is B=0, C, D, E, H, L, (HL), A for many opcodes
+: b    0 ;
+: c    1 ;
+: d    2 ;
+: e    3 ;
+: h    4 ;
+: l    5 ;
+: (hl) 6 ;
+: a    7 ;
+: (bc) 8 ;
+: (de) 9 ;
+
+: ix $dd ;
+: iy $fd ;
+: ix-reg? ( ix/iy -- ? ) dup ix = swap iy = or ;
+
+\ 8-bit load/stores ==========================================================
+
+\ Register to register: c e ld,
+\ Written as LD A,B to write B into A. Any of the 7 working registers are allowed on
+\ both sides.
+\ These are encoded with the 8 * dst + $40 + src
+: ld-r,r ( dst src -- ) swap 3 lshift $40 + + assemble ;
+
+\ Memory to accumulator: $1234 $ a ld,
+\ LD A,(1234H)
+\ The address is little-endian in the instruction.
+: ld-a,$  ( src -- )   $3a assemble assemble16 ;
+: ld-$,a  ( dst -- )   $32 assemble assemble16 ;
+
+\ Memory to other register: (hl) c ld,
+\ LD C,(HL)
+\ This is already handled by the main ld-r,r
+
+\ Literal to register: e $12 ld-r,#
+\ LD E,12h
+\ Encoded as 6 + 8*dst
+: ld-r,#  ( dst src -- )   swap 3 lshift $06 + assemble ( src ) assemble ;
+
+\ Literal to indexed
+: ld-(i+#),# ( d ix/iy n -- ) swap assemble $36 assemble swap assemble assemble ;
+
+
+\ Other memory pointers as special cases:
+: ld-a,(rr)  ( [bc]=8/[de]=9 -- ) 8 - 16 * $0a + assemble ;
+: ld-(rr),a  ( [bc]=8/[de]=9 -- ) 8 - 16 * $02 + assemble ;
+
+\ Indirect
+\ These compile the IX/IY prefix, then (hl) ld-r,r, then the offset.
+: ld-r,(i+#) ( dst n ix/iy -- ) assemble swap (hl) ld-r,r assemble ;
+
+\ These compile the IX/IY prefix, then (hl) swap ld-r,r, then the offset.
+: ld-(i+#),r ( n ix/iy src -- ) swap assemble (hl) swap ld-r,r assemble ;
+
+
+\ 16-bit load/stores =========================================================
+
+: af 3 ;
+: bc 0 ;
+: de 1 ;
+: hl 2 ;
+: sp 3 ;
+
+\ Stack behavior:
+\ SP points to the top byte of the stack.
+\ IF SP is $0100 and AF is pushed, SP is decremented, A is pushed, then SP is
+\ decremented again and F is pushed.
+
+\ Pops: af pop,
+: pop,  ( dst )
+  \ Special case for the index regs.
+  dup ix-reg? IF assemble $e1 assemble EXIT THEN
+  4 lshift $c1 + assemble ;
+
+\ Pushes: af push,
+: push, ( src )
+  \ Special case for the index regs.
+  dup ix-reg? IF assemble $e5 assemble EXIT THEN
+  4 lshift $c6 + assemble ;
+
+\ Immediate loads: bc/de/hl/sp nnnn ld-rr,##
+: ld-rr,## ( dst src )
+  swap   dup ix-reg? IF assemble hl THEN
+  16 * $01 + assemble assemble16 ;
+
+\ Absolute loads:  bc/de/hl/sp nnnn ld-rr,$
+\ This is ED + dst*16 + $48 + nn
+\ Except if the dst is HL, then it's $2a + nn
+: ld-rr,$  ( dst src )
+  \ First, if the dst is an ix-reg, make that the first byte and pretend to be HL.
+  over ix-reg? IF >R assemble hl R> THEN
+  \ Second, special case a dst of HL as $2a with no prefix.
+  over hl = IF nip $2a ELSE
+    \ And if not HL, then it's ED + the formula.
+    $ed assemble   swap 16 * $4b + THEN
+  assemble assemble16 ;
+
+\ Absolute store:  nnnn bc/de/hl/sp ld-$,rr
+\ This is ED + src*16 + $43 + u16
+\ Except if the src is HL, then it's $22 + nn
+: ld-$,rr  ( dst src )
+  \ First, if the src is an ix-reg, make that the first byte then pretend to be HL.
+  dup ix-reg? IF assemble hl THEN
+  \ Second, special case a src of HL as $22 with no prefix.
+  dup hl = IF drop $22 ELSE
+    \ Third, it's $ed then $43 + src*16
+    $ed assemble 16 * $43 + THEN
+  assemble assemble16 ;
+
+\ Writing to SP itself, not (SP)
+: ld-sp,rr ( src -- ) dup ix-reg? IF assemble ELSE drop THEN $f9 assemble ;
+
+
+\ Exchanges ==================================================================
+\ EX de, hl  = $eb
+: ex-de,hl   ( -- )    $eb assemble ;
+
+\ EX (sp),hl = $e3
+\ EX (sp),ix = $dd $e3
+\ EX (sp),iy = $fd $e3
+: ex-(sp),rr ( rr -- ) dup ix-reg? IF assemble ELSE drop THEN $e3 assemble ;
+
+\ EX af = $08
+: ex-af,     ( -- )    $08 assemble ;
+
+\ EXX = $d9
+: exx,       ( -- )    $d9 assemble ;
+
+\ Block Transfers ============================================================
+\ These use BC, DE, and HL: BC is a 16-bit counter of bytes.
+\ (HL) is copied to (DE). There are incrementing and decrementing versions, and
+\ repeating and one-byte variants.
+: ldi,  ( -- ) $ed assemble $a0 assemble ;
+: ldir, ( -- ) $ed assemble $b0 assemble ;
+: ldd,  ( -- ) $ed assemble $a8 assemble ;
+: lddr, ( -- ) $ed assemble $b8 assemble ;
+
+\ Block CP, comparing (HL) successively to the accumulator
+\ CPI and CPD do it once only.
+\ CPIR and CPDR repeat until either a match (equal?) or BC=0
+: cpi,  ( -- ) $ed assemble $a1 assemble ;
+: cpir, ( -- ) $ed assemble $b1 assemble ;
+: cpd,  ( -- ) $ed assemble $a9 assemble ;
+: cpdr, ( -- ) $ed assemble $b9 assemble ;
+
+
+\ Arithmetic =================================================================
+\ ADD, ADC, SUB and SBC; AND, XOR, OR; CP; INC, DEC
+\ Regular registers and (HL)
+: add-r,  ( src -- ) $80 + assemble ;
+: adc-r,  ( src -- ) $88 + assemble ;
+: sub-r,  ( src -- ) $90 + assemble ;
+: sbc-r,  ( src -- ) $98 + assemble ;
+: and-r,  ( src -- ) $a0 + assemble ;
+: xor-r,  ( src -- ) $a8 + assemble ;
+:  or-r,  ( src -- ) $b0 + assemble ;
+:  cp-r,  ( src -- ) $b8 + assemble ;
+
+\ Literal operand
+: add-#,  ( src -- ) $c6 assemble assemble ;
+: adc-#,  ( src -- ) $ce assemble assemble ;
+: sub-#,  ( src -- ) $d6 assemble assemble ;
+: sbc-#,  ( src -- ) $de assemble assemble ;
+: and-#,  ( src -- ) $e6 assemble assemble ;
+: xor-#,  ( src -- ) $ee assemble assemble ;
+:  or-#,  ( src -- ) $f6 assemble assemble ;
+:  cp-#,  ( src -- ) $fe assemble assemble ;
+
+\ $04 + 8*src
+: inc-r,  ( src -- ) 8 * $04 + assemble ;
+: dec-r,  ( src -- ) 8 * $05 + assemble ;
+
+
+: _-(i+#),   ( n ix/iy opcode ) swap assemble assemble assemble ;
+: add-(i+#), ( n ix/iy ) $86 _-(i+#), ;
+: adc-(i+#), ( n ix/iy ) $8e _-(i+#), ;
+: sub-(i+#), ( n ix/iy ) $96 _-(i+#), ;
+: sbc-(i+#), ( n ix/iy ) $9e _-(i+#), ;
+: and-(i+#), ( n ix/iy ) $a6 _-(i+#), ;
+: xor-(i+#), ( n ix/iy ) $ae _-(i+#), ;
+:  or-(i+#), ( n ix/iy ) $b6 _-(i+#), ;
+:  cp-(i+#), ( n ix/iy ) $be _-(i+#), ;
+
+: inc-(i+#), ( n ix/iy ) $34 _-(i+#), ;
+: dec-(i+#), ( n ix/iy ) $35 _-(i+#), ;
+
+
+\ 16-bit Arithmetic ==========================================================
+: add-rr,rr ( dst src -- )
+  \ Before anything else, check a special case: if both operands are IX regs, they
+  \ have to be the same.
+  over ix-reg? over ix-reg? and IF
+    2dup <> ABORT" add-rr,rr with IX regs, both operands must be the same" THEN
+
+  \ First, if src is IX/IY, pretend to be HL. DO NOT compile the prefix, however.
+  dup ix-reg? IF drop hl THEN
+  \ Second, if the dst is IX/IY, compile that prefix, then pretend to be HL
+  over ix-reg? IF >R assemble hl R> THEN
+  \ Third, operand is $09 + 16*src. dst is discarded.
+  16 * $09 + assemble drop ;
+
+: adc-hl,rr ( src -- ) $ed assemble 16 * $4a + assemble ;
+: sbc-hl,rr ( src -- ) $ed assemble 16 * $42 + assemble ;
+
+: inc-rr, ( src -- ) dup ix-reg? IF assemble hl THEN 16 * $03 + assemble ;
+: dec-rr, ( src -- ) dup ix-reg? IF assemble hl THEN 16 * $0b + assemble ;
+
+
+\ Skew Operations ============================================================
+: cb, ( -- ) $cb assemble ;
+: rlc-r, ( src -- ) cb, $00 + assemble ;
+: rrc-r, ( src -- ) cb, $08 + assemble ;
+:  rl-r, ( src -- ) cb, $10 + assemble ;
+:  rr-r, ( src -- ) cb, $18 + assemble ;
+: sla-r, ( src -- ) cb, $20 + assemble ;
+: sra-r, ( src -- ) cb, $28 + assemble ;
+: srl-r, ( src -- ) cb, $38 + assemble ;
+
+: r__-(i+#), ( n ix/iy opcode ) >R assemble cb, assemble R> assemble ;
+: rlc-(i+#), ( n ix/iy -- ) $06 r__-(i+#), ;
+: rrc-(i+#), ( n ix/iy -- ) $0e r__-(i+#), ;
+:  rl-(i+#), ( n ix/iy -- ) $16 r__-(i+#), ;
+:  rr-(i+#), ( n ix/iy -- ) $1e r__-(i+#), ;
+: sla-(i+#), ( n ix/iy -- ) $26 r__-(i+#), ;
+: sra-(i+#), ( n ix/iy -- ) $2e r__-(i+#), ;
+: srl-(i+#), ( n ix/iy -- ) $3e r__-(i+#), ;
+
+: rlca, ( -- ) $07 assemble ;
+: rrca, ( -- ) $0f assemble ;
+: rla,  ( -- ) $17 assemble ;
+: rra,  ( -- ) $1f assemble ;
+
+\ Skipping RLD and RRD, never mind decimal mode.
+
+
+\ Bit Manipulation ===========================================================
+\ These are bit*8 + base + reg.
+: bit-r, ( r bit -- ) cb, 8 * $40 + + assemble ;
+: res-r, ( r bit -- ) cb, 8 * $80 + + assemble ;
+: set-r, ( r bit -- ) cb, 8 * $c0 + + assemble ;
+
+\ These are DD/FD, CB, d, base
+: bits-(i+#), ( n ix/iy bit opcode -- )
+  >R >R assemble cb, assemble R> 8 * R> + assemble ;
+
+: bit-(i+#), ( n ix/iy bit -- ) $46 bits-(i+#), ;
+: res-(i+#), ( n ix/iy bit -- ) $86 bits-(i+#), ;
+: set-(i+#), ( n ix/iy bit -- ) $c6 bits-(i+#), ;
+
+\ Random bit twiddling
+: daa, ( -- ) $27 assemble ;
+: cpl, ( -- ) $2f assemble ;
+: neg, ( -- ) $ed assemble $44 assemble ;
+: ccf, ( -- ) $3f assemble ;
+: scf, ( -- ) $37 assemble ;
+
+
+\ Jumps ======================================================================
+\ These reference the "carry" flavour of jump as 0.
+: +c    ( -- cc )  0 ;
+: -c    ( -- cc ) -8 ;
+: +z    ( -- cc ) -16 ;
+: -z    ( -- cc ) -24 ;
+: +even ( -- cc )  16 ;
+: +odd  ( -- cc )   8 ;
+: +n    ( -- cc )  32 ;
+: -n    ( -- cc )  24 ;
+
+\ Absolute jump
+: jp-cc, ( nn cc -- ) $da + assemble assemble16 ;
+: jp,    ( nn -- )    $c3 assemble assemble16 ;
+
+\ Relative jump - the address is the target; the assembler will adjust for the pipeline.
+\ Only +c -c +z -z are allowed. They're the non-negative ones.
+: relative, ( nn -- ) there @ 1+ - assemble ;
+
+: jr-cc, ( nn cc -- )
+  dup 0> ABORT" JR conditional only works on +c -c +z -z"
+  $38 + assemble
+  relative, ;
+: jr, ( nn -- ) $18 assemble   relative, ;
+
+: jp-(rr), ( [hl]/ix/iy -- ) dup ix-reg? IF assemble ELSE drop THEN $e9 assemble ;
+
+: call-cc, ( nn cc -- ) $dc + assemble assemble16 ;
+: call,    ( nn -- )    $cd   assemble assemble16 ;
+
+: ret-cc,  ( cc -- ) $d8 + assemble ;
+: ret,     ( -- )    $c9   assemble ;
+: reti,    ( -- )    $ed assemble $4d assemble ;
+: retn,    ( -- )    $ed assemble $45 assemble ;
+
+\ Decrement B, jump if non-zero
+: djnz, ( nn -- ) $10 assemble relative, ;
+
+\ TODO Resets? I don't think I need them right now.
+
+
+\ Input/Output instructions ==================================================
+\ OUT (C),r  = $ed, 8*src + $41
+: out-(c),r     ( src -- ) $ed assemble 8 * $41 + assemble ;
+: out-($),A     ( n -- )   $d3 assemble           assemble ;
+: outi-(c),(hl) ( -- )     $ed assemble $a3       assemble ;
+: otir-(c),(hl) ( -- )     $ed assemble $b3       assemble ;
+: outd-(c),(hl) ( -- )     $ed assemble $ab       assemble ;
+: otdr-(c),(hl) ( -- )     $ed assemble $bb       assemble ;
+
+\ IN r,(C)   = $ed, 8*dst + $40
+: in-A,#        ( n -- )   $db assemble           assemble ;
+: in-r,(c)      ( dst -- ) $ed assemble 8 * $40 + assemble ;
+:  ini-(hl),(c) ( -- )     $ed assemble $a2       assemble ;
+: inir-(hl),(c) ( -- )     $ed assemble $b2       assemble ;
+:  ind-(hl),(c) ( -- )     $ed assemble $aa       assemble ;
+: indr-(hl),(c) ( -- )     $ed assemble $ba       assemble ;
+
+\ Control instructions =======================================================
+: nop,  ( -- ) $00 assemble ;
+: halt, ( -- ) $76 assemble ;
+: di,   ( -- ) $f3 assemble ;
+: ei,   ( -- ) $fb assemble ;
+: im0,  ( -- ) $ed assemble $46 assemble ;
+: im1,  ( -- ) $ed assemble $56 assemble ;
+: im2,  ( -- ) $ed assemble $5e assemble ;

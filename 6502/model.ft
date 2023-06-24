@@ -1,0 +1,316 @@
+\ The Forth system is compiled into an 8KiB cart image, which gets loaded into
+\ $8000-9fff at startup.
+\ The C64 expects "CBM80" in PETSCII at $8004-8008: c3 c2 cd 38 30
+\ Then it indirects through $8000-1 to start executing the cartridge code.
+
+\ The original, standalone c64th I wrote used DTC with the system stack as
+\ the data stack.
+\ That's bulky and slow - so I'm rebuilding it to use STC, with the data stack
+\ in the zero page. (It's hard to "pick" nearby values on the system stack, but
+\ easy with zp,x and zp,y indexed reads.
+
+\ Forth registers:
+\ - W in zero page: $FA-FB
+\ - IP doesn't exist - using the system stack and PC.
+\ - RSP is S, the system stack.
+\ - Data stack is $02-$7f in the zero page; PSP is X.
+\   - Both X and Y can be used for absolute indexing, and $02,x ZP indexing.
+\   - The difference lies in ($02,x) vs. ($02),y indirect indexing.
+\   - It's useful for reading 16-bit quantities to put the address in W and do:
+\     LDY #$01;  LDA (w),Y   to read the high byte.
+
+\ Machine registers:
+\ - A is always free.
+\ - X always holds the PSP.
+\ - Y is free.
+\ - S is RSP; other things can be pushed there temporarily if necessary.
+
+\ Note that DOCOL and NEXT don't exist for an STC Forth.
+\ High-level threads end with RTS instructions.
+
+\ EXIT is usually achieved by an RTS at the end of a thread. If EXIT is called
+\ explicitly, it can be implemented with R>, or it can compile an RTS.
+
+host definitions
+
+\ Basic dictionary constants
+$80 CONSTANT f_immed
+$40 CONSTANT f_hidden
+$7f CONSTANT mask_len_hidden
+$3f CONSTANT mask_len
+
+\ Other constants
+$0080 CONSTANT sp0
+$ff   CONSTANT rp0
+\ System stack (used for RSP) is empty-descending, so $FF is an empty stack.
+
+REQUIRE registers.ft
+
+there CONSTANT DP
+: here dp @ ;
+$2000 dp !
+
+: hi ( w -- b ) 8 rshift $ff and ;
+: lo ( w -- b )          $ff and ;
+
+: t,     ( w -- )   asm,16 ;
+: tc,    ( b -- )   asm, ;
+: t@     ( a -- w ) dup 1+ tc@ 8 lshift swap   tc@ or ;
+: t!     ( w a -- ) 2dup tc!   >R 8 rshift R>   1+ tc! ;
+
+
+\ Assembler macros
+\ These are "personal", ie. they're used by the model and kernel for this machine, not in the
+\ shared code.
+: next, ( -- ) rts, ; \ STC NEXT is actually return from subroutine.
+
+: tchars ;
+: tchar+ 1+ ;
+: tcells 2* ;
+: tcell+ 2 + ;
+
+\ This is tricky! Compiling a literal value is definitely not the same as compiling a call!
+\ The xt is the code address for the word, so we compile a JSR $xxxx to it.
+: tcompile, ( xt -- ) $ jsr, ;
+
+\ No alignment on 6502.
+: taligned  ( x -- x2 ) ;
+: talign    ( -- )      ;
+
+16 CONSTANT tcellbits \ 16 bits per cell
+ 8 CONSTANT tbits     \ 8 bits per address unit
+
+VARIABLE 'latest
+: LATEST ( -- nt ) 'lastest @ ;
+0 'latest !
+
+
+\ Start of assembly ==========================================================
+$8000 there !
+0 asm,16 \ $8000: Reset vector
+0 asm,16 \ $8002: NMI vector
+
+$c3 asm, $c2 asm, $cd asm, $38 asm, $30 asm, \ "CBM80"
+
+
+\ Codewords ==================================================================
+\ This is the default codeword for CREATEd words.
+\ A thread called the variable, which begins with `JSR DOCOL` then the parameter field.
+\ So the variable's codeword calls here, and the "return address" it pushed is the parameter
+\ field. So pop it from the return stack and push it onto the data stack instead.
+\ Then the RTS at the end will return to the thread.
+label DOVAR
+    dex, dex,
+    pla, \ lo -> A
+    0 zp,x sta,
+    pla, \ hi -> A
+    1 zp,x sta,
+    rts, \ Actually returning to the calling thread.
+
+\ Like a codeword for literals in the thread.
+\ The address of the literal is on the stack. We need to adjust it, though, so copy it to W.
+label (LIT)
+    R>W,                \ Copy the address of the literal to W.
+    dex, dex, (w)>tos,  \ Move PSP and load (W) to TOS.
+    2 W+,
+    W>R,
+    rts, ;
+
+\ Expects a byte with the length, then that many characters.
+\ Uses w2l to hold the length temporarily.
+label (DOSTRING)
+    R>W,           \ *len  -> W
+    wl  zp lda,    \ len   -> W
+    w2l zp sta,    \ len   -> W2_lo
+    1 W+,          \ *char -> W
+
+    dex, dex, w>tos, \ Push *char
+    dex, dex,
+    0 # lda,
+    1 zp,x sta,      \ High byte is 0
+    w2l zp lda,
+    0 zp,x sta,      \ Low byte from w2l.
+
+    \ The length is in A, and we have to increase W (which points at the first char) by that much.
+    clc,
+    wl zp adc,       \ len + wl -> A
+    wl zp sta,       \ len + wl -> wl
+    0 # lda,
+    wh zp adc,
+    pha,             \ Store that high byte of the resulting address right onto R.
+    wl zp lda,
+    pha,             \ And follow it with the low byte.
+    \ Now it's safe to return; will continue executing from after the string.
+    rts,
+
+
+
+\ DOES> ======================================================================
+\ This is different from the original TC-Forth DODOES scheme.
+\ Sequence 1: while eg. : CONSTANT create , DOES> @ ; is being defined.
+\ Sequence 2: while CONSTANT is running, defining a new constant.
+\ Sequence 3: while a particular constant is executing.
+
+\ DOES> is an immediate word, it runs during "Sequence 1".
+\ It compiles   (DOES>) EXIT dodoes-code   at the end of CONSTANT.
+\ Then the Forth code after DOES> is compiled. The final CONSTANT looks like:
+\ link | len | CONSTANT | docol | CREATE | , | (DOES>) | EXIT |
+\     dodoes-code... | @ | EXIT
+
+\ Sequence 2 (eg. 7 CONSTANT FOO) CREATEs the new header with the default
+\ DOVAR as its code word, but then (DOES>) runs and patches it to be the address
+\ of dodoes-code above, ie. after the EXIT:
+\ link | len | FOO | &dodoes-code | 7
+
+\ Sequence 3 (eg. FOO) is straightforward in STC.
+\ FOO's codeword is a jump to the dodoes-code. That leaves the parameter field
+\ address (address of the 7) on the hardware stack.
+\ dodoes-code pops that and pushes it on the data stack instead.
+\ Then execution continues into the code after DOES> (eg. @).
+\ That will have an RTS at the end from the Sequence 1 compilation, which
+\ returns to the caller of FOO. Beautiful.
+
+\ This gets populated later; we can't defined it right now.
+VARIABLE '(DOES>)
+
+: DOES, ( -- 'dodoes-code )
+    \ Sequence 1 - compiling things into CONSTANT.
+    '(DOES>) @ tcompile,   rts,
+    here
+
+    \ Sequence 3 - parameter field address on hardware/return stack, needs to be pushed.
+    R>,
+    \ Now we're set up to continue executing the DOES> code.
+;
+
+
+\ Dictionary Headers =========================================================
+\ Compiles the code field for a colon definition - this is blank.
+: ,docol ( -- ) ;
+\ Compiles the code field for a CREATEd word - JSR DOVAR
+: ,dovar ( -- ) dovar tcompile, ;
+
+\ Compiles a string literal into the thread.
+\ That's JSR (DOSTRING), then the length byte then the chars.
+: ,dostring ( c-addr u -- )
+  (dostring) tcompile,
+  dup tc,
+  ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tc,   1+ R> REPEAT drop ;
+
+\ Overwrites the codeword of the word at word-xt to point to does-addr.
+\ It's currently JSR dovar; we can adjust the address and write the new
+\ target address.
+: !dodoes ( dodoes-code word-xt -- ) 1+ t! ;
+
+\ Compile a literal. This is in the model because STC handles it differently
+\ from DTC etc. There's no need for a LIT jump in general. It can just compile
+\ code to push the literal.
+\ JSR DOLIT + the word is 10B 16c, plus the overhead of jumping and back.
+\ Inlining it is 10B 16c also but without overhead.
+: tliteral ( x --   X: -- x )
+    dex, dex,
+    dup lo #    lda,
+    0      zp,x sta,
+        hi #    lda,
+    1      zp,x sta, \ 10B 16c
+;
+
+\ Branches ===================================================================
+\ Uses regular instructions, not custom words.
+\ (BRANCH) is a `JMP $abs`; (0BRANCH) ORs the top two bytes of the stack, then
+\ does BNE +3 *over* the JMP $abs.
+\ [0BRANCH] and [BRANCH] compile just the framework, but without the final
+\ target address; ,dest compiles that address.
+: ,dest ( dest -- ) t, ;
+: !dest ( dest slot -- ) t! ;
+
+\ The codeword is 3 bytes wide.
+: t>body ( target-xt -- target-body ) 3 + ;
+
+label entry-point 0 asm,16
+
+\ @: Pop a 16-bit address, read a 16-bit value from it, and push the result.
+\ (Assume that X is the PSP and Y is free. TMPL:H is $fa $fb).
+\ LDA $00,x       2B  4c
+\ STA $fa         2B  3c
+\ LDA $01,x       2B  4c
+\ STA $fb         2B  3c
+\ LDA $00fa       3B  4c
+\ STA $00,x       2B  4c
+\ LDY #$01        2B  2c
+\ LDA ($fa),Y     2B  5c (6c if crossing)
+\ STA $01,x       2B  4c
+\ total:         18B 33c
+\ which beats DTC's 19B 40c handily!
+
+\ +: Add two 16-bit numbers, leaving the result on the stack.
+\ The low bytes are at $00,x and $02,x
+\ CLC             1B  2c
+\ LDA $00,x       2B  4c
+\ ADC $02,x       2B  4c
+\ STA $02,x       2B  4c
+\ LDA $01,x       2B  4c
+\ ADC $03,x       2B  4c
+\ STA $03,x       2B  4c
+\ INX             1B  2c
+\ INX             1B  2c
+\ total:         15B  30c
+\ which again beats DTC's 24B 46c by a wide margin.
+
+\ !: Store a 16-bit value ($00,x and $01,x at the address indicated by $02,x)
+\ (Address at $00-01; value at $02-03.)
+\ LDA $00,x       2B  4c
+\ STA $fa         2B  3c
+\ LDA $01,x       2B  4c
+\ STA $fb         2B  3c   Address in $fa-fb
+\ INX             1B  2c
+\ INX             1B  2c   X now pointing at value.
+\ LDA $00,x       2B  4c
+\ STA $00fa       3B  4c
+\ LDA $01,x       2B  4c
+\ LDY #$01        2B  2c
+\ STA $fa,y       2B  5c
+\ INX             1B  2c
+\ INX             1B  2c
+\ total:         23B 41c
+
+\ SWAP: Exchange the top two values on the stack.
+\ LDA $00,x       2B  4c
+\ LDY $02,x       2B  4c
+\ STY $00,x       2B  4c
+\ STA $02,x       2B  4c
+\ LDA $01,x       2B  4c
+\ LDY $02,x       2B  4c
+\ STY $01,x       2B  4c
+\ STA $03,x       2B  4c
+\ total:         16B 32c
+
+\ OVER: Copy the second entry on the stack as the new TOS.
+\ DEX             1B  2c   stack now ( yh yl xh xl __ )
+\ LDA $04,x       2B  4c   grab yh
+\ STA $00,x       2B  4c   copy it
+\ DEX             1B  2c   stack now ( yh yl xh xl yh __ )
+\ LDA $04,x       2B  4c   grab yl
+\ STA $00,x       2B  4c   copy it
+\ total          10B 20c
+
+\ +!: Add the value NOS to the value in memory at TOS.
+\ CLC             1B  2c
+\ LDA $02,x       2B  4c
+\ ADC ($00,x)     3B  4c \ Add low bytes -> A
+\ STA ($00,x)     3B  4c \ Write A to address.
+\ LDA $00,x       2B  4c \ Copy address to W
+\ STA $fa         2B  3c
+\ LDA $01,x       2B  4c
+\ STA $fb         2B  3c
+\ LDA $03,c       2B  4c \ High delta -> A
+\ LDY #$01        2B  2c
+\ ADC ($fa),Y     2B  5c \ Add high bytes -> A
+\ STA ($fa),Y     2B  6c \ Store high byte
+\ INX INX INX INX 4B  8c
+\ total:         29B 53c
+
+\ Overall assessment: STC with the stack in the zero page is fantastic, slightly
+\ smaller and way faster than DTC or ITC with the stack absolutely addressed.
+\ I wonder how much of that is the threading model and how much the ZP data
+\ stack, but still NEXT is expensive in non-STC.

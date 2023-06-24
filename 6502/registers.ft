@@ -1,0 +1,61 @@
+\ Zero page registers:
+\ The first two bytes are built-in; everything else is mine to use in theory.
+\ But I'm using some kernal routines (eg. reading the keyboard) so there are
+\ some reserved bytes.
+
+\ The data stack occupies the range $02-$7f (and maybe a bit more?)
+
+CREATE zero-page-claimed 256 allot
+
+: claim-reg  ( r -- ) zero-page-claimed +   1 swap c! ;
+: claim-regs ( r width -- ) 0 DO dup i + claim-reg LOOP drop ;
+
+: register ( r "name" --    X: -- addr )
+  CREATE dup claim-reg , DOES> @ ;
+
+\ These ports are special.
+$00 register port-a
+$01 register port-b
+
+\ Data stack from $02 to $7f.
+$02 $7d claim-regs
+
+\ The jiffy clock that's part of the IRQ routines.
+$a0 register jiffylo
+$a1 register jiffymd
+$a2 register jiffyhi
+$91 register stopkey \ Flags set by the keyboard registers.
+
+\ Keyboard reading and buffer things.
+$c5 register lstx \ Matrix coordinate of last key pressed
+$c6 register ndx  \ Number of characters in keyboard buffer (queue)
+$cb register sfdx \ Matrix coordinate of current key pressed
+$f5 register keydeclo \ Pointer to the keyboard decoding table in use.
+$f6 register keydechi \ Pointer to the keyboard decoding table in use.
+
+: run-of? ( r width -- ? )
+  1 ?DO ( r )
+    dup i + zero-page-claimed + c@ IF \ Already claimed
+      drop 0 UNLOOP EXIT THEN
+  LOOP
+  \ If we got here, there's enough space.
+  drop true ;
+
+: find-reg-space ( width -- r-lo )
+  256 0 DO
+    i zero-page-claimed + c@ 0= IF ( width )
+      i over run-of? IF ( width ) i swap claim-regs   i UNLOOP EXIT THEN ( width )
+    THEN
+  LOOP
+  1 ABORT" Failed to locate enough zero page space" ;
+
+: +registerW  ( width "name" -- ) find-reg-space CREATE , DOES> @ ;
+: +register   ( "name" -- ) 1 +registerW ;
+: +register16 ( "name" -- ) 2 +registerW ;
+
++register16 wl        wl      1+ CONSTANT wh       \ Temporary area (W)
++register16 w2l       w2l     1+ CONSTANT w2h      \ Another temp   (X)?
++register16 w3l       w3l     1+ CONSTANT w3h      \ A third temp
++register16 cursorl   cursorl 1+ CONSTANT cursorh  \ Cursor pointer
++register16 herel     herel   1+ CONSTANT hereh    \ Dictionary pointer
+

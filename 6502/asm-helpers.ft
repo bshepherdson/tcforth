@@ -1,0 +1,89 @@
+\ Gets the cell at (W) and overwrites TOS with it.
+\ DOES NOT move PSP; it overwrites the current TOS.
+\ Clobbers Y.
+: (w)>tos,
+    1  #      ldy,
+    wl (zp),y lda,
+    1  zp,x   sta,
+    wl $      lda,
+    0  zp,x   sta, ;
+
+\ Writes TOS to (W).
+\ DOES NOT move PSP.
+\ Clobbers Y.
+: tos>(w),
+    1  #      ldy,
+    1  zp,x   lda,
+    wl (zp),y sta,
+    0  zp,x   lda,
+    wl $      sta, ;
+
+: R>,
+    dex, dex,
+    pla,   0 zp,x sta,
+    pla,   1 zp,x sta, ;
+
+: >R,
+    1 zp,x lda,   pha,
+    0 zp,x lda,   pha,
+    inx, inx, ;
+
+: R>W,
+    pla,   wl zp sta,
+    pla,   wh zp sta, ;
+
+: W>R,
+    wh zp lda,   pha,
+    wl zp lda,   pha, ;
+
+: W>tos,
+    wh zp   lda,
+    1  zp,x sta,
+    wl zp   lda,
+    0  zp,x sta, ;
+
+: tos>W,
+    1 zp,x  lda,
+    wh zp   sta,
+    0 zp,x  lda,
+    wl zp   sta, ;
+
+: W+, ( lit -- )
+    clc,
+    wl zp lda,
+    ( lit ) # adc,
+    wl zp sta,
+
+    wh zp lda,
+    0  #  adc,
+    wh zp sta, ;
+
+\ Copies a word on the stack to another location, overwriting it.
+\ Give the indexes of the low bites; eg. NIP does 0 2 stack-cp, to copy
+\ TOS over NOS.
+: stack-cp, ( from to -- )
+    over    zp,x lda,
+    dup     zp,x sta,
+    swap 1+ zp,x lda,
+         1+ zp,x sta, ;
+
+\ **Swaps** the bytes at these two stack indices.
+: b-swap, ( a b -- )
+    over zp,x ldy,
+    dup  zp,x lda,
+         zp,x sty,
+         zp,x sta, ;
+
+\ **Swaps** the words at these two stack indices.
+: w-swap, ( a b -- )
+    2dup b-swap,
+    1+ >R 1+ >R b-swap, ;
+
+\ Compiles code that will push a literal value.
+: lit, ( value -- )
+  dex, dex,        \ 2B 4c
+  dup hi # lda,    \ 2B 2c
+  1 zp,x   sta,    \ 2B 4c
+  lo     # lda,    \ 2B 2c
+  0 zp,x   sta, ;  \ 2B 4x  = 10B 16c
+

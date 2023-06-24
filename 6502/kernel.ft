@@ -1,0 +1,402 @@
+\ Forth kernel for 6502 on C64.
+\ These are HOST vocab words that define assembler words on Target - their
+\ mirror words are regular.
+
+\ A code definition is the (TCREATE) header, then then code.
+: code      ( "name' -- ) (TCREATE) ;
+: end-code  ( -- )        next, ;
+\ End marker, but no NEXT.
+: end-code-bare ( -- ) ;
+
+
+\ Arithmetic =================================================================
+: binary, ( pre-xt op-xt )
+    >R
+    ( pre-xt ) execute
+    0 zp,x lda,
+    2 zp,x R@ execute
+    2 zp,x sta,
+    1 zp,x lda,
+    3 zp,x R> execute
+    3 zp,x sta,
+    inx, inx, ;
+
+: noop ( -- ) ;
+
+code +    ' clc, ' adc, binary, end-code
+code -    ' sec, ' sbc, binary, end-code
+code AND  ' noop ' and, binary, end-code
+code OR   ' noop ' ora, binary, end-code
+code XOR  ' noop ' eor, binary, end-code
+
+\ TODO: LSHIFT RSHIFT ARSHIFT as Forth loops.
+
+code 2*   0 zp,x asl,   1 zp,x rol,   end-code
+code 2/   1 zp,x lsr,   0 zp,x ror,   end-code
+
+code INVERT
+    $ff # lda,   0 zp,x eor,   0 zp,x sta,
+    $ff # lda,   1 zp,x eor,   1 zp,x sta,
+end-code
+
+
+\ Comparisons ================================================================
+code =
+    1 zp,x lda,
+    3 zp,x cmp,
+    0 # ldy,
+    eq? if,
+        0 zp,x lda,
+        2 zp,x cmp,
+        eq? if,
+            $ff # ldy,
+        then,
+    then,
+    2 zp,x sty,
+    3 zp,x sty,
+    inx, inx,
+end-code
+
+\ Signed inequalities are hard, since they depend on the sign bits.
+\ Unsigned ones first.
+code U<
+    0 #    ldy,   \ Assume failure.
+    1 zp,x lda,   \ TOS_hi -> A
+    3 zp,x cmp,   \ TOS_hi - NOS_hi
+    \ If N is set, NOS_hi is unsigned-larger than TOS_hi - so NOS > TOS.
+    pl? if,     \ N not set, so check Z.
+        eq? if, \ Z is set, so we need to check the lo bytes.
+            0 zp,x lda, \ TOS_lo -> A
+            2 zp,x cmp, \ TOS_lo - NOS_lo
+            \ If N is clear, NOS_lo is unsigned-smaller than TOS_lo, return true.
+            pl? if,
+                $ff # ldy,
+            then,
+            \ Here: equal hi bytes, flag set per lo bytes.
+        then,
+    then,
+    \ Flag should be set appropriately.
+    inx, inx,
+    0 zp,x sty,
+    1 zp,x sty, \ Write the flag onto TOS.
+end-code
+
+\ TODO: < is tricky - implement it in Forth?
+
+\ Stack operations ===========================================================
+code DUP
+label DUP-code
+    dex, dex,
+    2 0 stack-cp,
+end-code
+
+code DROP inx, inx, end-code
+
+code OVER
+    dex, dex,
+    4 0 stack-cp,
+end-code
+
+code SWAP
+    2 0 w-swap,
+end-code
+
+code ROT ( 45 23 01 -- 23 01 45 )
+    4 zp,x ldy,
+    2 zp,x lda,
+    4 zp,x sta,
+    0 zp,x lda,
+    2 zp,x sta,
+    0 zp,x sty,
+
+    5 zp,x ldy,
+    3 zp,x lda,
+    5 zp,x sta,
+    1 zp,x lda,
+    3 zp,x sta,
+    1 zp,x sty,
+end-code
+
+code -ROT ( 45 23 01 -- 01 45 23 )
+    0 zp,x ldy,
+    2 zp,x lda,
+    0 zp,x sta,
+    4 zp,x lda,
+    2 zp,x sta,
+    4 zp,x sty,
+
+    1 zp,x ldy,
+    3 zp,x lda,
+    1 zp,x sta,
+    5 zp,x lda,
+    3 zp,x sta,
+    5 zp,x sty,
+end-code
+
+code ?DUP
+    0 zp,x lda,
+    1 zp,x ora,
+    ne? if, \ If the combo is not 0, jump to DUP
+        DUP-code $ jmp,
+    then,
+end-code
+
+code NIP ( y x -- x ) 0 2 stack-cp, inx, inx, end-code
+
+code TUCK ( y x -- x y x )
+    dex, dex,
+    2 0 stack-cp,
+    4 2 stack-cp,
+    0 4 stack-cp,
+end-code
+
+code 2DUP ( y x -- y x y x )
+    dex, dex, dex, dex,
+    4 0 stack-cp,
+    6 2 stack-cp,
+end-code
+
+code 2SWAP ( z y x w -- x w z y )
+    0 4 w-swap,
+    2 6 w-swap,
+end-code
+
+code 2OVER ( z y x w -- z y x w z y )
+    dex, dex, dex, dex,
+    10 2 stack-cp,
+     8 0 stack-cp,
+end-code
+
+code SP@ ( -- psp )
+    txa,       \ Get the X before we move the stack pointer.
+    dex, dex,
+    0 zp,x sta,
+    \ High byte is always 0
+    0 #    lda,
+    1 zp,x sta,
+end-code
+
+code SP! ( psp -- )
+    0 zp,x ldx,
+end-code
+
+\ The return stack will have the address after the RP@ call on it.
+\ RP! will want to return from RP! to the caller of RP@ - so that works.
+code RP@
+    txa,        \ Preserve PSP
+    tsx,        \ Get the hardware stack pointer.
+    txy,        \ And put it in Y.
+    tax,        \ Put PSP back
+    dex, dex,   \ Make space
+    0 zp,x sty, \ Low byte is S (from Y)
+    1 # lda,    \ High byte is always 1.
+    1 zp,x sta,
+end-code
+
+code RP!
+    0 zp,x lda, \ Low byte - the new S.
+    inx, inx,   \ Drop the value off the stack.
+    txy,        \ Set PSP aside.
+    tax,        \ Put the new S in X.
+    txs,        \ Then S
+    tyx,        \ And put PSP back.
+end-code
+
+
+code >R >R, end-code
+code R> R>, end-code
+code R@
+    R>W, W>R, \ W now holds the value.
+    dex, dex,
+    W>tos,
+end-code
+
+\ Depth is $80 - X, shifted right by 1.
+code DEPTH
+    wl zp stx,  \ Put the current X into memory.
+    $80 # lda,  \ $80 in A
+    sec,
+    wl zp sbc,  \ $80-X in A now.
+    dex, dex,
+    lsr,        \ ($80-X)/2 in A
+    0 zp,x sta, \ That's the low byte.
+    0 #    lda,
+    1 zp,x sta, \ High byte is always 0.
+end-code
+
+
+\ Memory =====================================================================
+code @
+    tos>W,         \ Set aside the address.
+    0 # ldy,       \ Offset of 0 in Y
+    wl (zp),y lda, \ Lo byte -> A
+    0  zp,x   sta, \ Into TOS
+    iny,
+    wl (zp),y lda, \ Hi byte -> A
+    1  zp,x   sta, \ Into TOS
+end-code
+
+code ! ( value addr -- )
+    tos>W,         \ Set aside the address.
+    0 # ldy,       \ 0 -> Y
+    2  zp,x   lda, \ NOS_lo -> A
+    wl (zp),y sta, \ Lo byte -> mem
+    iny,           \ 1 -> Y
+    3  zp,x   lda, \ NOS_hi -> A
+    wl (zp),y sta, \ Hi byte -> mem
+    inx, inx, inx, inx,
+end-code
+
+code C@ ( c-addr -- b )
+    0 (zp,x) lda,
+    0 zp,x   sta,
+    0 #      lda,
+    1 zp,x   sta, \ High byte is always 0
+end-code
+
+code C! ( b c-addr -- )
+    0 zp,x   lda,
+    2 (zp,x) sta,
+    inx, inx, inx, inx,
+end-code
+
+\ TODO: Write 2@ and 2! in Forth?
+
+code +! ( delta addr -- )
+    tos>W,
+    0  #      ldy, \ 0 -> Y
+    clc,
+    2  zp,x   lda, \ delta_lo -> A
+    wl (zp),y adc, \ mem_lo + delta_lo -> A
+    wl (zp),y sta, \ result_lo -> mem_lo
+    iny,
+    3  zp,x   lda, \ delta_hi -> A
+    wl (zp),y adc, \ mem_hi + delta_hi -> A
+    wl (zp),y sta, \ result_hi -> mem_hi
+    inx, inx, inx, inx,
+end-code
+
+code EXECUTE ( xt -- )
+    \ Pop the xt into W, then JMP-indirect through it.
+    tos>W,
+    inx, inx,
+    wl $ (jmp), \ That will return to the caller of EXECUTE, as intended.
+end-code-bare
+
+\ TODO: BREAK? Is there any way to trigger a breakpoint on C64?
+
+
+\ Variables and core states ==================================================
+label var_dp          0 asm,16
+label var_latest      0 asm,16
+label var_base        0 asm,16
+label var_state       0 asm,16
+label var_handler     0 asm,16
+
+label var_last_parse  0 asm,16 0 asm,16
+label var_source      0 asm,16 0 asm,16
+label var_in_ptr      0 asm,16
+label var_source_id   0 asm,16
+label input-buf       128 there +!
+
+code DP var_dp lit, end-code
+
+\ Puts 'dp in W2; DP itself in W.
+\ Clobbers Y.
+label DP-load
+    var_dp lo #      lda,
+    w2l       zp     sta,
+    var_dp hi #      lda,
+    w2h       zp     sta,
+    \ 'dp in W2
+
+    0         #      ldy,
+    w2l       (zp),y lda,
+    wl        zp     sta, \ dp_lo -> W_lo
+    iny,
+    w2l       (zp),y lda,
+    wh        zp     sta, \ dp_hi -> W_hi
+    \ dp now in W
+    rts,
+
+\ Expects DP in W, 'DP in W2.
+\ Writes the (presumably updated) DP to 'DP.
+label DP-save
+    0         #      ldy, \ 0    -> Y
+    wl        zp     lda, \ W_lo -> A
+    w2l       (zp),y sta, \ W_lo -> ('DP_lo)
+    iny,
+    wh        zp     lda, \ W_hi -> A
+    w2l       (zp),y sta, \ W_hi -> ('DP_hi)
+    rts,
+
+
+
+code , ( x -- )
+    DP-load $ jsr,
+    tos>(w),
+    2 W+
+    inx, inx,
+    DP-save $ jmp, \ Tail call
+end-code-bare
+
+code C, ( b -- )
+    DP-load $ jsr,
+    \ Now store TOS_lo at (W).
+    0         zp,x   lda, \ b_lo -> A
+    wl        $      sta, \ b_lo -> mem_lo
+
+    1 W+, \ Bump the value in W; the new DP.
+    inx, inx,
+    DP-save $ jmp,
+end-code-bare
+
+\ Compilation means compiling a JSR byte first, then jumping into , above.
+\ OPT: This could probably be optimized for space at the cost of speed.
+code COMPILE, ( xt -- )
+    DP-load $ jsr,
+    \ Write the opcode for JSR $1234: $20.
+    0   #      ldy,
+    $20 #      lda,
+    wl  (zp),y sta, \ $20 -> (dp)
+    iny,
+    0   zp,x   lda,
+    wl  (zp),y sta, \ xt_lo -> (dp+1)
+    iny,
+    1   zp,x   lda,
+    wl  (zp),y sta, \ xt_hi -> (dp+2)
+
+    3 +W,
+    inx, inx,
+    DP-save $ jmp,  \ Tail call
+end-code-bare
+
+
+code HANDLER      var_handler    lit, end-code
+code 'LATEST      var_latest     lit, end-code
+code STATE        var_state      lit, end-code
+code BASE         var_base       lit, end-code
+code 'SOURCE      var_source     lit, end-code
+code 'SOURCE-ID   var_source_id  lit, end-code
+code >IN          var_in_ptr     lit, end-code
+code TIB          input-buf      lit, end-code
+code LAST-PARSE   var_last_parse lit, end-code
+code F_IMMED      f_immed        lit, end-code
+
+
+\ More arithmetic ============================================================
+\ Fixed-sized arithmetic should just be written in Forth.
+\ CELLS is just 2*; CHARS is empty.
+code CELL   2 lit,  end-code
+
+
+\ Double-cell arithmetic =====================================================
+\ TODO: Implement this.
+
+
+\ Branches ===================================================================
+\ In STC these compile literal conditional branches.
+\ That limits the distance to +127, -128. That's 40 words worth, which I'm
+\ going to assume (but check) is enough for now.
+
+

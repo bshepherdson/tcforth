@@ -1,27 +1,13 @@
-\ Addressing modes:
-\ - Implied (none)
-\ - Accumulator only, non memory (ASL, LSR, ROL, ROR)
-\ - Immediate: 1-byte literal, spelled #nn or #$nn
-\ - Absolute: 2-byte literal address, spelled $nnnn
-\ - X-indexed absolute: 2-byte literal address plus X, spelled $nnnn,X
-\ - Y-indexed absolute: same, but Y
-\ - Absolute Indirect: 2-byte abs addr, doubly indirected (JMP ($nnnn) only)
-\ - Zero page: 1-byte zero page offset, spelled $nn
-\ - X-indexed zero page: 1-byte offset with X, spelled $nn,X
-\ - Y-indexed zero page: 1-byte offset with Y, spelled $nn,Y (LDX and STX only)
-\ - X-indexed ZP indirect: 1-byte offset added to X, then indirected "($nn,X)"
-\ - ZP indirect Y-indexed: 1-byte offset, looked up and *then* added to Y "($nn),Y"
-\ - (Relative: 2-byte PC-relative offset, only branches)
+\ Forth-powered assembler for 6502 family.
+\ It's intended for the 6510 in the Commodore 64.
+\ Syntax style is:   12 # lda,
 
-\ Relative and Implied are special and don't need to be in the table.
-\ Likewise Absolute Indirect is only allowed for the jump.
+\ A couple of top-level notes about the 6502:
+\ - Little endian
+\ - The machine stack is empty-descending; and always $01xx with a 1-byte
+\   stack pointer S.
 
-\ All 16-bit values are stored little-endian.
-
-\ START HERE: Adjust the above to STC with the system stack for return stack and
-\ zero page for data stack.
-
-CREATE output 64 1024 * allot
+CREATE output 65536 allot
 VARIABLE there
 0 there !
 VARIABLE min-there   1000000 min-there !
@@ -34,15 +20,58 @@ clean-output
   dup max-there @ max max-there !
       min-there @ min min-there ! ;
 
-: b@ ( t-addr -- b ) output + c@ ;
-: w@ ( t-addr -- w ) output + dup c@   swap 1+ c@   8 lshift or ;
+: ta ( t-addr -- c-addr ) output + ;
+: tc@ ( t-addr -- b ) ta c@ ;
+: tc! ( b t-addr -- ) dup endpoints! ta c! ;
 
-: b! ( b t-addr -- ) dup endpoints!   output + c! ;
-: w! ( w t-addr -- ) over 255 and over b!   1+ >R 8 rshift R> b! ;
-: assemble   ( b -- )    there @ b!   1 there +! ;
-: assemble16 ( word -- ) there @ w!   2 there +! ;
+1 CONSTANT instr-width
 
-: implied ( opcode "name" -- ) CREATE , DOES> @ assemble ;
+: asm,   ( b -- ) there @ tc!   1 there +! ;
+: asm,16 ( w -- ) dup $ff and asm,   8 rshift $ff and asm, ;
+
+: label ( "name" --    X: -- t-addr ) there @ CONSTANT ;
+
+\ Addressing modes:
+\ Name                 | OG Syntax | This Syntax | Marker | Effect
+\ ==============================================================================
+\ Implied/Accumulator  | --        | --          | 0      | No argument
+\ Immediate            | #aa       | aa #        | 1      | Literal byte
+\ Absolute             | aaaa      | aaaa $      | 2      | 16-bit immediate
+\ Abs Indexed,X        | aaaa,X    | aaaa $,X    | 3      | [aaaa+X]
+\ Abs Indexed,Y        | aaaa,Y    | aaaa $,Y    | 4      | [aaaa+Y]
+\ Zero Page            | (blank)   | aa zp       | 5      | [00aa]
+\ Zero page Indexed,X  | aa,X      | aa zp,X     | 6      | [aa+X]
+\ Zero page Indexed,Y  | aa,Y      | aa zp,Y     | 7      | [aa+Y]
+\ Indexed Indirect     | (aa,X)    | aa (,X)     | 8      | [[aa+X]]
+\ Indirect Indexed     | (aa),Y    | aa (),Y     | 9      | [[aa]+Y]
+\ Indirect Absolute    |           | aaaa (())   | --     | [[aaaa]]; JMP only
+\ Relative             | aaaa      | aaaa        | --     | For branches
+\ Accumulator          | A         | A           | --     |
+
+\ Arbitrary indexes for the opcodes.
+0  CONSTANT acc
+1  CONSTANT #      \ Immediate
+2  CONSTANT $      \ Absolute
+3  CONSTANT $,x    \ X-indexed Absolute
+4  CONSTANT $,y    \ Y-indexed Absolute
+5  CONSTANT zp     \ Zero page
+6  CONSTANT zp,x   \ X-indexed zero page
+7  CONSTANT zp,y   \ Y-indexed zero page
+8  CONSTANT (zp,x) \ Indexed indirect
+9  CONSTANT (zp),y \ Indirect indexed
+10 CONSTANT #modes
+
+
+\ Instructions
+\ ----------------------------------------------------------------------------
+\ 56 unique instructions (2 more on 65C02). Many have access to several
+\ addressing modes. The opcodes for these follow certain patterns, which are
+\ exploited by the defining words.
+
+\ Group 1: Implied addressing
+\ ----------------------------------------------------------------------------
+\ The simplest of all - just a single byte with no arguments.
+: implied ( opcode "name" -- ) CREATE , DOES> @ asm, ;
 $00 implied brk,
 $18 implied clc, $d8 implied cld, $58 implied cli, $b8 implied clv,
 $ca implied dex, $88 implied dey, $e8 implied inx, $c8 implied iny,
@@ -55,35 +84,29 @@ $aa implied tax, $a8 implied tay, $ba implied tsx,
 $8a implied txa, $9a implied txs, $98 implied tya,
 
 
-\ Arbitrary indexes for the opcodes.
-0  CONSTANT acc
-1  CONSTANT #      \ Immediate
-2  CONSTANT $      \ Absolute
-3  CONSTANT $,x    \ X-indexed Absolute
-4  CONSTANT $,y    \ Y-indexed Absolute
-5  CONSTANT zp     \ Zero page
-6  CONSTANT zp,x   \ X-indexed zero page
-7  CONSTANT zp,y   \ Y-indexed zero page
-8  CONSTANT (zp,x) \ Y-indexed zero page
-9  CONSTANT (zp),y \ Y-indexed zero page
-10 CONSTANT #modes
+\ START HERE: Adjust the above to STC with the system stack for return stack and
+\ zero page for data stack.
 
+
+\ Constructing a table of bytes indexed by operation index then addressing mode.
+\ There are 23 unique ops.
 23 CONSTANT #addressed
 CREATE opcode-table #modes #addressed * allot align
 
+\ Table of assembler XTs for each addressing mode's argument.
 : nop ( -- ) ;
 CREATE arg-assemblers #modes cells allot
 
-' nop          acc    cells arg-assemblers + !
-' assemble     #      cells arg-assemblers + !
-' assemble16   $      cells arg-assemblers + !
-' assemble16   $,x    cells arg-assemblers + !
-' assemble16   $,y    cells arg-assemblers + !
-' assemble     zp     cells arg-assemblers + !
-' assemble     zp,x   cells arg-assemblers + !
-' assemble     zp,y   cells arg-assemblers + !
-' assemble     (zp,x) cells arg-assemblers + !
-' assemble     (zp),y cells arg-assemblers + !
+' nop      acc    cells arg-assemblers + !
+' asm,     #      cells arg-assemblers + !
+' asm,16   $      cells arg-assemblers + !
+' asm,16   $,x    cells arg-assemblers + !
+' asm,16   $,y    cells arg-assemblers + !
+' asm,     zp     cells arg-assemblers + !
+' asm,     zp,x   cells arg-assemblers + !
+' asm,     zp,y   cells arg-assemblers + !
+' asm,     (zp,x) cells arg-assemblers + !
+' asm,     (zp),y cells arg-assemblers + !
 
 : assemble-arg ( ... mode -- ) cells arg-assemblers + @ execute ;
 
@@ -91,7 +114,7 @@ CREATE arg-assemblers #modes cells allot
 : addressed ( tag "name" -- ) CREATE , DOES>
   @ ( ... mode tag )
   2dup #modes * + opcode-table + c@ ( ... mode tag opcode )
-  ?dup IF assemble drop assemble-arg ELSE
+  ?dup IF asm, drop assemble-arg ELSE
     ." Illegal tag + mode pair: " . . cr
     abort
   THEN ;
@@ -232,7 +255,7 @@ dup zp    $e6 encode
 : jumper ( opcode "name" -- ) CREATE , DOES>
   ( addr16 mode addr )
   swap $ <> ABORT" jmp, jsr, and (jmp), can only be called with $ absolute"
-  @ assemble assemble16 ;
+  @ asm, asm,16 ;
 
 $4c jumper jmp,
 $6c jumper (jmp),
@@ -243,10 +266,10 @@ $20 jumper jsr,
 \ signed byte delta. They take a raw target address and the assembler computes
 \ the gap.
 : brancher ( op "name" -- ) CREATE , DOES>
-  ( addr16 addr ) @ assemble ( addr16 )
+  ( addr16 addr ) @ asm, ( addr16 )
   \ The delta is relative to the PC *after* the branch delta, which is there 1+
   there @ 1+ - ( delta8 )
-  255 and assemble ;
+  255 and asm, ;
 
 $90 brancher bcc,
 $b0 brancher bcs,
@@ -271,7 +294,11 @@ $70 brancher bvs,
 
 \ Resolves a forward branch. It's relative to a-slot+2.
 : then, ( a-slot -- )
-  there @   over 1+ -   ( a-slot delta )   swap b! ;
+  there @   over 1+ -   ( a-slot delta )   swap tc! ;
+
+\ On ELSE - assembly else, doesn't work - JMP only works on absolutes,
+\ whereas the branches use single relative bytes.
+\ We could implement it as  LDA #0 + BEQ xx to guarantee
 
 
 \ TODO Labels, forward and backward
@@ -336,5 +363,4 @@ CREATE chip-header
   $8000 min-there !   $a000 max-there !
   R> dup c64-emit
   c64-close ;
-
 

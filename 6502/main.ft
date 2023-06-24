@@ -1,0 +1,49 @@
+\ Entry point for metacompiling the portable kernel to Commodore-64.
+\ Most of the heavy lifting is done in other files, this is just orchestrating.
+
+REQUIRE ../host/vocabularies.ft
+
+host definitions REQUIRE assembler.ft
+
+host REQUIRE ../host/helpers.ft
+host REQUIRE model.ft                      \ Machine-specific model words
+host REQUIRE ../host/dictionary.ft
+host REQUIRE ../host/mirrors.ft
+
+\ Now we have what we need to metacompile the CODE definitions at the heart of
+\ the new kernel.
+host definitions REQUIRE kernel.ft
+
+\ The main part of the metacompiler
+host REQUIRE ../host/metacompiler.ft
+
+\ Now the first chunk of Target Forth code!
+host REQUIRE ../shared/core1.ft
+host REQUIRE ../shared/exceptions.ft
+
+\ Load the target-side model words.
+host REQUIRE model-target.ft
+
+\ And back to the universal code.
+host REQUIRE ../shared/input.ft
+host REQUIRE ../shared/core2.ft
+
+\ More C64 code that supplements the core library.
+host REQUIRE lib.ft
+
+\ TODO: Add input and output libraries.
+
+\ More shared files
+host definitions REQUIRE ../shared/output.ft
+host definitions REQUIRE ../shared/error-messages.ft
+
+\ TODO: Add an intro screen?
+
+\ And finally the startup code!
+host definitions REQUIRE ../shared/init.ft
+
+\ NB: You should always include tail.ft as the last stage of your build.
+\ It actually emits the assembled image.
+
+\ Known-missing words ========================================================
+\ Core: ENVIRONMENT? WORD

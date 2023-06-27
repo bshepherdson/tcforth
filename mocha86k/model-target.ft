@@ -48,3 +48,19 @@ host definitions
   $817b        tliteral  [T'] c,       tcompile,
   docol        tliteral  [T'] c,       tcompile, ;
 
+
+\ Debugging helpers ==========================================================
+host definitions
+: codeword+ ( xt -- tt ) 2 + ; \ JSR lit_uw + the literal
+: ?tsee-lit    ( tt -- tt 0 | tt' -1 )
+  dup t@ lit = IF
+    tcell+ dup t@ dup . hex.   tcell+ true
+  ELSE false THEN ;
+
+: ?tsee-branch ( tt -- tt 0 | tt' val -1 )
+  dup t@ dup [T'] (0branch) =   swap [T'] (branch) = or IF
+    dup t@ T>NAME TID. bl emit
+    tcell+ dup t@ hex. tcell+ true ELSE false THEN ;
+
+: tsee-end? ( tt -- ? )   t@ [T'] EXIT = ;
+: tsee-word ( tt -- tt' ) dup t@ t>name tid. tcell+ ;

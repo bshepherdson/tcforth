@@ -172,9 +172,6 @@ label DOSTRING
 \ cell [LIT|x] pattern.
 : tliteral ( x --    X: -- x ) lit tcompile,   t, ;
 
-: ,dest ( dest -- ) t, ;
-: !dest ( dest slot -- ) t! ;
-
 \ 3 words in the code field of a CREATEd word.
 : t>body ( target-xt -- target-body ) 3 + ;
 

@@ -385,10 +385,11 @@ end-code
 
 \ Branches are abstracted, because they differ signficantly on STC systems,
 \ and even on others they might prefer relative or absolute branches.
-\ ,BRANCH ,DEST and !DEST handle that abstraction between the kernel and the
+\ 0/BRANCH, !DEST etc. handle that abstraction between the kernel and the
 \ shared high-level Forth control structures.
 
 \ On Mocha 86k these are absolute new IP values, in the next slot of the thread.
+\ This is the same design as DCPU-16 and Risque-16 (and DTC on ARM, actually).
 code (BRANCH)
   [ip] ip setl,
 end-code

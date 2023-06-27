@@ -1,0 +1,36 @@
+\ The slots returned by 0/BRANCH, and consumed by !DEST are arbitrary but must
+\ be compatible. They are distinct from the HERE values used as the targets
+\ for branches. On ITC and DTC, they'll generally be the address of the
+\ cell after the `(BRANCH)` instruction, which holds an absolute target.
+\ Then !DEST is simply !.
+
+\ On some machines, the branch might be relative or encoded into an instruction.
+\ It might also matter whether the word in question was a conditional or
+\ unconditional branch, since they might be implemented very differently.
+
+\ On the target side, BRANCH, means compiling the necessary and leaving HERE
+\ on the stack. It can easily be written in Forth in this file.
+\ On the host side, it can be implemented using host words like the assembler.
+
+\ First the host side words.
+host definitions
+: 0BRANCH,    [T'] (0BRANCH) tcompile,   here 0 t, ;
+: BRANCH,     [T'] (BRANCH)  tcompile,   here 0 t, ;
+: !DEST       t! ;
+: DEST>BRANCH 1 tcells - ;
+: DEST>POST   tcell+ ;
+
+target definitions
+
+target : 0BRANCH,
+    [ host T' (0BRANCH) tliteral target ] compile,   here 0 , ;
+  host acts: 0branch, ;
+
+target : BRANCH,
+    [ host T' (BRANCH) tliteral target ] compile,   here 0 , ;
+  host acts: branch, ;
+
+target : !DEST ( dest slot -- ) !   ;      host acts: !dest ;
+target : DEST>BRANCH            cell - ;   host acts: dest>branch ;
+target : DEST>POST              cell+ ;    host acts: dest>post ;
+

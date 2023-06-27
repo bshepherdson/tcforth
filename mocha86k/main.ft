@@ -21,37 +21,27 @@ main 1 t!
 \ The main part of the metacompiler
 host REQUIRE ../host/metacompiler.ft
 
-\ Now the first chunk of Target Forth code!
-host REQUIRE ../shared/core1.ft
+\ Now an interleaved dance of shared and target-specific metacompiled code.
+host REQUIRE ../shared/basics.ft
+host REQUIRE branches.ft               \ Target-specific branching helpers.
+host REQUIRE ../shared/control-structures.ft
 host REQUIRE ../shared/exceptions.ft
-
-\ Load the target-side model words.
 host REQUIRE model-target.ft
-
-\ And back to the universal code.
 host REQUIRE ../shared/input.ft
 host REQUIRE ../shared/core2.ft
+host REQUIRE lib.ft                    \ Division etc. helpers
+host REQUIRE hardware.ft               \ Can't borrow from DCPU-16; 32-bit values differ
+host REQUIRE ../dcpu16/screen.ft       \ Can borrow DCPU-16's screen handler
+host REQUIRE ../shared/output.ft
+host REQUIRE ../shared/error-messages.ft
+host REQUIRE ../dcpu16/intro.ft        \ DCPU-16/Risque-16 HW init; intro msg
+host REQUIRE ../shared/init.ft         \ Shared init code.
 
-\ More Mocha 86k code that supplements the core library.
-host REQUIRE lib.ft
-
-\ We can borrow the DCPU-16's screen.ft, but not its hardware.ft because the
-\ details of HWQ are different here (couple of 32-bit values that can be treated
-\ directly on Mocha 86k).
-host definitions REQUIRE hardware.ft
-host definitions REQUIRE ../dcpu16/screen.ft
-
-\ More shared files
-host definitions REQUIRE ../shared/output.ft
-host definitions REQUIRE ../shared/error-messages.ft
-
-host definitions REQUIRE ../dcpu16/intro.ft
-
-\ And finally the startup code!
-host definitions REQUIRE ../shared/init.ft
-
+host REQUIRE ../host/debugging.ft    \ Shared init code.
 \ NB: You should always include tail.ft as the last stage of your build.
 \ It actually emits the assembled image.
 
 \ Known-missing words ========================================================
 \ Core: ENVIRONMENT? WORD
+
+\ START HERE: Branching is busted on Mocha 86k; missing some juggling somewhere.

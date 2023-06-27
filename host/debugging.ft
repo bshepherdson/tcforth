@@ -1,38 +1,17 @@
 \ Optionally included debugging helpers for metacompiled words.
-\ TODO This only works for threaded code right now; it assumes it can t@ the
-\ thread and get the xt for the target.
+\ For portability:
+\ : codeword+    ( xt -- tt )  to skip the xt past the codeword
+\ : tsee-end?    ( tt -- ? )   for locating the end of the thread
+\ These two print the details, but NOT the address or CR.
+\ : ?tsee-lit    ( tt -- tt 0 | tt' -1 ) for conditionally processing a literal
+\ : ?tsee-branch ( tt -- tt 0 | tt' -1 ) for conditionally processing a branch
+\ : tsee-word    ( tt -- tt' ) for the regular case of printing a word; no address or CR
 host definitions
 
-: TNAME>STRING ( t-nt -- c-addr u ) tcell+ dup 1+ swap tc@ mask_len and ;
-
-: TNAME>INT ( t-nt -- t-xt ) tname>string + taligned ;
-
-: T>NAME ( target-xt -- target-nt|0 )
-  'latest @ BEGIN dup WHILE ( target-xt target-nt )
-    2dup tname>int = IF nip EXIT THEN
-    t@
-  REPEAT nip ;
-
-\ TODO: This only works with a 1-cell code field.
-T' BL   tcell+ T@ CONSTANT 'lit
-
-: TTYPE ( tc-addr u -- ) over + swap ?DO i tc@ emit LOOP ;
-
-: TID. ( t-nt -- ) tname>string ttype ;
-
-: .BRANCH ( t-xt -- t-xt' )
- dup t@ T>name tid. space
- tcell+ dup t@ over tcell+ - .
- tcell+ ;
-
-: .LIT ( t-xt -- t-xt' ) tcell+ dup t@ dup . hex. tcell+ ;
-
 : TXT-SEE-1 ( t-xt -- t-xt'|0 )
-  dup t@ 'lit = IF .lit EXIT THEN
-  dup t@ [T'] exit = IF drop 0 ." EXIT"   EXIT THEN
-  dup t@ dup  [T'] (0branch) =
-         swap [T'] (branch)  = or IF .branch EXIT THEN
-  \ ." main case " dup t@ hex. cr
+  ?tsee-lit    IF EXIT THEN
+  ?tsee-branch IF EXIT THEN
+  dup tsee-end? IF drop 0 ." EXIT" EXIT THEN
   dup t@ T>NAME TID. tcell+ ;
 
 : TXT-SEE ( t-xt -- )
@@ -42,7 +21,5 @@ T' BL   tcell+ T@ CONSTANT 'lit
 
 : TSEE ( "name" -- ) T' txt-see ;
 
-\ target : ABS ( n -- u ) dup 0< IF negate THEN ;
-
-: TWORDS ( -- ) latest BEGIN dup tid. cr t@ ?dup 0= UNTIL ;
+: TWORDS ( -- ) latest BEGIN ?dup WHILE dup tid. cr t@ REPEAT ;
 

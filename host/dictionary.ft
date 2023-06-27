@@ -44,3 +44,17 @@ f_hidden 1-        CONSTANT mask_len
 : t>cfa ( target-nt -- target-xt )
   tcell+ dup tc@ mask_len and + tchar+ taligned ;
 
+: TNAME>STRING ( t-nt -- c-addr u ) tcell+ dup 1+ swap tc@ mask_len and ;
+
+: TNAME>INT ( t-nt -- t-xt ) tname>string + taligned ;
+
+: T>NAME ( target-xt -- target-nt|0 )
+  'latest @ BEGIN dup WHILE ( target-xt target-nt )
+    2dup tname>int = IF nip EXIT THEN
+    t@
+  REPEAT nip ;
+
+: TTYPE ( tc-addr u -- ) over + swap ?DO i tc@ emit LOOP ;
+
+: TID. ( t-nt -- ) tname>string ttype ;
+

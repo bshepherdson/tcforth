@@ -59,8 +59,9 @@ VARIABLE acting?   VARIABLE doing?
 
 
 \ Like IMMEDIATE for metacompilation - copies the metainterpretation action to
-\ be the metacompilation action instead, and makes the metainterpretation action
-\ an error.
+\ be the metacompilation action instead.
+\ IMPERATIVE makes the metainterpretation action an error (eg. for IF)
+\ IMPERATIVE-BOTH keeps both actions the same (eg. for \ )
 : IMPERATIVE-BOTH ( -- )
   'mirror @ dup >R  ( mirror     R: mirror )
   mirror>interp @   R> mirror>compile ! ;
@@ -156,8 +157,5 @@ latest tcell+ dup tc@ f_immed or swap tc!
 host here ." Metacompilation starts at " dup hex.  ." (" 2* hex. ." )" cr
 
 host .s cr
-
-\ START HERE: The setup chain is correct, but why is COLD compiled with
-\ bl $4 instead of bl $10004?
 
 \ entry-point should now be set properly for the :main routine.

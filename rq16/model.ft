@@ -4,13 +4,7 @@
 
 host definitions
 
-\ Basic constants of the dictionary
-$8000 CONSTANT f_immed
-$4000 CONSTANT f_hidden
-$7fff CONSTANT mask_len_hidden
-$3fff CONSTANT mask_len
-
-\ And other constants
+\ Some basic constants
 0     CONSTANT rp0
 $ff7f CONSTANT sp0 \ This is the value to literally write to SP for an empty stack.
 

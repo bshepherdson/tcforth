@@ -98,7 +98,7 @@ host presume scroll target
 \ always scrolled in. VRAM doesn't move.
 : (-scroll) ( +chars -- )
   \ Move vram to vram+len for vram-size - length words.
-  >R   vram dup R@ +   384 R@ - move \ START HERE downward move busted?
+  >R   vram dup R@ +   384 R@ - move
   \ Then wipe the top part.
   0 R@ wipe
   \ And adjust the cursor so it follows the scroll.

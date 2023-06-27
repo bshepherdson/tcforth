@@ -147,15 +147,31 @@ target : ['] ( C: "name" --    X: -- xt )
 
 
 \ DO LOOPs ===================================================================
+\ Anatomy of a DO LOOP, as compiled into the target definition.
+\ (DO) | LIT | 1 | (0BRANCH) | dest1
+\ ** dest2 points here, top of the loop body.
+\ ... loop body ...
+\ (LOOP-END) | (0BRANCH) | dest2
+\ ** dest1 points here, after the branch to the top but before the postlude.
+\ UNLOOP
+
+\ (loop-top) holds the current (innermost) loop's slot address, ie. *dest1.
+
+\ It's manipulated in two ways, though, neither of which are portable to STC.
+\ - `cell+` to point after it, ie. at the top of the loop body.
+\ - `1 cells -` to point at the (0BRANCH) at the top.
+\ To make that portable, we need dest>branch and dest>post adjustments in the
+\ branches.ft model code.
+
 target VARIABLE (loop-top)
 
 target : DO ( m i -- )
     ['] (DO) compile,   1 postpone literal
-    [0BRANCH] here 0 , ( C: new-loop-top )
+    0BRANCH,                        ( C: new-loop-top )
     (loop-top) @ swap (loop-top) !  ( C: old-jump-addr )
     ; IMMEDIATE
   host acts:
-    [T'] (DO) tcompile,   1 tliteral   T0BRANCH tcompile,  here 0 t,
+    [T'] (DO) tcompile,   1 tliteral   0branch,
     [T'] (loop-top) t>body >R  ( top-slot   R: 'loop-top )
     R@ t@ swap ( old-top top-slot   R: 'loop-top ) R> t!  ( old-top )
     ; IMPERATIVE
@@ -163,10 +179,11 @@ target : DO ( m i -- )
 
 host definitions
 : (+LOOP)
-  [T'] (loop-end) tcompile,   T0BRANCH tcompile,
-  \ Now we want to ,dest compile the top address, which is a tcell after the
-  \ location in (loop-top).
-  [T'] (loop-top) t>body dup >R   t@ tcell+   ,dest   ( old-top  R: 'top)
+  [T'] (loop-end) tcompile,   0BRANCH, ( old-top bottom-slot )
+  \ The target for the bottom jump is the top of the loop body; AFTER the slot
+  \ stored in (loop-top).
+  [T'] (loop-top) t>body dup >R   t@ dest>post swap ( old-top body bottom-slot)
+  !dest ( old-top   R: 'top )
   \ Now HERE is after the bottom of the loop, and should be put with !dest
   \ at (loop-top).
   here R@ t@ !dest
@@ -177,11 +194,11 @@ host definitions
 target definitions
 
 target : +LOOP ( step --   C: old-jump-addr )
-    ['] (loop-end) compile,   [0branch] here 0 , ( old-top bottom )
-    (loop-top) @ cell+   ( old-top bottom top-target ) swap !dest ( old-top )
+    ['] (loop-end) compile,   0branch, ( old-top bottom )
+    (loop-top) @ dest>post   ( old-top bottom top-target ) swap !dest ( old-top )
     \ End of the loop, start of the postlude
     here (loop-top) @ ( C: old-jump-addr end-addr top-slot )
-    swap !dest        ( C: old-jump-addr )
+    !dest             ( C: old-jump-addr )
     (loop-top) !      ( C: )
     ['] unloop compile, ; IMMEDIATE
   host acts: (+LOOP) ; IMPERATIVE
@@ -190,17 +207,16 @@ target : LOOP   1 postpone literal   postpone +LOOP ; IMMEDIATE
   host acts: 1 tliteral   (+LOOP) ; IMPERATIVE
 
 \ LEAVE compiles code that will jump out of the innermost loop.
-\ (loop-top) contains the address of its jump slot - this slides it back a tcell
+\ (loop-top) contains the address of its jump slot - this slides it back
 \ to the 0branch itself, pushes a 0 so it'll branch, and branches there.
 \ Note that the UNLOOP is after the top branch's target, so it'll handle
 \ removing those parameters.
 target : LEAVE ( --    R: loop-sys --   C: -- )
-    (loop-top) @ 1 cells -
     0   postpone literal
-    [branch] ,dest ; IMMEDIATE
+    (loop-top) @ dest>branch   branch, !dest ; IMMEDIATE
   host acts:
-    [T'] (loop-top) t>body t@ 1 tcells -
-    0 tliteral TBRANCH tcompile, ,dest ; IMPERATIVE
+    [T'] (loop-top) t>body t@ dest>branch
+    0 tliteral BRANCH, !dest ; IMPERATIVE
 
 \ Miscellany =================================================================
 target : FILL ( c-addr u ch -- )

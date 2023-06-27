@@ -163,9 +163,6 @@ VARIABLE 'EXIT   \ These get populated later.
 \ differently.
 : tliteral ( x --   X: -- x ) lit tcompile,   t, ;
 
-: ,dest ( dest -- ) t, ;
-: !dest ( dest slot -- ) t! ;
-
 : t>body ( target-xt -- target-body ) tcell+ ;
 
 label entry-point 0 asm,

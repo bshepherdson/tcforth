@@ -1,0 +1,45 @@
+\ Common Forth high-level words
+\ These are intended to be portable to any machine the metacompiler can target.
+\ ANS Forth standard names and arguments where practical.
+target definitions
+
+\ LATEST gives the name token. Skip over the link pointer and check the length.
+target : LATEST 'latest @ ;
+  host acts: latest ;
+target : IMMEDIATE
+    latest cell+   dup c@   f_immed or   swap c! ;
+  host acts: latest tcell+ dup tc@   f_immed or   swap tc! ;
+
+target : [ 0 state ! ; IMMEDIATE
+  host acts: 0 state ! postpone host ; IMPERATIVE
+
+target : ] 1 state ! ;
+  host acts: postpone target meta] ;
+
+target
+: BL   32  ;
+: 0<   0 < ;
+: 0=   0 = ;
+: 0>   0 swap < ;
+: NOT  0= ;
+: >    swap < ;
+: <=   > not ;
+: >=   < not ;
+: U>   swap U< ;
+: <>   = not ;
+: 0<>  0= not ;
+
+\ Memory operations
+: COUNT dup c@ >R char+ R> ;
+
+target : ALLOT ( n -- ) dp +! ;
+  host acts: dp +! ;
+
+target : HERE dp @ ;
+  host acts: dp @ ;
+
+target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , ; IMMEDIATE
+  host acts: tliteral ; IMPERATIVE
+
+target : WITHIN ( x lo hi -- ? ) over - >R   - R> U< ;
+

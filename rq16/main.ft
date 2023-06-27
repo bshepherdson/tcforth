@@ -17,34 +17,21 @@ host definitions REQUIRE kernel.ft
 \ The main part of the metacompiler
 host REQUIRE ../host/metacompiler.ft
 
-\ Now the first chunk of Target Forth code!
-host REQUIRE ../shared/core1.ft
+\ Now an interleaved dance of shared and target-specific metacompiled code.
+host REQUIRE ../shared/basics.ft
+host REQUIRE branches.ft               \ Target-specific branching helpers.
+host REQUIRE ../shared/control-structures.ft
 host REQUIRE ../shared/exceptions.ft
-
-\ Load the target-side model words.
 host REQUIRE model-target.ft
-
-\ And back to the universal code.
 host REQUIRE ../shared/input.ft
 host REQUIRE ../shared/core2.ft
-
-\ More Risque-16 code that supplements the core library.
-host REQUIRE lib.ft
-
-\ These DCPU-16 files work for Risque-16 as well since it's the same hardware!
-host definitions REQUIRE ../dcpu16/hardware.ft
-host definitions REQUIRE ../dcpu16/screen.ft
-
-
-\ More shared files
-host definitions REQUIRE ../shared/output.ft
-host definitions REQUIRE ../shared/error-messages.ft
-
-\ DCPU-16/Risque-16 hardware setup and LEM1802 intro message format.
-host definitions REQUIRE ../dcpu16/intro.ft
-
-\ And finally the startup code!
-host definitions REQUIRE ../shared/init.ft
+host REQUIRE lib.ft                    \ Division etc. helpers
+host REQUIRE ../dcpu16/hardware.ft     \ DCPU-16 files, but the same HW.
+host REQUIRE ../dcpu16/screen.ft
+host REQUIRE ../shared/output.ft
+host REQUIRE ../shared/error-messages.ft
+host REQUIRE ../dcpu16/intro.ft        \ DCPU-16/Risque-16 HW init; intro msg
+host REQUIRE ../shared/init.ft         \ Shared init code.
 
 \ NB: You should always include tail.ft as the last stage of your build.
 \ It actually emits the assembled image.

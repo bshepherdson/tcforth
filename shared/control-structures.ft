@@ -1,0 +1,28 @@
+\ Control structures, must be loaded after machine-specific branching.
+target definitions
+
+target : IF   ( ? --     C: -- if-slot ) 0BRANCH, ; IMMEDIATE
+  host acts: 0BRANCH, ; IMPERATIVE
+
+target : THEN ( ? --     C: if-slot -- ) here swap !dest ; IMMEDIATE
+  host acts: here swap !dest ; IMPERATIVE
+target : ELSE ( ? --     C: if-slot -- else-slot )
+    BRANCH,   swap here swap !dest ; IMMEDIATE
+  host acts: BRANCH,   swap here swap !dest ; IMPERATIVE
+
+target : BEGIN  ( --       C: -- top-loc ) here ; IMMEDIATE
+  host acts: here ; IMPERATIVE
+target : AGAIN  ( --       C: top-loc -- ) BRANCH, !dest ; IMMEDIATE
+  host acts: BRANCH, !dest ; IMPERATIVE
+target : WHILE  ( ? --     C: -- while-slot ) 0BRANCH, ; IMMEDIATE
+  host acts: 0BRANCH, ; IMPERATIVE
+target : REPEAT ( --       C: top-loc while-slot )
+    swap branch, !dest ( while-slot )
+    here swap !dest ; IMMEDIATE
+  host acts: swap BRANCH, !dest   here swap !dest ; IMPERATIVE
+target : UNTIL  ( ? --     C: top-loc -- ) 0BRANCH, !dest ; IMMEDIATE
+  host acts: 0BRANCH,   !dest ; IMPERATIVE
+
+
+target : MOVE  ( src dst u -- ) >R 2dup U< IF R> MOVE> ELSE R> MOVE< THEN ;
+

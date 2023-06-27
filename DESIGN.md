@@ -305,6 +305,41 @@ full of `host definitions`; see below for the Target-side model.
 - Define an image variable `entry-point`, currently an empty cell. This will get
   set to the xt for `COLD`, the startup word.
 
+#### Branch Redesign
+
+In ITC and DTC, branches are Forth words that consume the next cell from the
+thread. In STC, branches can be arbitrary instructions.
+
+To accomodate both with the same interface to the model:
+- `BRANCH,   ( -- slot-addr )`
+- `0BRANCH,  ( -- slot-addr )`
+- `!DEST     ( target slot-addr -- )`
+- `TBRANCH,  ( -- slot-addr )`
+- `T0BRANCH, ( -- slot-addr )`
+- `T!DEST    ( target slot-addr -- )`
+
+```forth
+: IF    ( ? --    C: -- if-slot ) 0BRANCH, ; IMMEDIATE
+: THEN  ( --      C: if-slot -- ) here swap !dest ; IMMEDIATE
+: ELSE  ( --      C: if-slot -- else-slot )
+  BRANCH,        ( if-slot else-slot )
+  here rot !dest ( else-slot ) ; IMMEDIATE
+```
+
+In ITC and DTC, those are (in Forth pseudocode):
+
+```forth
+: BRANCH,  ( -- slot-addr )     ['] BRANCH  compile, here 0 , ;
+: 0BRANCH, ( -- slot-addr )     ['] 0BRANCH compile, here 0 , ;
+: !DEST    ( target slot-addr ) ! ;
+```
+
+On Risque-16 STC:
+
+- `BRANCH,` compiles a blank `B` instruction, leaving its address as the slot.
+- `0BRANCH,` compiles `CMP tos, #0; BEQ +0`; `BEQ` is the slot.
+- `!DEST` does roughly `here over - ( slot delta ) swap !`
+
 
 ### Target-side Model
 

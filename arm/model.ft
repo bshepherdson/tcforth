@@ -148,10 +148,6 @@ label DOSTRING
 \ cell [LIT|x] pattern.
 : tliteral ( x --    X: -- x ) lit tcompile,   t, ;
 
-\ Branching is easiest with absolute targets, ip [] ip ldr,
-: ,dest ( dest -- ) t, ;
-: !dest ( dest slot -- ) t! ;
-
 : t>body ( target-xt -- target-body ) tcell+ ;
 
 

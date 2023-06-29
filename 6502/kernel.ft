@@ -396,7 +396,10 @@ code CELL   2 lit,  end-code
 
 \ Branches ===================================================================
 \ In STC these compile literal conditional branches.
-\ That limits the distance to +127, -128. That's 40 words worth, which I'm
-\ going to assume (but check) is enough for now.
+\ But those only have +/- 127 of range, which may not be enough; that's
+\ only 40 inner words. But I'll build the check in and hope it works.
+\ There's no words for it; they're compiled directly. See branches.ft
 
+
+\ Word Headers ===============================================================
 

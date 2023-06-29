@@ -434,14 +434,6 @@ code EXIT
   ip poprsp,
 end-code
 
-code >CFA ( nt -- xt )
-  1 # tos [+] r0 ldr,  \ Get the length word
-  2 # tos        add,  \ Skip over the link pointer and length word.
-  mask_len    r1 load, \ Get the length mask into r1
-  r1 r0       r0 and,  \ Mask it to get the real length.
-  r0 tos     tos add,  \ And advance TOS that far.
-end-code
-
 
 \ MOVEs ======================================================================
 code MOVE< ( src dst u -- ) \ Copies from low addresses to high.

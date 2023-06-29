@@ -410,15 +410,6 @@ code EXIT
   ip poprsp,
 end-code
 
-\ Converts a name token (ie. a hdr pointer) into the code field address, by
-\ skipping over the name.
-code >CFA ( nt -- xt )
-  2 #        tos  addl, \ Bump TOS by 2: points at length word.
-  [tos]+     rb   setw, \ B_lo is length word; TOS points at string.
-  mask_len # rb   andl, \ B is just the length.
-  rb         tos  addl, \ TOS is now the CFA
-end-code
-
 \ Copies src to dst from lower addresses to higher.
 code MOVE< ( src dst u -- )
   pop rb setl, \ Dest in B

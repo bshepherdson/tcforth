@@ -52,13 +52,11 @@ VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
 
 \ This is called with BL, so lr holds the address after the code field, which is
 \ the thread.
-cr cr cr S" DOCOL at " there @ hex.
+
 label DOCOL
   ip pushrsp,
   lr ip mov,
   next,
-
-docol hex. cr cr
 
 \ DOVAR is the code word for a CREATEd definition without a DOES> - it pushes
 \ the address of the parameter field. The parameter field address is in lr.

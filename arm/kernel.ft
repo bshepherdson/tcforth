@@ -384,16 +384,6 @@ code EXIT
   ip poprsp,
 end-code
 
-code >CFA ( nt -- xt )
-  4 # tos [+] r0 ldrb,  \ Get the length byte -> r0.
-  mask_len # r0 r0 and, \ Mask the length to be just the length.
-  r0 tos       tos add, \ And advance TOS that far.
-  \ Add 4 to skip the link pointer, 1 for the length byte, and 3 for alignment:
-  8 # tos tos    add,   \ Skip over the link pointer and length byte.
-  \ And mask out the low bits to align TOS - this is the xt.
-  3 # tos tos    bic,
-end-code
-
 
 \ MOVEs ======================================================================
 \ XXX remove me

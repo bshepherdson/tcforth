@@ -156,6 +156,6 @@ latest tcell+ dup tc@ f_immed or swap tc!
 
 host here ." Metacompilation starts at " dup hex.  ." (" 2* hex. ." )" cr
 
-host .s cr
+?stack-clear
 
 \ entry-point should now be set properly for the :main routine.

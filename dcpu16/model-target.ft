@@ -2,7 +2,7 @@
 \ Forth model (eg. ITC vs. DTC vs. STC)
 \ This file: DTC on the DCPU-16.
 
-\ >CFA is already defined, so is ,DOCOL.
+\ ,DOCOL is already defined.
 target definitions
 
 \ Add ,CF, which expects the address to jump to on the stack.
@@ -21,6 +21,11 @@ target : ,DOSTRING ( c-addr u -- )
 
 target : ALIGNED ;
 target : ALIGN ;
+
+\ This is actually portable but since it fits right here between ALIGNED and
+\ (DOES>), there's no good place to put it with splitting this file into 3.
+target : >CFA ( nt -- xt )
+  cell+ dup c@ [ host mask_len tliteral target ] and + char+ aligned ;
 
 target : PAD ( -- addr ) $fb00 ;
 

@@ -383,17 +383,6 @@ code EXIT
   ip poprsp,
 end-code
 
-\ Converts a name token (ie. a hdr pointer) into the code field address, by
-\ skipping over the name.
-code >CFA ( nt -- xt )
-  pop        ra   set, \ A is the NT
-  1 [a+]     rb   set,
-  mask_len # rb   and, \ B now the length
-  2 #        ra   add,
-  rb         ra   add, \ A is now the CFA
-  ra         push set,
-end-code
-
 \ Copies src to dst from lower addresses to higher.
 code MOVE< ( src dst u -- )
 label (MOVE<)

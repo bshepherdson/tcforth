@@ -10,9 +10,12 @@ DCPU_DISK ?= /dev/null
 
 
 ARM_QEMU ?= qemu-system-arm -M versatilepb -m 128M -nographic
-
 ARM_PREFIX ?= arm-none-eabi-
 
+VICE_C64 ?= x64sc
+VICE_C64_FLAGS ?=
+
+# DCPU cinematic universe - DCPU-16, Risque-16, Mocha 86k
 forth-dcpu16.bin: host/*.ft dcpu16/*.ft shared/*.ft
 	$(FORTH) dcpu16/main.ft dcpu16/disks.ft dcpu16/tail.ft
 
@@ -47,6 +50,7 @@ test-mocha86k: forth-mocha86k.bin test.disk test-long.dcs FORCE
 	$(EMULATOR) -arch mocha -turbo -disk test.disk -script test-long.dcs \
 		forth-mocha86k.bin
 
+# Bare metal ARMv7 32-bit
 forth-arm.bin: host/*.ft arm/*.ft shared/*.ft
 	$(FORTH) arm/main.ft arm/tail.ft
 	arm-none-eabi-objdump -b binary -m armv4t -D forth-arm.bin > forth.disasm
@@ -60,6 +64,15 @@ forth-arm-tests.bin: host/*.ft arm/*.ft shared/*.ft test.disk
 
 test-arm: forth-arm-tests.bin test.disk FORCE
 	$(ARM_QEMU) -kernel forth-arm-tests.bin
+
+# Commodore 64
+forth-c64.crt: host/*.ft 6502/*.ft shared/*.ft
+	$(FORTH) 6502/main.ft 6502/tail.ft
+
+c64: forth-c64.crt
+
+run-c64: forth-c64.crt
+	$(VICE_C64) $(VICE_C64_FLAGS)
 
 test: test-dcpu16 test-rq16 test-mocha86k test-arm FORCE
 

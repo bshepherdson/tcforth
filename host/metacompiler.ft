@@ -151,7 +151,7 @@ code : end-code 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, \ 9 cells
 code ; end-code 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, 0 t, \ Likewise, 9 cells.
 \ Mark ; as IMMEDIATE
 latest tcell+ dup tc@ f_immed or swap tc!
-  host acts: 0 state !   'EXIT @ tcompile, ; IMPERATIVE
+  host acts: 0 state !   EXIT, ; IMPERATIVE
 
 
 host here ." Metacompilation starts at " dup hex.  ." (" 2* hex. ." )" cr

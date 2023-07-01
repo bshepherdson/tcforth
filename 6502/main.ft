@@ -4,6 +4,8 @@
 REQUIRE ../host/vocabularies.ft
 
 host definitions REQUIRE assembler.ft
+host definitions REQUIRE registers.ft
+host definitions REQUIRE asm-helpers.ft
 
 host REQUIRE ../host/helpers.ft
 host REQUIRE model.ft                      \ Machine-specific model words
@@ -17,30 +19,20 @@ host definitions REQUIRE kernel.ft
 \ The main part of the metacompiler
 host REQUIRE ../host/metacompiler.ft
 
-\ Now the first chunk of Target Forth code!
-host REQUIRE ../shared/core1.ft
+\ Now an interleaved dance of shared and target-specific metacompiled code.
+host REQUIRE ../shared/basics.ft
+host REQUIRE branches.ft
+host REQUIRE ../shared/control-structures.ft
 host REQUIRE ../shared/exceptions.ft
-
-\ Load the target-side model words.
 host REQUIRE model-target.ft
-
-\ And back to the universal code.
 host REQUIRE ../shared/input.ft
 host REQUIRE ../shared/core2.ft
-
-\ More C64 code that supplements the core library.
 host REQUIRE lib.ft
-
-\ TODO: Add input and output libraries.
-
-\ More shared files
-host definitions REQUIRE ../shared/output.ft
-host definitions REQUIRE ../shared/error-messages.ft
-
-\ TODO: Add an intro screen?
-
-\ And finally the startup code!
-host definitions REQUIRE ../shared/init.ft
+host REQUIRE screen.ft
+host REQUIRE ../shared/output.ft
+host REQUIRE ../shared/error-messages.ft
+host REQUIRE intro.ft
+host REQUIRE ../shared/init.ft
 
 \ NB: You should always include tail.ft as the last stage of your build.
 \ It actually emits the assembled image.

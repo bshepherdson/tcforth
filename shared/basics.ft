@@ -10,6 +10,8 @@ target : IMMEDIATE
     latest cell+   dup c@   f_immed or   swap c! ;
   host acts: latest tcell+ dup tc@   f_immed or   swap tc! ;
 
+native here hex.
+host   here hex.
 target : [ 0 state ! ; IMMEDIATE
   host acts: 0 state ! postpone host ; IMPERATIVE
 

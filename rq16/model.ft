@@ -127,6 +127,8 @@ label (DOSTRING)
 VARIABLE '(DOES>)
 VARIABLE 'EXIT   \ These get populated later.
 
+: EXIT, ( -- ) 'EXIT @ tcompile, ;
+
 : DOES, ( -- 'dodoes-code )
   '(DOES>) @ t,   'EXIT @ t,
   here

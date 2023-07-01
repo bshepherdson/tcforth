@@ -1,22 +1,25 @@
-\ Gets the cell at (W) and overwrites TOS with it.
+: hi ( w -- b ) 8 rshift $ff and ;
+: lo ( w -- b )          $ff and ;
+
+\ Gets the cell at some fixed ZP offset and overwrites TOS with it.
 \ DOES NOT move PSP; it overwrites the current TOS.
 \ Clobbers Y.
-: (w)>tos,
-    1  #      ldy,
-    wl (zp),y lda,
-    1  zp,x   sta,
-    wl $      lda,
-    0  zp,x   sta, ;
+: (zp)>tos, ( zp-addr -- )
+    1      #      ldy,
+    dup    (zp),y lda,
+    1      zp,x   sta,
+    ( zp ) $      lda,
+    0      zp,x   sta, ;
 
-\ Writes TOS to (W).
+\ Writes TOS to (ZP) at some fixed offset.
 \ DOES NOT move PSP.
 \ Clobbers Y.
-: tos>(w),
-    1  #      ldy,
-    1  zp,x   lda,
-    wl (zp),y sta,
-    0  zp,x   lda,
-    wl $      sta, ;
+: tos>(zp), ( zp-addr -- )
+    1      #      ldy,
+    1      zp,x   lda,
+    dup    (zp),y sta,
+    0      zp,x   lda,
+    ( zp ) $      sta, ;
 
 : R>,
     dex, dex,
@@ -36,27 +39,29 @@
     wh zp lda,   pha,
     wl zp lda,   pha, ;
 
-: W>tos,
-    wh zp   lda,
-    1  zp,x sta,
-    wl zp   lda,
-    0  zp,x sta, ;
+\ Copies a fixed ZP cell into TOS. DOES NOT move PSP.
+: ZP>tos, ( zp-addr -- )
+    dup 1+ zp   lda,
+    1      zp,x sta,
+    ( zp ) zp   lda,
+    0      zp,x sta, ;
 
-: tos>W,
-    1 zp,x  lda,
-    wh zp   sta,
-    0 zp,x  lda,
-    wl zp   sta, ;
+\ Copies TOS into a fixed ZP cell. DOES NOT move PSP.
+: tos>ZP, ( zp-addr -- )
+    1      zp,x  lda,
+    dup 1+ zp    sta,
+    0      zp,x  lda,
+    ( zp ) zp    sta, ;
 
-: W+, ( lit -- )
+: ZP+, ( lit zp-addr -- )
     clc,
-    wl zp lda,
-    ( lit ) # adc,
-    wl zp sta,
+    dup     zp lda,
+    swap ( zp-addr lit ) #  adc,
+    dup                  zp sta,
 
-    wh zp lda,
-    0  #  adc,
-    wh zp sta, ;
+    1+ dup   zp lda,
+    0        #  adc,
+    ( zp+1 ) zp sta, ;
 
 \ Copies a word on the stack to another location, overwriting it.
 \ Give the indexes of the low bites; eg. NIP does 0 2 stack-cp, to copy
@@ -77,7 +82,14 @@
 \ **Swaps** the words at these two stack indices.
 : w-swap, ( a b -- )
     2dup b-swap,
-    1+ >R 1+ >R b-swap, ;
+    1+ >R 1+ R> b-swap, ;
+
+\ Juggles the hardware S pointer into Y, preserving X in W_lo.
+\ Clobbers A, Y, W_lo!
+: rsp>Y, ( -- )
+  wl zp stx,
+  tsx, txa, tay,
+  wl zp ldx, ;
 
 \ Compiles code that will push a literal value.
 : lit, ( value -- )
@@ -86,4 +98,14 @@
   1 zp,x   sta,    \ 2B 4c
   lo     # lda,    \ 2B 2c
   0 zp,x   sta, ;  \ 2B 4x  = 10B 16c
+
+\ Compiles code that adds a literal to TOS.
+: TOS+lit, ( value -- )
+  dup lo #    lda,
+  clc,
+  0      zp,x adc,
+  0      zp,x sta,
+  1      zp,x lda,
+      hi #    adc,
+  1      zp,x sta, ;
 

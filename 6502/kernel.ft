@@ -31,12 +31,50 @@ code XOR  ' noop ' eor, binary, end-code
 
 \ TODO: LSHIFT RSHIFT ARSHIFT as Forth loops.
 
-code 2*   0 zp,x asl,   1 zp,x rol,   end-code
-code 2/   1 zp,x lsr,   0 zp,x ror,   end-code
+code 2* label 2*-inner  0 zp,x asl,   1 zp,x rol,   end-code
+code 2/                 1 zp,x lsr,   0 zp,x ror,   end-code
 
 code INVERT
     $ff # lda,   0 zp,x eor,   0 zp,x sta,
     $ff # lda,   1 zp,x eor,   1 zp,x sta,
+end-code
+
+
+\ Multiplication =============================================================
+\ Taken from _Assembly in One Step_'s example 5-6 - 16x16 -> 32-bit multiply.
+\ The operands are taken from the stack, and the product in W_lo .. W2_hi.
+\ Call the 4 product bytes, low to high, p0 to p3.
+code UM* ( u u -- ud )
+  0   #  lda,        \ Clear the upper two bytes of the result.
+  w2l zp sta,
+  w2h zp sta,
+  16  #  ldy,        \ Multiplier bit count of 16.
+
+  label UM*-next-bit
+    1 zp,x lsr,      \ Shift two-byte multiplier (TOS) right
+    0 zp,x ror,
+    cs? if,          \ If we just shifted out a 1, add to the result.
+      w2l zp lda,    \ Fetch p2
+      clc,
+      2   zp,x adc,  \ Add NOS_lo to it
+      w2l zp   sta,  \ And store it back
+      w2h zp   lda,
+      3   zp,x adc,  \ Then NOS_hi + p3, but DON'T write it back.
+    then,
+    acc ror,         \ Rotate the four-byte product right.
+    w2h zp   sta,    \ Write p3
+    w2l zp   ror,
+    wh  zp   ror,
+    wl  zp   ror,
+    dey,             \ Decrement the bit count.
+    UM*-next-bit bne,
+
+  \ End of loop - product is in W (low) and W2 (high).
+  \ Double-cell values are stored ( lo hi ), so overwrite NOS and TOS.
+  w2h zp   lda,   3   zp,x sta,
+  w2l zp   lda,   2   zp,x sta,
+  wh  zp   lda,   1   zp,x sta,
+  wl  zp   lda,   0   zp,x sta,
 end-code
 
 
@@ -80,6 +118,30 @@ code U<
     0 zp,x sty,
     1 zp,x sty, \ Write the flag onto TOS.
 end-code
+
+\ TODO: Some kind of conditional compilation of target words - these are
+\ overwritten in shared/basics.ft currently.
+code 0= ( x -- ? )
+  $ff #    ldy,
+  1   zp,x lda,
+  0   zp,x ora,
+  ne? if,
+    0 # ldy,
+  then,
+  0   zp,x sty,
+  1   zp,x sty,
+end-code
+
+code 0< ( x -- ? )
+  $ff #    lda,
+  1   zp,x ldy,
+  pl? if,
+    0 # lda,
+  then,
+  0   zp,x sta,
+  1   zp,x sta,
+end-code
+
 
 \ TODO: < is tricky - implement it in Forth?
 
@@ -177,29 +239,30 @@ code SP@ ( -- psp )
 end-code
 
 code SP! ( psp -- )
-    0 zp,x ldx,
+    0 zp,x lda,
+    tax,
 end-code
 
 \ The return stack will have the address after the RP@ call on it.
 \ RP! will want to return from RP! to the caller of RP@ - so that works.
 code RP@
-    txa,        \ Preserve PSP
+    wl zp stx,  \ Preserve PSP
     tsx,        \ Get the hardware stack pointer.
-    txy,        \ And put it in Y.
-    tax,        \ Put PSP back
+    txa, tay,   \ And put it in Y.
+    wl zp ldx,  \ Put PSP back
     dex, dex,   \ Make space
     0 zp,x sty, \ Low byte is S (from Y)
-    1 # lda,    \ High byte is always 1.
+    1 #    lda, \ High byte is always 1.
     1 zp,x sta,
 end-code
 
 code RP!
     0 zp,x lda, \ Low byte - the new S.
     inx, inx,   \ Drop the value off the stack.
-    txy,        \ Set PSP aside.
+    wl zp stx,  \ Set PSP aside.
     tax,        \ Put the new S in X.
     txs,        \ Then S
-    tyx,        \ And put PSP back.
+    wl zp ldx,  \ And put PSP back.
 end-code
 
 
@@ -208,7 +271,7 @@ code R> R>, end-code
 code R@
     R>W, W>R, \ W now holds the value.
     dex, dex,
-    W>tos,
+    wl zp>tos,
 end-code
 
 \ Depth is $80 - X, shifted right by 1.
@@ -218,7 +281,7 @@ code DEPTH
     sec,
     wl zp sbc,  \ $80-X in A now.
     dex, dex,
-    lsr,        \ ($80-X)/2 in A
+    acc lsr,        \ ($80-X)/2 in A
     0 zp,x sta, \ That's the low byte.
     0 #    lda,
     1 zp,x sta, \ High byte is always 0.
@@ -227,7 +290,7 @@ end-code
 
 \ Memory =====================================================================
 code @
-    tos>W,         \ Set aside the address.
+    wl tos>ZP,     \ Set aside the address.
     0 # ldy,       \ Offset of 0 in Y
     wl (zp),y lda, \ Lo byte -> A
     0  zp,x   sta, \ Into TOS
@@ -237,7 +300,7 @@ code @
 end-code
 
 code ! ( value addr -- )
-    tos>W,         \ Set aside the address.
+    wl tos>ZP,     \ Set aside the address.
     0 # ldy,       \ 0 -> Y
     2  zp,x   lda, \ NOS_lo -> A
     wl (zp),y sta, \ Lo byte -> mem
@@ -263,7 +326,7 @@ end-code
 \ TODO: Write 2@ and 2! in Forth?
 
 code +! ( delta addr -- )
-    tos>W,
+    wl tos>ZP,
     0  #      ldy, \ 0 -> Y
     clc,
     2  zp,x   lda, \ delta_lo -> A
@@ -278,7 +341,7 @@ end-code
 
 code EXECUTE ( xt -- )
     \ Pop the xt into W, then JMP-indirect through it.
-    tos>W,
+    wl tos>ZP,
     inx, inx,
     wl $ (jmp), \ That will return to the caller of EXECUTE, as intended.
 end-code-bare
@@ -287,7 +350,6 @@ end-code-bare
 
 
 \ Variables and core states ==================================================
-label var_dp          0 asm,16
 label var_latest      0 asm,16
 label var_base        0 asm,16
 label var_state       0 asm,16
@@ -299,77 +361,47 @@ label var_in_ptr      0 asm,16
 label var_source_id   0 asm,16
 label input-buf       128 there +!
 
-code DP var_dp lit, end-code
-
-\ Puts 'dp in W2; DP itself in W.
-\ Clobbers Y.
-label DP-load
-    var_dp lo #      lda,
-    w2l       zp     sta,
-    var_dp hi #      lda,
-    w2h       zp     sta,
-    \ 'dp in W2
-
-    0         #      ldy,
-    w2l       (zp),y lda,
-    wl        zp     sta, \ dp_lo -> W_lo
-    iny,
-    w2l       (zp),y lda,
-    wh        zp     sta, \ dp_hi -> W_hi
-    \ dp now in W
-    rts,
-
-\ Expects DP in W, 'DP in W2.
-\ Writes the (presumably updated) DP to 'DP.
-label DP-save
-    0         #      ldy, \ 0    -> Y
-    wl        zp     lda, \ W_lo -> A
-    w2l       (zp),y sta, \ W_lo -> ('DP_lo)
-    iny,
-    wh        zp     lda, \ W_hi -> A
-    w2l       (zp),y sta, \ W_hi -> ('DP_hi)
-    rts,
-
+\ The dictionary pointer is in the zero page for speed.
+code DP herel lit, end-code
 
 
 code , ( x -- )
-    DP-load $ jsr,
-    tos>(w),
-    2 W+
+    0     zp,x   lda,
+    0     #      ldy,
+    herel (zp),y sta,
+    1     zp,x   lda,
+    iny,
+    herel (zp),y sta,
+
+    2 herel ZP+,
     inx, inx,
-    DP-save $ jmp, \ Tail call
-end-code-bare
+end-code
 
 code C, ( b -- )
-    DP-load $ jsr,
-    \ Now store TOS_lo at (W).
-    0         zp,x   lda, \ b_lo -> A
-    wl        $      sta, \ b_lo -> mem_lo
-
-    1 W+, \ Bump the value in W; the new DP.
+    0     zp,x   lda,
+    0     #      ldy,
+    herel (zp),y sta,
+    1 herel ZP+,
     inx, inx,
-    DP-save $ jmp,
-end-code-bare
+end-code
 
 \ Compilation means compiling a JSR byte first, then jumping into , above.
 \ OPT: This could probably be optimized for space at the cost of speed.
 code COMPILE, ( xt -- )
-    DP-load $ jsr,
     \ Write the opcode for JSR $1234: $20.
-    0   #      ldy,
-    $20 #      lda,
-    wl  (zp),y sta, \ $20 -> (dp)
+    0     #      ldy,
+    $20   #      lda,
+    herel (zp),y sta, \ $20 -> (dp)
     iny,
-    0   zp,x   lda,
-    wl  (zp),y sta, \ xt_lo -> (dp+1)
+    0     zp,x   lda,
+    herel (zp),y sta, \ xt_lo -> (dp+1)
     iny,
-    1   zp,x   lda,
-    wl  (zp),y sta, \ xt_hi -> (dp+2)
+    1     zp,x   lda,
+    herel (zp),y sta, \ xt_hi -> (dp+2)
 
-    3 +W,
+    3 herel ZP+,
     inx, inx,
-    DP-save $ jmp,  \ Tail call
-end-code-bare
+end-code
 
 
 code HANDLER      var_handler    lit, end-code
@@ -385,21 +417,245 @@ code F_IMMED      f_immed        lit, end-code
 
 
 \ More arithmetic ============================================================
-\ Fixed-sized arithmetic should just be written in Forth.
-\ CELLS is just 2*; CHARS is empty.
-code CELL   2 lit,  end-code
+code CELL   2 lit,                    end-code
+code CELLS  2*-inner $ jmp,           end-code-bare
+code CHARS                            end-code
+code CELL+  2 TOS+lit,                end-code
 
 
 \ Double-cell arithmetic =====================================================
 \ TODO: Implement this.
 
 
-\ Branches ===================================================================
-\ In STC these compile literal conditional branches.
-\ But those only have +/- 127 of range, which may not be enough; that's
-\ only 40 inner words. But I'll build the check in and hope it works.
-\ There's no words for it; they're compiled directly. See branches.ft
+\ MOVEs ======================================================================
+code MOVE< ( src dst u -- ) \ Copies from low addresses to high.
+  \ This uses (zp),Y addressing to copy bytes relatively painlessly.
+  \ It can use 8-bit INYs most of the time, and use the Z flag to determine
+  \ if carrying if necessary.
+  \ First check if the length is all 0.
+  0 zp,x lda,   1 zp,x ora,
+  eq? if, txa, clc, 6 # adc, tax, rts, then, \ Pop all 3 and return if so.
+
+  wl  tos>ZP,   \ len -> W
+  inx, inx,
+  w3l tos>ZP,   \ dst -> W3
+  inx, inx,
+  w2l tos>ZP,   \ src -> W2
+
+  txa, pha,     \ Push PSP (X).
+
+  \ Len in X counting down; memory offset in Y
+  0  #  ldy,
+  wl zp ldx,
+
+  label MOVE<-loop
+    w2l (zp),Y  lda,
+    w3l (zp),Y  sta,
+    iny,
+    eq? if, \ If that just rolled over to 0, increment the pointers.
+      w2h zp    inc,
+      w3h zp    inc,
+    then,
+
+    dex,    \ Then decrement the length to go.
+
+    \ Fast case: if that DEX left it nonzero, continue.
+    MOVE<-loop bne,
+
+    \ Slow case: decrement the high byte of the length.
+    \ Note that X is already 0 in this case, ready to continue.
+    wh  zp      dec, \ If that left a 0, we're done with the loop.
+    MOVE<-loop  bne, \ So continue if nonzero,
+    pla, tax, rts,   \ or pull the old X and return if zero.
 
 
-\ Word Headers ===============================================================
+code MOVE> ( src dst u -- ) \ Copies from high addresses to low.
+  \ This uses (zp),Y addressing to copy bytes relatively painlessly.
+  \ It can use 8-bit INYs most of the time, and use the Z flag to determine
+  \ if carrying is necessary.
+  \ Note that due to the nature of the arithmetic that MOVE< is faster and
+  \ should be preferred if memory regions don't overlap.
+
+  \ First check if the length is all 0.
+  0 zp,x lda,   1 zp,x ora,
+  eq? if, txa, clc, 6 # adc, tax, rts, then, \ Pop all 3 and return if so.
+
+  wl  tos>ZP,   \ len -> W
+  inx, inx,
+  w3l tos>ZP,   \ dst -> W3
+  inx, inx,
+  w2l tos>ZP,   \ src -> W2
+
+  txa, pha,     \ Push PSP (X).
+
+  \ Len in X counting down; memory offset in Y
+  \ Offset starts at 0; when it is 0 and gets decremented to $ff, we decrement
+  \ the pointers as well.
+  0  #  ldy,
+  wl zp ldx,
+
+  label MOVE>-loop
+    w2l (zp),Y  lda,
+    w3l (zp),Y  sta,
+    tya,
+    eq? if, \ If Y is 0 and about to go to $FF, decrement the pointers.
+      w2h zp dec,
+      w3h zp dec,
+    then,
+    dey,    \ Then actually decrement the offset
+    dex,    \ and the length.
+
+    \ Fast case: if that DEX left it nonzero, continue.
+    MOVE>-loop bne,
+
+    \ Slow case: decrement the high byte o the length.
+    \ Note that X is already 0 in this case, ready to continue.
+    wh  zp     dec,  \ If that left a 0, we're done with the loop.
+    MOVE>-loop bne,  \ So continue if nonzero,
+    pla, tax, rts,   \ or pull the old X and return if zero.
+
+\ DO LOOP machinery ==========================================================
+\ DO LOOPs can be built right in as loops inside the containing word, using
+\ the (return) stack for nesting and a ZP cell for the current index.
+\ The setup and tear-down machinery (DO) and (LOOP-END) are too lengthy to
+\ inline, however.
+code (DO) \ ( limit index --     R: ret -- old_index limit ret )
+  R>W,                       \ Get return address out of the way.
+  indexh zp   lda,   pha,    \ Push old index_hi
+  indexl zp   lda,   pha,    \ Push old index_lo
+  3      zp,x lda,   pha,    \ Push limit_hi
+  2      zp,x lda,   pha,    \ Push limit_lo
+  indexl tos>zp,             \ New limit in index register.
+  inx, inx, inx, inx,        \ Drain stack
+  wl $ (jmp),                \ Jump-indirect to W, the return address.
+end-code-bare \ No need to return.
+
+code (LOOP-END) ( delta -- done?     R: old-index limit ret -- ditto )
+  rsp>Y,            \ Juggle the RSP into Y
+  \ Put 0 into W3_lo and _hi for later use.
+  0   #  lda,
+  w3l zp sta,
+  w3h zp sta,
+
+  \ We need index - limit first, in W.
+  sec,
+  indexl zp  lda,
+  $0102  $,y sbc,
+  wl     zp  sta,   \ index - limit LO -> W_lo
+  indexh zp  lda,
+  $0103  $,y sbc,
+  wh     zp  sta,   \ index - limit HI -> W_hi
+
+  \ Add it to the delta from TOS into W2 (we still need the delta).
+  clc,
+  0   zp,x lda,
+  wl  zp   adc,
+  w2l zp   sta,
+  1   zp,x lda,
+  wh  zp   adc,
+  w2h zp   sta,     \ delta + index - limit -> W2
+
+  \ XOR the high bytes of d+i-l and i-l
+  \ d+i-l_hi is still in A.
+  wl zp eor,
+  pl? if, \ If N is clear, ie. same flag, set -1 into W3_lo, the first flag.
+    $ff #  lda,
+    w3l zp sta,
+  then,
+
+  \ Then calculate delta_hi XOR i-l_hi
+  \ i-l is in W; delta in TOS.
+  wh zp   lda,
+  0  zp,x eor,
+  pl? if,      \ N clear = same sign, store $ff into W3_hi, second flag.
+    $ff #  lda,
+    w3h zp sta,
+  then,
+
+  w3h zp lda,  \ Second flag   -> A
+  w3l zp ora,  \ OR first flag -> A
+  $ff #  eor,  \ Negate it - this is the done flag.
+  w3l zp sta,  \ Done flag -> W3_lo for a sec
+
+  clc,
+  indexl zp   lda,
+  0      zp,x adc,
+  indexl zp   sta,
+  indexh zp   lda,
+  1      zp,x adc,
+  indexh zp   sta,   \ index + delta -> index
+
+  \ Get the done flag from W3_lo to both bytes of TOS.
+  w3l zp   lda,
+  0   zp,x sta,
+  1   zp,x sta,
+end-code
+
+
+code UNLOOP ( -- R: old-index limit ret -- ret )
+  R>W,
+  pla, pla,
+  pla,   indexl zp sta,
+  pla,   indexh zp sta,
+  wl $ (jmp),
+end-code-bare
+
+code I ( -- index1 )
+  dex, dex,
+  indexl zp   lda,
+  0      zp,x sta,
+  indexh zp   lda,
+  1      zp,x sta,
+end-code
+
+code J ( -- old-index   R: old-index limit ret -- old-index limit ret )
+  dex, dex,
+  rsp>Y,              \ Juggle the RSP into Y
+  $104 $,y  lda,      \ old-index_lo -> A
+  0    zp,x sta,      \ -> TOS_lo
+  $105 $,y  lda,      \ old-index_hi -> A
+  1    zp,x sta,      \ -> TOS_hi
+end-code
+
+REQUIRE interrupts.ft
+
+\ Some KERNAL routines for startup.
+$fda3 CONSTANT k-ioinit
+$fd50 CONSTANT k-ramtas
+$fd15 CONSTANT k-restor
+$ff5b CONSTANT k-cint
+
+\ Machine code entry point.
+\ Sets up the basic system - bank switching, interrupt vectors, etc.
+label main
+  sei, \ No interrupts for now.
+  cld, \ Just in case, no one wants decimal mode.
+  $ff # ldx,
+  txs,
+  sp0 # ldx,
+
+  \ TODO: See about smaller/faster setup, and maybe copying the Forth system
+  \ to a lower address to make maximum contiguous memory for the dictionary.
+
+  \ For now I'm using the kernal ROM startup routines.
+  k-ioinit $ jsr,
+  k-ramtas $ jsr, \ TODO: Most likely to be skippable - just set PAL/NTSC?
+  k-restor $ jsr,
+  k-cint   $ jsr,
+  cli,  \ Interrupts are rigged up again.
+
+  \ From this point we no longer need the BASIC or KERNAL ROMs.
+  label jsr-init-screen  \ Forward reference that needs overwriting.
+  0 $ jsr,
+
+  0 # lda,   cursorl zp sta,
+  4 # lda,   cursorh zp sta,
+
+  \ TODO: Adjust the memory banks at this point, if we're going to.
+
+  \ Jump through the entry-point cell, which contains an xt.
+  entry-point $ (jmp),
+
+\ Write this main routine into the cart's reset vector.
+main $8000 t!
 

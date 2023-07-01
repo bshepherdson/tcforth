@@ -129,8 +129,8 @@ CREATE arg-assemblers #modes cells allot
  7 addressed dec,
  8 addressed eor,
  9 addressed inc,
-10 addressed jmp,
-11 addressed jsr,
+\ 10 addressed jmp,
+\ 11 addressed jsr,
 12 addressed lda,
 13 addressed ldx,
 14 addressed ldy,
@@ -269,6 +269,7 @@ $20 jumper jsr,
   ( addr16 addr ) @ asm, ( addr16 )
   \ The delta is relative to the PC *after* the branch delta, which is there 1+
   there @ 1+ - ( delta8 )
+  dup -128 128 within 0= ABORT" Branch too far"
   255 and asm, ;
 
 $90 brancher bcc,

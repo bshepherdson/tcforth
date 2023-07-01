@@ -113,6 +113,8 @@ label DOVAR
 VARIABLE '(DOES>)
 VARIABLE 'EXIT   \ These get populated later.
 
+: EXIT, ( -- ) 'EXIT @ tcompile, ;
+
 : DOES, ( -- xt-does ) '(DOES>) @ t,   'EXIT @ t,   here   DOCOL # jsr, ;
 
 

@@ -44,14 +44,9 @@ $0080 CONSTANT sp0
 $ff   CONSTANT rp0
 \ System stack (used for RSP) is empty-descending, so $FF is an empty stack.
 
-REQUIRE registers.ft
-
 there CONSTANT DP
 : here dp @ ;
 $2000 dp !
-
-: hi ( w -- b ) 8 rshift $ff and ;
-: lo ( w -- b )          $ff and ;
 
 : t,     ( w -- )   asm,16 ;
 : tc,    ( b -- )   asm, ;
@@ -81,7 +76,7 @@ $2000 dp !
  8 CONSTANT tbits     \ 8 bits per address unit
 
 VARIABLE 'latest
-: LATEST ( -- nt ) 'lastest @ ;
+: LATEST ( -- nt ) 'latest @ ;
 0 'latest !
 
 
@@ -95,9 +90,10 @@ $c3 asm, $c2 asm, $cd asm, $38 asm, $30 asm, \ "CBM80"
 
 \ Codewords ==================================================================
 \ This is the default codeword for CREATEd words.
-\ A thread called the variable, which begins with `JSR DOCOL` then the parameter field.
-\ So the variable's codeword calls here, and the "return address" it pushed is the parameter
-\ field. So pop it from the return stack and push it onto the data stack instead.
+\ A thread called the variable, which begins with `JSR DOVAR` then the
+\ parameter field. So the variable's codeword calls here, and the "return
+\ address" it pushed is the parameter field. So pop it from the return stack
+\ and push it onto the data stack instead.
 \ Then the RTS at the end will return to the thread.
 label DOVAR
     dex, dex,
@@ -109,12 +105,14 @@ label DOVAR
 
 \ Like a codeword for literals in the thread.
 \ The address of the literal is on the stack. We need to adjust it, though, so copy it to W.
-label (LIT)
-    R>W,                \ Copy the address of the literal to W.
-    dex, dex, (w)>tos,  \ Move PSP and load (W) to TOS.
-    2 W+,
-    W>R,
-    rts, ;
+\ label (LIT)
+\     R>W,         \ Copy the address of the literal to W.
+\     dex, dex,    \ Make room on the stack.
+\     wl (zp)>tos, \ (W) -> TOS
+\     2 wl ZP+,
+\     W>R,
+\     rts, ;
+\ TODO: Delete (LIT) - I think it's unnecessary and can be inlined.
 
 \ Expects a byte with the length, then that many characters.
 \ Uses w2l to hold the length temporarily.
@@ -122,9 +120,10 @@ label (DOSTRING)
     R>W,           \ *len  -> W
     wl  zp lda,    \ len   -> W
     w2l zp sta,    \ len   -> W2_lo
-    1 W+,          \ *char -> W
+    1 wl ZP+,      \ *char -> W
 
-    dex, dex, w>tos, \ Push *char
+    dex, dex,
+    wl ZP>tos,     \ Push *char
     dex, dex,
     0 # lda,
     1 zp,x sta,      \ High byte is 0
@@ -173,13 +172,18 @@ label (DOSTRING)
 \ This gets populated later; we can't defined it right now.
 VARIABLE '(DOES>)
 
+: EXIT, ( -- ) rts, ;
+
 : DOES, ( -- 'dodoes-code )
     \ Sequence 1 - compiling things into CONSTANT.
     '(DOES>) @ tcompile,   rts,
     here
 
-    \ Sequence 3 - parameter field address on hardware/return stack, needs to be pushed.
-    R>,
+    \ Sequence 3 - parameter field address on hardware/return stack,
+    \ needs to be pushed.
+    dex, dex,
+    pla,   0 zp,x sta,
+    pla,   1 zp,x sta,
     \ Now we're set up to continue executing the DOES> code.
 ;
 
@@ -215,102 +219,8 @@ VARIABLE '(DOES>)
     1      zp,x sta, \ 10B 16c
 ;
 
-\ Branches ===================================================================
-\ Uses regular instructions, not custom words.
-\ (BRANCH) is a `JMP $abs`; (0BRANCH) ORs the top two bytes of the stack, then
-\ does BNE +3 *over* the JMP $abs.
-\ [0BRANCH] and [BRANCH] compile just the framework, but without the final
-\ target address; ,dest compiles that address.
-: ,dest ( dest -- ) t, ;
-: !dest ( dest slot -- ) t! ;
-
 \ The codeword is 3 bytes wide.
 : t>body ( target-xt -- target-body ) 3 + ;
 
 label entry-point 0 asm,16
 
-\ @: Pop a 16-bit address, read a 16-bit value from it, and push the result.
-\ (Assume that X is the PSP and Y is free. TMPL:H is $fa $fb).
-\ LDA $00,x       2B  4c
-\ STA $fa         2B  3c
-\ LDA $01,x       2B  4c
-\ STA $fb         2B  3c
-\ LDA $00fa       3B  4c
-\ STA $00,x       2B  4c
-\ LDY #$01        2B  2c
-\ LDA ($fa),Y     2B  5c (6c if crossing)
-\ STA $01,x       2B  4c
-\ total:         18B 33c
-\ which beats DTC's 19B 40c handily!
-
-\ +: Add two 16-bit numbers, leaving the result on the stack.
-\ The low bytes are at $00,x and $02,x
-\ CLC             1B  2c
-\ LDA $00,x       2B  4c
-\ ADC $02,x       2B  4c
-\ STA $02,x       2B  4c
-\ LDA $01,x       2B  4c
-\ ADC $03,x       2B  4c
-\ STA $03,x       2B  4c
-\ INX             1B  2c
-\ INX             1B  2c
-\ total:         15B  30c
-\ which again beats DTC's 24B 46c by a wide margin.
-
-\ !: Store a 16-bit value ($00,x and $01,x at the address indicated by $02,x)
-\ (Address at $00-01; value at $02-03.)
-\ LDA $00,x       2B  4c
-\ STA $fa         2B  3c
-\ LDA $01,x       2B  4c
-\ STA $fb         2B  3c   Address in $fa-fb
-\ INX             1B  2c
-\ INX             1B  2c   X now pointing at value.
-\ LDA $00,x       2B  4c
-\ STA $00fa       3B  4c
-\ LDA $01,x       2B  4c
-\ LDY #$01        2B  2c
-\ STA $fa,y       2B  5c
-\ INX             1B  2c
-\ INX             1B  2c
-\ total:         23B 41c
-
-\ SWAP: Exchange the top two values on the stack.
-\ LDA $00,x       2B  4c
-\ LDY $02,x       2B  4c
-\ STY $00,x       2B  4c
-\ STA $02,x       2B  4c
-\ LDA $01,x       2B  4c
-\ LDY $02,x       2B  4c
-\ STY $01,x       2B  4c
-\ STA $03,x       2B  4c
-\ total:         16B 32c
-
-\ OVER: Copy the second entry on the stack as the new TOS.
-\ DEX             1B  2c   stack now ( yh yl xh xl __ )
-\ LDA $04,x       2B  4c   grab yh
-\ STA $00,x       2B  4c   copy it
-\ DEX             1B  2c   stack now ( yh yl xh xl yh __ )
-\ LDA $04,x       2B  4c   grab yl
-\ STA $00,x       2B  4c   copy it
-\ total          10B 20c
-
-\ +!: Add the value NOS to the value in memory at TOS.
-\ CLC             1B  2c
-\ LDA $02,x       2B  4c
-\ ADC ($00,x)     3B  4c \ Add low bytes -> A
-\ STA ($00,x)     3B  4c \ Write A to address.
-\ LDA $00,x       2B  4c \ Copy address to W
-\ STA $fa         2B  3c
-\ LDA $01,x       2B  4c
-\ STA $fb         2B  3c
-\ LDA $03,c       2B  4c \ High delta -> A
-\ LDY #$01        2B  2c
-\ ADC ($fa),Y     2B  5c \ Add high bytes -> A
-\ STA ($fa),Y     2B  6c \ Store high byte
-\ INX INX INX INX 4B  8c
-\ total:         29B 53c
-
-\ Overall assessment: STC with the stack in the zero page is fantastic, slightly
-\ smaller and way faster than DTC or ITC with the stack absolutely addressed.
-\ I wonder how much of that is the threading model and how much the ZP data
-\ stack, but still NEXT is expensive in non-STC.

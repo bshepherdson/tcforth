@@ -1,0 +1,74 @@
+\ Target words to get metacompiled, that hide the details of the machine and the
+\ Forth model (eg. ITC vs. DTC vs. STC)
+\ This file: STC on 6502 for Commodore-64.
+
+\ ,DOCOL is already defined.
+target definitions
+
+\ Add ,CF which expects the address of the codeword on the stack.
+\ For STC this is compile, it must JSR $abs to the codeword.
+target : ,CF ( codeword-addr -- ) compile, ;
+
+\ Write the code field for a colon definition.
+\ In STC this is empty, so this word is a no-op.
+target : ,DOCOL ( -- ) ;
+
+\ Compiles a string literal into a thread.
+\ On STC that means a jump to DOSTRING, the length, then the words.
+target : ,DOSTRING ( c-addr u -- )
+  [ host (dostring) tliteral target ] compile,   \ Compile the codeword first.
+  dup >R c,        \ Then the length
+  here R@ move     \ And the text
+  R> chars allot ; \ And make room for it.
+
+\ No alignment on 6502.
+target : ALIGNED ;
+target : ALIGN ;
+
+\ This is actually portable but since it fits right here between ALIGNED and
+\ (DOES>), there's no good place to put it with splitting this file into 3.
+target : >CFA ( nt -- xt )
+  cell+ dup c@ [ host mask_len tliteral target ] and + char+ aligned ;
+
+\ TODO: Figure out a more coherent memory map - where should I put the PAD?
+target : PAD ( -- addr ) $7800 ;
+
+\ DOES> ======================================================================
+\ Implementing sequence 2
+\ (DOES>) runs in eg. CONSTANT to properly compile a particular constant.
+\ Inside target (DOES>), TORS points at the RTS at the end of CONSTANT.
+\ Just after it is the dodoes-code that should become the new codeword.
+\ 1+ the xt is the address to overwrite.
+target : (DOES>) R@ cell+   latest >cfa 1+   ! ;
+
+host T' (DOES>) '(DOES>) !
+host T' EXIT    'EXIT !
+
+\ Runs during compilation TARGET : DOES> - compile code into its thread!
+host definitions
+
+\ Moves THERE back by u and pushes the most recently compiled words onto the
+\ stack (low address first).
+: asm-lit ( u -- w ... ) dup negate there +!   0 DO there @ i + t@ LOOP ;
+
+\ Runs during compilation TARGET : DOES> - compile code into its thread!
+host definitions
+: TDOES,
+  [T'] (DOES>) tliteral  [T'] compile, tcompile,
+  \ RTS is $60
+  $60 tliteral  [T'] c, tcompile,
+  \ Now the dodoes-code. For STC this receives the parameter field address
+  \ on the return (hardware) stack. Shift this to the data stack.
+  \ The code required is:
+  \ DEX DEX          = ca ca
+  \ PLA    STA 00,x  = 68 95 00
+  \ PLA    STA 01,x  = 68 95 01
+  $caca tliteral [T'] , tcompile,
+  $9568 tliteral [T'] , tcompile,
+  $6800 tliteral [T'] , tcompile,
+  $0195 tliteral [T'] , tcompile, ;
+  \ Which is 8B per word that DOES>, eg. CONSTANT, etc.
+  \ It's slower and more complicated to JSR to a routine for this, since it
+  \ covers the PFA on the stack.
+
+\ TODO: Implement debugging helpers.

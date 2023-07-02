@@ -1,0 +1,7 @@
+\ Interrupt handlers for the Commodore 64.
+
+label vec-nmi
+  rti,
+
+label vec-irq
+  rti,

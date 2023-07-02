@@ -142,8 +142,24 @@ code 0< ( x -- ? )
   1   zp,x sta,
 end-code
 
+code <  ( lhs rhs -- ? ) \ Subtracting TOS from NOS.
+  0 zp,x lda,
+  2 zp,x cmp,
+  1 zp,x lda,
+  3 zp,x sbc,
+  vc? if,
+    $80 # eor,
+  then,
+  \ Top bit of A is now 1 if <, 0 if >=. Convert that to a Forth flag.
+  $80 # and,   \ Check that top bit - if it's 0 A is now 0.
+  ne? if,
+    $ff # lda, \ And if it wasn't 0, A is now $ff
+  then,
+  2 zp,x sta,
+  3 zp,x sta,  \ Store A to both parts of NOS.
+  inx, inx,    \ Pop one stack cell.
+end-code
 
-\ TODO: < is tricky - implement it in Forth?
 
 \ Stack operations ===========================================================
 code DUP

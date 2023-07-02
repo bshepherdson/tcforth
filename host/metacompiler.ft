@@ -20,7 +20,7 @@
         >R 2drop R> name>int ( ." Before: " .s ) execute ( ."    after: " .s cr)
       ELSE ( ca u )
         2dup s>number? IF ( ca u d )
-          D>S >R 2drop R> ( n ) LIT T, T,
+          D>S >R 2drop R> ( n ) tliteral
         ELSE \ Unknown word!
           2drop ." *** Undefined Target word: " type cr bye
         THEN ( )

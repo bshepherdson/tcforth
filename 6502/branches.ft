@@ -1,0 +1,65 @@
+\ The slots returned by 0/BRANCH, and consumed by !DEST are arbitrary but must
+\ be compatible. They are distinct from the HERE values used as the targets
+\ for branches. On ITC and DTC, they'll generally be the address of the
+\ cell after the `(BRANCH)` instruction, which holds an absolute target.
+\ Then !DEST is simply !.
+
+\ On some machines, the branch might be relative or encoded into an instruction.
+\ It might also matter whether the word in question was a conditional or
+\ unconditional branch, since they might be implemented very differently.
+
+\ On the target side, BRANCH, means compiling the necessary and leaving HERE
+\ on the stack. It can easily be written in Forth in this file.
+\ On the host side, it can be implemented using host words like the assembler.
+
+\ Our STC construction uses regular instructions, not custom words.
+\ (BRANCH) is a `JMP $abs`; (0BRANCH) ORs the top two bytes of the stack, then
+\ does BNE +3 *over* a JMP $abs.
+
+
+\ First the host side words.
+\ JMP $abs is $4c
+host definitions
+: BRANCH,    $4c tc, here 0 t, ;
+
+: 0BRANCH,
+  inx, inx,
+  $fe zp,x lda,
+  $ff zp,x ora,
+  eq? if,
+    here 1+ \ Point at the address, not the opcode.
+    0 $ jmp,
+  then, ;
+\ That's 9B 15c, which is a little chunky but not too bad.
+
+: !DEST       t! ;
+: DEST>BRANCH 1- ;
+: DEST>POST   2 + ;
+
+target definitions
+
+\ NOTE: This uses , not compile, on purpose.
+\ These are literal bytes to write, not XTs.
+target : 0BRANCH,
+    \ INX INX   = e8 e8
+    [ host $e8e8 tliteral target ] ,
+    \ LDA $fe,x = b5 fe
+    [ host $feb5 tliteral target ] ,
+    \ ORA $ff,x = 15 ff
+    [ host $ff15 tliteral target ] ,
+    \ BNE +3    = d0 03
+    [ host $03d0 tliteral target ] ,
+    \ JMP $0    = 4c 00 00
+    [ host $4c   tliteral target ] c,
+    here 0 , ;
+  host acts: 0branch, ;
+
+target : BRANCH,
+    \ JMP $0    = 4c 00 00
+    [ host $4c tliteral target ] tc,   here 0 , ;
+  host acts: branch, ;
+
+target : !DEST ( dest slot -- ) !  ;      host acts: !dest ;
+target : DEST>BRANCH            1- ;      host acts: dest>branch ;
+target : DEST>POST              cell+ ;   host acts: dest>post ;
+

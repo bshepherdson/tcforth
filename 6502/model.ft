@@ -224,3 +224,138 @@ VARIABLE '(DOES>)
 
 label entry-point 0 asm,16
 
+
+\ Tail calls =================================================================
+\ It seems reasonably straightforward, while metacompiling 6502 STC
+\ definitions, to replace a final JSR some-word; RTS with a tail call:
+\ JMP some-word.
+\ That's a byte shorter, and substantially faster:
+\ JSR + RTS is 6 + 6 = 12c; JMP abs is only 3c.
+
+\ So it's a clear win, if it proves practical to implement without bugs.
+\ For simplicity, I won't implement it until after I've got the whole system
+\ working and passing tests.
+\ Known issues with this plan:
+\ - If any branches were intending to land at the end, they'll be misplaced.
+\   - Solvable by keeping the RTS in place, even though it's rarely used.
+\ - Likewise if the inner word were intending to do return stack magic.
+\   - I think only J and RSP@/RSP! do that.
+\     - J is fine, it has to be inside a loop so it's not the last call.
+\     - Return stack gymnastics are more concerning; they could be checked at
+\       compile time? That's somewhat expensive to build into the system...
+\       A flag set by COMPILE, I guess, that marks if the last thing compiled
+\       was a return stack operator?
+\ TODO: Substantial potential optimization - to be investigated!
+
+
+
+\ A second look at (in)direct threading on 6502.
+\ I wonder how much of the pain in the first attempt at this system came from
+\ a poor choice of threading setup. Let's take another look and consider.
+\ We have JMP (abs) indirect, 3B 5c. It jumps to the code at the address
+\ found at abs - exactly the operation needed for DTC! We JMP (ip) and go!
+\ Of course the IP needs to be moved, and we can't move it after we've already
+\ jumped to it. (Or can we? Words could begin with moving IP... but that seems
+\ tricky on the way in and out?)
+\ But if the IP points to this word, rather than the next, it's not bad.
+\ NEXT becomes something like (assuming IP is in the zero page)
+\ LDA #2       \ 2B  2c
+\ CLC          \ 1B  2c
+\ ADC IPlo     \ 2B  3c
+\ STA IPlo     \ 2B  3c
+\ LDA IPhi     \ 2B  3c
+\ ADC #0       \ 2B  2c
+\ STA IPhi     \ 2B  3c
+\ JMP (IPlo)   \ 3B  5c
+\ totals:       16B 23c
+\ which is too long to be inlined everywhere, so let's add a JMP abs: 3B 3c
+\ for totals:   19B 26c
+
+\ In comparison, JSR abs + RTS is 4B 12c. Yeah, that's really hard to beat.
+
+\ How about yet another alternative - token threading? There are absolute
+\ indirect addressing modes... hm.
+\ Then there's only one byte to read and an adjustment of 1 to IP.
+\ Allowing for full 16-bit IP, NEXT means reading the token, indexing into the
+\ table, and jumping indirect.
+\ There are ~70 primitives, well under 128, so the tokens can be literal offsets
+\ into the table!
+\ NEXT is: read token at IP, increment IP, jump indirect through the table.
+\ LDY (IP)      2B  3c   IP here is a 1-byte offset in the thread.
+\ LDY (TPlo),Y  2B  3c   TP is the thread pointer, for the whole thread.
+\ INC IP        2B  5c
+\ Y now holds the token, which is an offset into the token table.
+\ STY TOKENlo   2B  3c   TOKENhi is always $03 or whatever the token page is.
+\ JMP (TOKENlo) 3B  5c   Jumps to the address in the correct token table slot.
+\ totals:      11B 19c
+
+\ Which if inlined would consume #codewords * 11B = perhaps 800B
+\ Jumping to it instead would cost 3B (= 270B) and 3 cycles; probably not worth
+\ it for under 600B saved unless memory is very tight?
+\ This also shrinks the size of threads a lot, from 3B per call to 1B, usually.
+\ Quite an intriguing possibility...
+
+\ One caveat there is a 256-byte limit. But that's not so bad - we could add
+\ a primitive that adjusts the TP and IP to the current location.
+\ It would also need handling by (0)BRANCH primitives... they should always
+\ adjust it, I think. Absolute branch targets, just target -> TP; 0 -> IP.
+
+\ Hopefully any "extra" adjustments can be avoided. A compiler check would be
+\ wise. Inlined strings might be the biggest issue, but they could be coded
+\ outside the word if the compiler whined.
+
+\ How about DOCOL and EXIT, just to sanity check things?
+\ This is direct threading with a separate CALL and DOCOL.
+\ So nonprimitives begin with a JSR DOCOL before their thread.
+\ It's tempting for the compiler to skip the DOCOL but I'm not sure it's better.
+
+\ CALL expects a word at (TP+IP) which is the address of the new thread.
+\ It adds TP+IP, pushes this old value, overwrites TP with the new one, and
+\ NEXTs into it.
+\ LDA IP    2B  3c
+\ CLC       1B  2c
+\ ADC TPlo  2B  3c
+\ STA TPlo  2B  3c
+\ LDA TPhi  2B  3c
+\ ADC #0    2B  2c
+\ STA TPhi  2B  3c
+\ PHA       1B  3c
+\ LDA TPlo  2B  3c
+\ PHA       1B  3c    This could be optimized if we don't mind a big-endian RS?
+\ LDA #0    2B  2c
+\ STA IP    2B  3c
+\ JMP NEXT  3B  3c    (or inlined to save 3B 3c; can stack them together?)
+\ totals   24B 36c
+
+\ DOCOL, if we EXECUTE in to a nonprimitive, needs to push the old TP+IP value
+\ and continue from after the DOCOL field itself.
+\ So if the code field is JSR DOCOL, the address on the stack is the new TP.
+\ LDA IP    2B  3c
+\ CLC       1B  2c
+\ ADC TPlo  2B  3c
+\ STA Wlo   2B  3c
+\ LDA TPhi  2B  3c
+\ ADC #0    2B  2c
+\ STA Wlo   2B  3c
+\ PLA       1B  4c  \ new TPlo
+\ STA TPlo  2B  3c  \ -> TPlo
+\ PLA       1B  4c  \ new TPhi
+\ STA TPhi  2B  3c  \ -> TPhi
+\ LDA Whi   2B  3c  \ old TPhi
+\ PHA       1B  3c  \ -> return stack
+\ LDA Wlo   2B  3c  \ old TPlo
+\ PHA       1B  3c  \ -> return stack
+\ LDA #0    2B  2c
+\ STA IP    2B  3c
+\ NEXT
+\ Totals:  29B 50c  which is a lot but only called if we EXECUTE a nonprimitive.
+
+\ If we EXECUTE a primitive we simply work through its code until NEXT, which
+\ will continue from after EXECUTE in the thread.
+
+
+\ Tangential consideration: no carry on indirect indexed access ==============
+\ There's a bug (if that it be) on the 6502 family where an indexed indirect
+\ read like abs,x, (zp,x) or (zp),y will not carry between the bytes.
+\ This is not a problem for token threading, but it may be for some ops.
+\ TODO: Look up all uses of the risky modes to make sure there's no risks.

@@ -16,6 +16,9 @@ target : ,DOCOL ( -- )
   [ host $817a tliteral target ] c,
   [ host docol tliteral target ] c, ;
 
+target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , ; IMMEDIATE
+  host acts: tliteral ; IMPERATIVE
+
 \ Compiles a string literal into a thread.
 \ On ITC/DTC that means the address of DOSTRING, the length, then the words.
 target : ,DOSTRING ( c-addr u -- )

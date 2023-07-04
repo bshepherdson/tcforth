@@ -1,8 +1,16 @@
-\ Extra Target library words for eg. division.
-\ The Risque-16 has no instructions for division, and so these are based on
-\ SM/REM.
+\ Extra Target library words for eg. multiplication and division.
+\ Division based on based on SM/REM; multiplication based on UM*.
 target definitions
 
+: U*   ( u u -- p )   UM* D>S ;
+: *    ( n m -- n*m )
+  over 0< over 0< xor >R ( n m    R: neg? )
+       dup 0< IF negate THEN
+  swap dup 0< IF negate THEN ( u1 u2 )
+  U* R> IF negate THEN ;
+host acts: * ;
+
+target
 : /MOD ( n n -- r q ) >R S>D R> SM/REM ;
 : /    ( n n -- q )   /MOD nip ;
 : MOD  ( n n -- r )   /MOD drop ;

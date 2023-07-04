@@ -66,7 +66,8 @@ $2000 dp !
 
 \ This is tricky! Compiling a literal value is definitely not the same as compiling a call!
 \ The xt is the code address for the word, so we compile a JSR $xxxx to it.
-: tcompile, ( xt -- ) $ jsr, ;
+: tcompile,  ( xt -- ) $ jsr, ;
+: tdecompile ( slot -- xt ) 1+ t@ ;
 
 \ No alignment on 6502.
 : taligned  ( x -- x2 ) ;
@@ -102,17 +103,6 @@ label DOVAR
     pla, \ hi -> A
     1 zp,x sta,
     rts, \ Actually returning to the calling thread.
-
-\ Like a codeword for literals in the thread.
-\ The address of the literal is on the stack. We need to adjust it, though, so copy it to W.
-\ label (LIT)
-\     R>W,         \ Copy the address of the literal to W.
-\     dex, dex,    \ Make room on the stack.
-\     wl (zp)>tos, \ (W) -> TOS
-\     2 wl ZP+,
-\     W>R,
-\     rts, ;
-\ TODO: Delete (LIT) - I think it's unnecessary and can be inlined.
 
 \ Expects a byte with the length, then that many characters.
 \ Uses w2l to hold the length temporarily.
@@ -301,8 +291,7 @@ label entry-point 0 asm,16
 \ adjust it, I think. Absolute branch targets, just target -> TP; 0 -> IP.
 
 \ Hopefully any "extra" adjustments can be avoided. A compiler check would be
-\ wise. Inlined strings might be the biggest issue, but they could be coded
-\ outside the word if the compiler whined.
+\ wise. Inlined strings are a non-issue if (DOSTRING) also resets TP and IP.
 
 \ How about DOCOL and EXIT, just to sanity check things?
 \ This is direct threading with a separate CALL and DOCOL.

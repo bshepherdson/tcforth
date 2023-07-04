@@ -4,6 +4,7 @@
 \ Gets the cell at some fixed ZP offset and overwrites TOS with it.
 \ DOES NOT move PSP; it overwrites the current TOS.
 \ Clobbers Y.
+\ TODO: This is one of the bad cases - the (zp),y could mis-read.
 : (zp)>tos, ( zp-addr -- )
     1      #      ldy,
     dup    (zp),y lda,
@@ -108,4 +109,18 @@
   1      zp,x lda,
       hi #    adc,
   1      zp,x sta, ;
+
+\ Compiles code that writes a literal byte to a literal memory address.
+\ Clobbers A
+: b!, ( b addr -- )
+  swap lo # lda,
+  ( addr) $ sta, ;
+
+\ Compiles code that writes a literal word to a literal memory address.
+\ Clobbers A
+: w!, ( w addr -- )
+  over lo # lda,
+  dup     $ sta,
+  swap hi # lda,
+  1+      $ sta, ;
 

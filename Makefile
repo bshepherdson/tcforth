@@ -72,7 +72,7 @@ forth-c64.crt: host/*.ft 6502/*.ft shared/*.ft
 c64: forth-c64.crt
 
 run-c64: forth-c64.crt
-	$(VICE_C64) $(VICE_C64_FLAGS)
+	$(VICE_C64) $(VICE_C64_FLAGS) forth-c64.crt
 
 test: test-dcpu16 test-rq16 test-mocha86k test-arm FORCE
 

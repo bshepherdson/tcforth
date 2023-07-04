@@ -38,8 +38,5 @@ target : ALLOT ( n -- ) dp +! ;
 target : HERE dp @ ;
   host acts: dp @ ;
 
-target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , ; IMMEDIATE
-  host acts: tliteral ; IMPERATIVE
-
 target : WITHIN ( x lo hi -- ? ) over - >R   - R> U< ;
 

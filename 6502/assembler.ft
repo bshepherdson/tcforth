@@ -6,6 +6,7 @@
 \ - Little endian
 \ - The machine stack is empty-descending; and always $01xx with a 1-byte
 \   stack pointer S.
+$c000 CONSTANT max-assembly
 
 CREATE output 65536 allot
 VARIABLE there
@@ -17,6 +18,7 @@ VARIABLE max-there   0       max-there !
 clean-output
 
 : endpoints! ( t-addr -- )
+  dup max-assembly >= ABORT" Too big"
   dup max-there @ max max-there !
       min-there @ min min-there ! ;
 
@@ -322,7 +324,7 @@ CREATE cart-header
 ( 14 ) $01 c, $00 c,               \ Cart version v2.00 - actually v1.00
 ( 16 ) $00 c, $00 c,               \ Cart hardware type, 0 for generic
 ( 18 ) $00 c,                      \ EXROM setting
-( 19 ) $01 c,                      \ Game setting   0+1 = 8K ROM
+( 19 ) $00 c,                      \ Game setting   0+0 = 16K ROM
 ( 1a ) $00 c,                      \ Cart hardware revision/subtype
 ( 1b ) $00 c, $00 c, $00 c, $00 c, $00 c, \ Padding
 
@@ -330,11 +332,11 @@ CREATE cart-zeroes 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 ,
 
 CREATE chip-header
 ( 00 ) $43 c, $48 c, $49 c, $50 c, \ Segment signature "CHIP"
-( 04 ) $00 c, $00 c, $20 c, $10 c, \ Segment length: ROM size + $10 = $2010
+( 04 ) $00 c, $00 c, $40 c, $10 c, \ Segment length: ROM size + $10 = $4010
 ( 08 ) $00 c, $00 c,               \ Chip type: 0 = ROM
 ( 0a ) $00 c, $00 c,               \ Bank number ($0000 normal cart)
 ( 0c ) $80 c, $00 c,               \ Load address $8000
-( 0e ) $20 c, $00 c,               \ ROM length $2000
+( 0e ) $40 c, $00 c,               \ ROM length $4000
 
 
 \ Given the label for the cart
@@ -360,8 +362,9 @@ CREATE chip-header
   R@ c64-emit R> c64-close ;
 : emit-cart ( a-label u-label a-filename u-filename -- )
   c64-open   dup >R c64-cart-header
-  max-there @ $a000 >= ABORT" Too big for an 8K ROM"
-  $8000 min-there !   $a000 max-there !
+  ." max there: " max-there @ hex. cr
+  max-there @ max-assembly >= ABORT" Too big for a 16K ROM"
+  $8000 min-there !   max-assembly max-there !
   R> dup c64-emit
   c64-close ;
 

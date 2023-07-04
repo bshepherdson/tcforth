@@ -1,0 +1,197 @@
+\ Commodore-64 screen handling.
+
+\ Interface ==================================================================
+\ Due to the complexities of the colour and cursor handling, the user is
+\ recommended only to use words without (parens) around them.
+\ Don't touch the cursor directly!
+
+target definitions
+
+\ Colours ====================================================================
+$0 CONSTANT black
+$1 CONSTANT white
+$2 CONSTANT red
+$3 CONSTANT cyan
+$4 CONSTANT purple
+$5 CONSTANT green
+$6 CONSTANT blue
+$7 CONSTANT yellow
+$8 CONSTANT orange
+$9 CONSTANT brown
+$a CONSTANT light-red
+$b CONSTANT dark-grey
+$c CONSTANT med-grey
+$d CONSTANT light-green
+$e CONSTANT light-blue
+$f CONSTANT light-gray
+
+
+\ Basic internals ============================================================
+\ Color memory is always at $d800 through $dbe7.
+\ The character map is 256 characters, 8 bytes each = 2K.
+\ (But it's not mapped in by default.)
+
+\ $d018 controls where the GPU looks for the screen map and character table:
+\ sssscccX
+\ ssss is shifted up by 6 to be the address for the screen map.
+\ ccc  is shifted up by 14 to give the character table.
+\ Defaults are $0400-07ff and $1000-17ff respectively.
+\ But the character table is usually in ROM, with the default font.
+\ Defaults from a document: poke 53272,21 for charset 1 (big letters, graphics)
+\ or poke 53272,23 for charset 2 (big/small letters).
+\ That's $d018 with $15 or $17; we want the case-sensitive charset.
+
+\ $d011 is control reg 1: RST8, ECM, BMM, DEN, RSEL, YSCROLL3
+\ $d016 is control reg 2: X,    X,   RES, MCM, CSEL, XSCROLL3
+\ $d020 is the border colour
+\ $d021 is the main area background colour
+$d020 CONSTANT 'border-color
+$d021 CONSTANT 'bg-color
+
+: init-screen ( -- )
+  blue  'border-color c!
+  black 'bg-color     c!
+  \ Write white into all the color RAM, $d800 to $dbe7 = 1000B.
+  $d800 1000 white FILL ;
+
+
+\ 256-byte table mapping ASCII/PETSCII characters to their best equivalent
+\ screen code, ie. character number in the default font.
+CREATE screen-codes
+\ $00-1f Control codes: mapped to $80
+$80 c, $81 c, $82 c, $83 c,   $84 c, $85 c, $86 c, $87 c,
+$88 c, $89 c, $8a c, $8b c,   $8c c, $8d c, $8e c, $8f c,
+$90 c, $91 c, $92 c, $93 c,   $94 c, $95 c, $96 c, $97 c,
+$98 c, $99 c, $9a c, $9b c,   $9c c, $9d c, $9e c, $9f c,
+\ $20-3f Punctuation and numbers: straight across
+$20 c, $21 c, $22 c, $23 c,   $24 c, $25 c, $26 c, $27 c,
+$28 c, $29 c, $2a c, $2b c,   $2c c, $2d c, $2e c, $2f c,
+$30 c, $31 c, $32 c, $33 c,   $34 c, $35 c, $36 c, $37 c,
+$38 c, $39 c, $3a c, $3b c,   $3c c, $3d c, $3e c, $3f c,
+\ $40-5f Upper case letters and a few friends: mapped to $00s
+\   Backslash is a GBP sign; Map it to a diagonal line.
+$00 c, $01 c, $02 c, $03 c,   $04 c, $05 c, $06 c, $07 c,
+$08 c, $09 c, $0a c, $0b c,   $0c c, $0d c, $0e c, $0f c,
+$10 c, $11 c, $12 c, $13 c,   $14 c, $15 c, $16 c, $17 c,
+$18 c, $19 c, $1a c, $1b c,   $4d c, $1d c, $1e c, $1f c,
+\ $60-7f Backtick -> lowercases->uppercases, {|}->line drawing
+\   ~ -> white circle, DEL -> PI
+$4a c, $01 c, $02 c, $03 c,   $04 c, $05 c, $06 c, $07 c,
+$08 c, $09 c, $0a c, $0b c,   $0c c, $0d c, $0e c, $0f c,
+$10 c, $11 c, $12 c, $13 c,   $14 c, $15 c, $16 c, $17 c,
+$18 c, $19 c, $1a c, $4c c,   $42 c, $7a c, $57 c, $5e c,
+
+\ Note that $80 and up become $a6 greyscale grids. Saving space by dropping
+\ that half of the table.
+: petscii>scr ( ch -- scr )
+  dup $80 < IF screen-codes + c@ ELSE drop $a6 THEN ;
+
+$0400        CONSTANT (screen-map)
+40           CONSTANT /row
+25           CONSTANT #rows
+/row #rows * CONSTANT /screen
+
+\ Set or clear reverse video at the cursor position.
+: RV+ ( ch -- ch' ) $80 or ;
+: RV- ( ch -- ch' ) $7f and ;
+: REVERSED ( ch -- ch' ) $80 xor ;
+
+
+\ Cursor handling ============================================================
+host presume scroll target
+
+\ Wipes u bytes from start index (not an address!) with blank spaces.
+: wipe ( start u -- )
+  >R (screen-map) + R>   bl petscii>scr FILL
+  0 cursor ! ;
+
+: clear ( -- ) 0 /screen wipe   0 cursor ! ;
+
+: >CURSOR ( -- c-addr ) cursor @ (screen-map) + ;
+
+: +cursor ( n -- )
+  cursor @ +
+  dup 0< IF /row / 1-   scroll   0 ELSE
+    dup /screen >= IF /screen -   /row / 1+   scroll   /row #rows 1- * THEN THEN
+  cursor ! ;
+
+
+\ Scrolling ==================================================================
+: (-scroll) ( +chars -- )
+  \ Move vram to vram+len for vram-size - length words.
+  >R   (screen-map) dup R@ +   /screen R@ - move
+  \ Then wipe the top part.
+  0 R@ wipe
+  \ And adjust the cursor so it follows the scroll.
+  R> cursor +! ;
+
+: (+scroll) ( +chars -- )
+  \ We want to move vram+len to vram for vram-size - length words.
+  dup >R   (screen-map) +   (screen-map)   /screen R@ - move
+  \ Then wipe the bottom part.
+  /screen R@ - R@ wipe
+  \ And adjust the cursor so its relative position stays.
+  R> negate cursor +! ;
+
+\ Scrolls by lines. Positive scrolls down, negative scrolls up. Blanks are
+\ always scrolled in. Screen map doesn't move.
+: scroll ( lines -- )
+  /row * chars dup 0< IF negate (-scroll) ELSE (+scroll) THEN ;
+
+
+VARIABLE (cur-ch)
+: (vacate) ( -- ) (cur-ch) @ >cursor c! ;
+: (arrive) ( -- ) >cursor c@  dup (cur-ch) !   reversed >cursor c! ;
+
+: at-xy ( col row -- ) (vacate)   /row * + cursor !   (arrive) ;
+
+
+\ TODO: Words for setting the colours, default colours.
+
+\ Printing ===================================================================
+
+\ Writes scr (a screen code) to the current cursor position.
+\ DOES NOT move the cursor!
+: (DISPLAY) ( screen-ch -- ) >cursor c! ;
+: DISPLAY   ( screen-ch -- ) (vacate) (display)   1 +cursor   (arrive) ;
+
+\ Emits the PETSCII character ch to the screen. Moves the cursor.
+: EMIT ( petscii-ch -- ) petscii>scr display ;
+
+: CR ( -- )
+  (vacate)   cursor @ dup /row mod   /row swap -   +cursor   (arrive) ;
+
+
+\ Keyboard input =============================================================
+\ Keyboard input needs local echo, with basic line editing for eg. backspace.
+$14 CONSTANT key-backspace
+$0d CONSTANT key-return
+
+\ Steps back one, displays a blank at the current slot, and leaves the cursor
+\ pointed at the blank. Does nothing if already at the left edge, given by
+\ c-addr-min
+: BACKSPACE ( c-addr-current c-addr-min -- c-addr' )
+  over = IF EXIT THEN \ At left edge, do nothing.
+  \ Can't use EMIT directly here, it also juggles the cursor.
+  (vacate)   -1 +cursor   bl petscii>scr (display)   (arrive)
+  1- ( c-addr' ) ;
+
+: ACCEPT-CHAR ( c-addr ch -- c-addr' ) dup emit   over c! char+ ;
+
+$0277           CONSTANT (keybuffer)
+host ndx target CONSTANT 'kbuf-ndx
+: >kbuf ( -- u ) (keybuffer) 'kbuf-ndx + ;
+
+: (AWAIT-KEY) ( -- ) BEGIN 'kbuf-ndx c@ UNTIL ;
+: (DRAIN-KEY) ( -- ch )
+  int-   >kbuf c@  ( ch )
+  (keybuffer) dup 1+ swap 9 move
+  'kbuf-ndx dup c@ 1- swap c!
+  int+ ;
+
+: KEY ( -- ch ) (await-key) (drain-key) ;
+: ACCEPT ( c-addr max -- len )
+  drop dup >R  \ TODO Ignores the max length!
+  BEGIN key   dup key-return <> WHILE \ ( c-addr key )
+    dup key-backspace = IF drop R@ backspace ELSE accept-char THEN
+  REPEAT ( end newline   R: start ) drop R> - ( len ) ;

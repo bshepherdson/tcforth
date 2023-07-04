@@ -13,6 +13,21 @@ target : ,CF ( codeword-addr -- ) compile, ;
 \ In STC this is empty, so this word is a no-op.
 target : ,DOCOL ( -- ) ;
 
+\ Writes code such that this literal will be pushed during execution.
+target : LITERAL ( C: x --    X: -- x )
+    \ DEX DEX     = $caca
+    [ host $caca tliteral target ] ,
+    bytes  ( x_lo x_hi )
+    \ LDA hi      = a9 __
+    [ host $a9   tliteral target ] c, c, ( lo )
+    \ STA 01,x    = 95 01
+    [ host $0195 tliteral target ] ,
+    \ LDA lo      = a9 __
+    [ host $a9   tliteral target ] c, c,
+    \ STA 00,x    = 95 00
+    [ host $0095 tliteral target ] , ; IMMEDIATE
+  host acts: tliteral ; IMPERATIVE
+
 \ Compiles a string literal into a thread.
 \ On STC that means a jump to DOSTRING, the length, then the words.
 target : ,DOSTRING ( c-addr u -- )
@@ -20,6 +35,10 @@ target : ,DOSTRING ( c-addr u -- )
   dup >R c,        \ Then the length
   here R@ move     \ And the text
   R> chars allot ; \ And make room for it.
+
+\ For STC, this is an IMMEDIATE word that compiles an RTS.
+target : EXIT [ host $60 tliteral target ] c, ; IMMEDIATE
+  host acts: $60 c, ; IMPERATIVE
 
 \ No alignment on 6502.
 target : ALIGNED ;
@@ -42,7 +61,6 @@ target : PAD ( -- addr ) $7800 ;
 target : (DOES>) R@ cell+   latest >cfa 1+   ! ;
 
 host T' (DOES>) '(DOES>) !
-host T' EXIT    'EXIT !
 
 \ Runs during compilation TARGET : DOES> - compile code into its thread!
 host definitions
@@ -70,5 +88,19 @@ host definitions
   \ Which is 8B per word that DOES>, eg. CONSTANT, etc.
   \ It's slower and more complicated to JSR to a routine for this, since it
   \ covers the PFA on the stack.
+
+\ Early library code =========================================================
+\ A few Forth implementations of core words that aren't worth the space on a
+\ small machine.
+target definitions
+target : 2@ ( addr -- [addr+2] [addr] ) dup cell+ @   swap @ ;
+target : 2! ( [addr+2] [addr] addr -- ) swap over ! cell+ ! ;
+target : negate invert 1+ ;
+
+target : D>S drop ;
+target : UDM* ( l1 h1 u2 -- l3=l1*u2_lo h3=l1*u2_hi_+_h1*u2_lo )
+  tuck UM* D>S >R ( l1 u2             R: h1*u2_lo )
+  UM*             ( l1*u2_lo l1*u2_hi R: h1*u2_lo )
+  R> + ;
 
 \ TODO: Implement debugging helpers.

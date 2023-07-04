@@ -13,6 +13,9 @@ target : ,CF ( codeword-addr -- ) , ;
 \ In ITC this means the address of DOCOL.
 target : ,DOCOL ( -- ) [ host docol tliteral target ] ,CF ;
 
+target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , ; IMMEDIATE
+  host acts: tliteral ; IMPERATIVE
+
 \ Compiles a string literal into a thread.
 \ On ITC/DTC that means the address of DOSTRING, the length, then the words.
 target : ,DOSTRING ( c-addr u -- )

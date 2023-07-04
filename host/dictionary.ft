@@ -36,6 +36,7 @@ f_hidden 1-        CONSTANT mask_len
 
 \ Compiles a fresh Target header with an empty code field.
 : (mk-header) ( c-addr u -- target-xt )
+  \ 2dup type cr
   here   latest t,   'latest !
   dup tc, \ Length byte
   0 DO ( c-addr ) dup i + c@ >upper tc, LOOP drop ( )

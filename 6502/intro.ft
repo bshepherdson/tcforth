@@ -1,0 +1,36 @@
+target definitions
+
+:noname ( -- )
+  \  0123456789012345678901234567890123456789
+  ."           TC-FORTH version 8            " cr ;
+'.intro !
+
+: init-hardware ( -- )
+  [ host cr cr ." this is it: " there @ hex. cr    $03 $0401 b!, target ]
+  $04 $0402 c! \ Write an A on screen.
+  init-screen clear ;
+
+\ a91e:        c2 a8      link pointer
+\ a920:        0d         length (13)
+\ a921-a92d               "INIT-HARDWARE"
+\ a92e:        a9 03      LDA #3
+\ a930:        8d 01 04   STA $0401
+\ a933:        ca         DEX
+\ a934:        ca         DEX
+\ a935:        a9 04      LDA #4
+\ a937:        95 00      STA $00,X
+\ a939:        a9 00      LDA #0
+\ a93b:        95 01      STA $01,X
+\ a93d:        ca         DEX
+\ a93e:        ca         DEX
+\ a93f:        a9 02      LDA #2
+\ a941:        95 00      STA $00,X
+\ a943:        a9 04      LDA #4
+\ a945:        95 01      STA $01,X
+\ a947:        20 a5 83   JSR $83a5 c!
+\ a94a:        20 d4 9d   JSR $9dd4 init-screen
+\ a94d:        20 88 9f   JSR $9f88 clear
+\ a950:        60         RTS
+
+\ a951:        1e a9      link pointer $a91e
+

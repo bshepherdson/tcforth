@@ -4,9 +4,10 @@
 host definitions
 \ This needs to be the last lines in the target compilation.
 host latest var_latest t!
-host here   var_dp     t!
+host here   var_dp_ptr t!
 
 \ At this point the assembler's output region should be complete. Dump the
 \ resulting binary.
+here hex. cr
 S" TC-Forth" S" forth-c64.crt" emit-cart
 bye

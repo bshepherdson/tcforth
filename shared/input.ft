@@ -84,12 +84,12 @@ target : PARSE-NAME ( "<spaces>name<space>" -- c-addr u )
 target : ' ( "name" -- xt ) parse-name (find) 0= IF err-undefined throw THEN ;
   host acts: T' ;
 
-target : ['] ( "name" --    X: -- xt )
-    [ host lit tcompile, target ] ' , ; IMMEDIATE
-  host acts: T' tliteral ; IMPERATIVE
-
 target : POSTPONE ( "name" -- ) ' compile, ; IMMEDIATE
   host acts: T' tcompile, ; IMPERATIVE
+
+target : ['] ( "name" --    X: -- xt )
+    ' postpone literal ; IMMEDIATE
+  host acts: T' tliteral ; IMPERATIVE
 
 
 host REQUIRE case.ft

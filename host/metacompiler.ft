@@ -108,6 +108,8 @@ host definitions
   0 mirror
   ['] mirror-forward   'mirror @ mirror>compile ! ;
 
+: (replace-xt) ( xt slot -- ) there @ >R   there !   tcompile,   R> there ! ;
+
 \ Resolves a forward reference when we come to define it.
 \ ?forward runs after (TCREATE), so the newest mirror word's txt is the one we
 \ want to use to resolve the forward references.
@@ -117,7 +119,7 @@ host definitions
   'mirror @ mirror>txt @ ( fwd-mirror-body real-target-xt )
   swap mirror>txt @ BEGIN ?dup WHILE ( real-xt fwd-ref )
     \ ." Resolving forward at " dup hex. ." with " over hex. cr
-    dup t@ >R   2dup t!   drop R> ( real-xt fwd-ref' )
+    dup tdecompile >R   2dup (replace-xt)   drop R> ( real-xt fwd-ref' )
   REPEAT drop ;
 
 : ?!forward ( mirror-body|0 -- ) ?dup IF resolve-forward THEN ;
@@ -138,6 +140,7 @@ host definitions
 (T') @     'mirror !   act t@
 (T') !     'mirror !   act t!
 (T') ,     'mirror !   act t,
+(T') c,    'mirror !   act tc,
 (T') cells 'mirror !   act tcells
 (T') dup   'mirror !   act dup
 'mirror !

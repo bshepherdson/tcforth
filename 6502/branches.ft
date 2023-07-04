@@ -56,7 +56,7 @@ target : 0BRANCH,
 
 target : BRANCH,
     \ JMP $0    = 4c 00 00
-    [ host $4c tliteral target ] tc,   here 0 , ;
+    [ host $4c tliteral target ] c,   here 0 , ;
   host acts: branch, ;
 
 target : !DEST ( dest slot -- ) !  ;      host acts: !dest ;

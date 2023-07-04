@@ -22,6 +22,9 @@ target : ,CF ( codeword-addr -- ) here   0 ,   !cf ;
 \ This is   docol ,cf
 target : ,DOCOL ( -- ) [ host docol tliteral target ] ,CF ;
 
+target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , ; IMMEDIATE
+  host acts: tliteral ; IMPERATIVE
+
 \ 4-byte alignment on ARM 32-bit.
 target : ALIGNED   3 + 3 invert and ;
 target : ALIGN     here aligned dp ! ;

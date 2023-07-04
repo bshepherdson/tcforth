@@ -3,5 +3,33 @@
 label vec-nmi
   rti,
 
+\ Save A, X, Y.
+\ Check BRK flag
+\ JMP ($0314), the programmable IRQ vector.
+
+\ Then in that default vector, the important bits:
+\ - Bump RTC: JSR $ffea (uses ZP $a0-a2 and $91)
+\ - Scan keyboard: JSR $ea87
+\   - $289-291: key repeat delays and the shift/ctrl/C= flags
+\   - $c5:      previous key count
+\   - $c6:      keyboard buffer index
+\   - $cb:      which key
+\   - $eb81:    keyboard decoding table
+\   - $f5-6:    pointer to keyboard decoder table
+\ - Clear CIA#1 timer interrupt flag by reading it (LDA $dc0d)
 label vec-irq
-  rti,
+  $ffea $ jsr,    \ Bump RTC
+  $ea87 $ jsr,    \ Scan keyboard
+
+  \ The keyboard buffer will be drained by the Forth engine if it's accepting
+  \ input right now. If the buffer fills up, only the first 10 chars will be
+  \ kept, but that's okay.
+
+  \ Clear the interrupt flag by reading $dc0d.
+  $dc0d $ lda,
+  pla, tay, pla, tax, pla, rti,
+
+\ Turns interrupts on and off.
+\ Note that the sense is inverted from the I flag.
+code INT+ cli, end-code
+code INT- sei, end-code

@@ -9,5 +9,5 @@ host here   var_dp_ptr t!
 \ At this point the assembler's output region should be complete. Dump the
 \ resulting binary.
 here hex. cr
-S" TC-Forth" S" forth-c64.crt" emit-cart
+S" forth-c64.prg" emit-prg
 bye

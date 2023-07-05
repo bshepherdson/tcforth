@@ -34,6 +34,18 @@ code XOR  ' noop ' eor, binary, end-code
 code 2* label 2*-inner  0 zp,x asl,   1 zp,x rol,   end-code
 code 2/                 1 zp,x lsr,   0 zp,x ror,   end-code
 
+code LO
+  0 #    lda,
+  1 zp,x sta,
+end-code
+
+code HI
+  1 zp,x lda,
+  0 zp,x sta,
+  0 #    lda,
+  1 zp,x sta,
+end-code
+
 code INVERT
     $ff # lda,   0 zp,x eor,   0 zp,x sta,
     $ff # lda,   1 zp,x eor,   1 zp,x sta,
@@ -71,10 +83,10 @@ code UM* ( u u -- ud )
 
   \ End of loop - product is in W (low) and W2 (high).
   \ Double-cell values are stored ( lo hi ), so overwrite NOS and TOS.
-  w2h zp   lda,   3   zp,x sta,
-  w2l zp   lda,   2   zp,x sta,
-  wh  zp   lda,   1   zp,x sta,
-  wl  zp   lda,   0   zp,x sta,
+  wh  zp lda,   3 zp,x sta,
+  wl  zp lda,   2 zp,x sta,
+  w2h zp lda,   1 zp,x sta,
+  w2l zp lda,   0 zp,x sta,
 end-code
 
 
@@ -708,8 +720,8 @@ code (DO) \ ( limit index --     R: ret -- old_index limit ret )
   2      zp,x lda,   pha,    \ Push limit_lo
   indexl tos>zp,             \ New limit in index register.
   inx, inx, inx, inx,        \ Drain stack
-  wl $ (jmp),                \ Jump-indirect to W, the return address.
-end-code-bare \ No need to return.
+  W>R,                       \ Put the return address back.
+end-code
 
 code (LOOP-END) ( delta -- done?     R: old-index limit ret -- ditto )
   rsp>Y,            \ Juggle the RSP into Y
@@ -721,10 +733,10 @@ code (LOOP-END) ( delta -- done?     R: old-index limit ret -- ditto )
   \ We need index - limit first, in W.
   sec,
   indexl zp  lda,
-  $0102  $,y sbc,
+  $0103  $,y sbc,
   wl     zp  sta,   \ index - limit LO -> W_lo
   indexh zp  lda,
-  $0103  $,y sbc,
+  $0104  $,y sbc,
   wh     zp  sta,   \ index - limit HI -> W_hi
 
   \ Add it to the delta from TOS into W2 (we still need the delta).
@@ -738,19 +750,17 @@ code (LOOP-END) ( delta -- done?     R: old-index limit ret -- ditto )
 
   \ XOR the high bytes of d+i-l and i-l
   \ d+i-l_hi is still in A.
-  wl zp eor,
-  pl? if, \ If N is clear, ie. same flag, set -1 into W3_lo, the first flag.
-    $ff #  lda,
-    w3l zp sta,
+  wh zp eor,
+  pl? if, \ If N is clear, ie. same flag, DEC W3_lo to make it $ff, the first flag.
+    w3l zp dec,
   then,
 
   \ Then calculate delta_hi XOR i-l_hi
   \ i-l is in W; delta in TOS.
   wh zp   lda,
-  0  zp,x eor,
+  1  zp,x eor,
   pl? if,      \ N clear = same sign, store $ff into W3_hi, second flag.
-    $ff #  lda,
-    w3h zp sta,
+    w3h zp dec,
   then,
 
   w3h zp lda,  \ Second flag   -> A
@@ -768,6 +778,7 @@ code (LOOP-END) ( delta -- done?     R: old-index limit ret -- ditto )
 
   \ Get the done flag from W3_lo to both bytes of TOS.
   w3l zp   lda,
+  \ ne? if, jam, then,
   0   zp,x sta,
   1   zp,x sta,
 end-code
@@ -778,8 +789,8 @@ code UNLOOP ( -- R: old-index limit ret -- ret )
   pla, pla,
   pla,   indexl zp sta,
   pla,   indexh zp sta,
-  wl $ (jmp),
-end-code-bare
+  W>R,
+end-code
 
 code I ( -- index1 )
   dex, dex,
@@ -792,50 +803,18 @@ end-code
 code J ( -- old-index   R: old-index limit ret -- old-index limit ret )
   dex, dex,
   rsp>Y,              \ Juggle the RSP into Y
-  $104 $,y  lda,      \ old-index_lo -> A
+  \ NB: The hardware stack is empty-descending, so RTOS is at $101 $,Y and $102 $,Y.
+  $105 $,y  lda,      \ old-index_lo -> A
   0    zp,x sta,      \ -> TOS_lo
-  $105 $,y  lda,      \ old-index_hi -> A
+  $106 $,y  lda,      \ old-index_hi -> A
   1    zp,x sta,      \ -> TOS_hi
 end-code
 
 \ Cursor and screen handling =================================================
 code CURSOR ( -- a-addr ) \ The address of the cursor field itself.
   dex, dex,
-  cursorl #    lda,
-  0       zp,x sta,
-  cursorh #    lda,
-  1       zp,x sta,
+  cursorl ZP>tos,
 end-code
-
-code CLEAR-SCREEN
-label CLEAR-SCREEN-top
-  0 # ldy,
-  label CLEAR-SCREEN-loop
-    $20 # lda,
-    $0400 $,y sta,
-    $0500 $,y sta,
-    $0600 $,y sta,
-    $06e8 $,y sta,
-    1   # lda, \ white
-    $d800 $,y sta,
-    $d900 $,y sta,
-    $da00 $,y sta,
-    $dae8 $,y sta,
-    iny,
-  CLEAR-SCREEN-top bne,
-
-  \ Put the cursor - a reverse-video space $a0 - at $0400.
-  $a0   # lda,
-  $0400 $ sta,
-end-code
-
-code INIT-SCREEN
-  6     # lda, \ blue
-  $d020 $ sta, \ border colour
-  0     # lda, \ black
-  $d021 $ sta, \ background color
-  CLEAR-SCREEN-top $ jmp, \ Tail call to CLEAR-SCREEN
-end-code-bare
 
 
 \ Keyboard ===================================================================
@@ -896,22 +875,6 @@ label main
   \ TODO: Crib the minimal interrupt-handling code from the KERNAL ROM into the
   \ Forth implementation and discard the KERNAL.
 
-  \ On copying the entire engine to low memory?
-  \ The Forth system with no application code is perhaps 12KiB.
-  \ The tightest loop I can devise for copying that sort of thing is the MOVE<
-  \ loop, which requires 21 cycles per byte, plus 16 per page.
-  \ 12KiB is 12,288 bytes and 48 pages: 258,048 + 768 = 258,816 cycles.
-  \ The NTSC clock speed is just over 1MHz, so I would expect 500ms or so.
-
-  \ TODO: Implement this copying scheme, if it proves useful to have a large
-  \ contiguous block of memory for eg. a Z-machine.
-
-  \ TODO: VARIABLEs and other would-be writable fields are being defined inside
-  \ the ROM, which is obviously not going to work. So I either need to tweak
-  \ this to be ROM-friendly, load it from a disk .prg file instead, or copy it.
-  \ Actually I think a disk might be better - a tiny BASIC header makes the disk
-  \ program execute itself when RUN at the console. (VICE can auto-run too.)
-
   \ TODO: Adjust the memory banks at this point, if we're going to.
 
   \ Set the initial DP into the ZP slot.
@@ -920,10 +883,17 @@ label main
   \ The hardware stack starts configured - set up the data stack by setting X to $80.
   sp0 # ldx,
 
+  \ Write 7 into $0000 (PLA control) so the low bits of $0001 are outputs.
+  7 0 b!,
+
   \ There's no fancy FORTH initialization, IP, or NEXT with STC.
   \ Jump through the entry-point cell, which contains an xt, ie. a code address.
   entry-point $ (jmp),
 
-\ Write this main routine into the cart's reset vector.
-main $8000 t!
+\ Write a JMP to main at the start of the machine code.
+\ (There's a dummy jump there to be overwritten.
+there @
+machine-code-entry there !
+main $ jmp,
+there !
 

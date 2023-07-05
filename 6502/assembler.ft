@@ -6,7 +6,8 @@
 \ - Little endian
 \ - The machine stack is empty-descending; and always $01xx with a 1-byte
 \   stack pointer S.
-$c000 CONSTANT max-assembly
+$0801 CONSTANT origin
+$0810 CONSTANT machine-code-entry
 
 CREATE output 65536 allot
 VARIABLE there
@@ -18,7 +19,6 @@ VARIABLE max-there   0       max-there !
 clean-output
 
 : endpoints! ( t-addr -- )
-  dup max-assembly >= ABORT" Too big"
   dup max-there @ max max-there !
       min-there @ min min-there ! ;
 
@@ -75,6 +75,7 @@ clean-output
 \ The simplest of all - just a single byte with no arguments.
 : implied ( opcode "name" -- ) CREATE , DOES> @ asm, ;
 $00 implied brk,
+$02 implied jam,   \ An illegal instruction, but hooks the emulator's monitor.
 $18 implied clc, $d8 implied cld, $58 implied cli, $b8 implied clv,
 $ca implied dex, $88 implied dey, $e8 implied inx, $c8 implied iny,
 $ea implied nop,
@@ -308,8 +309,6 @@ $70 brancher bvs,
 \ I'll fill these in as their requirements are made clear in trying to write the
 \ Forth for this system.
 
-: high-water ( -- max-offset ) max-there @ ;
-
 : c64-open ( c-addr u -- fileid )
   W/O bin create-file ABORT" Failed to open output file" ;
 : c64-close ( fileid -- ) close-file ABORT" Failed to close output file" ;
@@ -318,53 +317,60 @@ $70 brancher bvs,
   >R   min-there @ output +   max-there @ 1+ min-there @ -   R> write-file
   ABORT" Failed to write to output file" ;
 
-CREATE cart-header
-\ The first row is "C64 CARTRIDGE   "
-( 10 ) $00 c, $00 c, $00 c, $40 c, \ Header length: $40
-( 14 ) $01 c, $00 c,               \ Cart version v2.00 - actually v1.00
-( 16 ) $00 c, $00 c,               \ Cart hardware type, 0 for generic
-( 18 ) $00 c,                      \ EXROM setting
-( 19 ) $00 c,                      \ Game setting   0+0 = 16K ROM
-( 1a ) $00 c,                      \ Cart hardware revision/subtype
-( 1b ) $00 c, $00 c, $00 c, $00 c, $00 c, \ Padding
-
-CREATE cart-zeroes 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 ,
-
-CREATE chip-header
-( 00 ) $43 c, $48 c, $49 c, $50 c, \ Segment signature "CHIP"
-( 04 ) $00 c, $00 c, $40 c, $10 c, \ Segment length: ROM size + $10 = $4010
-( 08 ) $00 c, $00 c,               \ Chip type: 0 = ROM
-( 0a ) $00 c, $00 c,               \ Bank number ($0000 normal cart)
-( 0c ) $80 c, $00 c,               \ Load address $8000
-( 0e ) $40 c, $00 c,               \ ROM length $4000
-
-
-\ Given the label for the cart
-: c64-cart-header ( c-addr u fileid -- )
-  >R
-  S" C64 CARTRIDGE   "         R@ write-file drop
-  cart-header $10              R@ write-file drop
-  tuck                         R@ write-file drop ( u )
-  32 swap -   cart-zeroes swap R@ write-file drop
-  chip-header $10              R> write-file drop ;
+\ CREATE cart-header
+\ \ The first row is "C64 CARTRIDGE   "
+\ ( 10 ) $00 c, $00 c, $00 c, $40 c, \ Header length: $40
+\ ( 14 ) $01 c, $00 c,               \ Cart version v2.00 - actually v1.00
+\ ( 16 ) $00 c, $00 c,               \ Cart hardware type, 0 for generic
+\ ( 18 ) $00 c,                      \ EXROM setting
+\ ( 19 ) $00 c,                      \ Game setting   0+0 = 16K ROM
+\ ( 1a ) $00 c,                      \ Cart hardware revision/subtype
+\ ( 1b ) $00 c, $00 c, $00 c, $00 c, $00 c, \ Padding
+\ 
+\ CREATE cart-zeroes 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 ,
+\ 
+\ CREATE chip-header
+\ ( 00 ) $43 c, $48 c, $49 c, $50 c, \ Segment signature "CHIP"
+\ ( 04 ) $00 c, $00 c, $40 c, $10 c, \ Segment length: ROM size + $10 = $4010
+\ ( 08 ) $00 c, $00 c,               \ Chip type: 0 = ROM
+\ ( 0a ) $00 c, $00 c,               \ Bank number ($0000 normal cart)
+\ ( 0c ) $80 c, $00 c,               \ Load address $8000
+\ ( 0e ) $40 c, $00 c,               \ ROM length $4000
+\ 
+\ 
+\ \ Given the label for the cart
+\ : c64-cart-header ( c-addr u fileid -- )
+\   >R
+\   S" C64 CARTRIDGE   "         R@ write-file drop
+\   cart-header $10              R@ write-file drop
+\   tuck                         R@ write-file drop ( u )
+\   32 swap -   cart-zeroes swap R@ write-file drop
+\   chip-header $10              R> write-file drop ;
 
 
 \ There are three forms of output useful.
 \ - Raw and unadorned.
-\ - Simple location word, then the raw form.
+\ - PRG disk file format
 \ - CRT ROM format
 : emit-raw ( c-addr u -- ) c64-open dup c64-emit c64-close ;
-: emit-binary ( c-addr u -- )
+
+\ .prg format is just a 2-byte little-endian origin at $0000-1, for where the
+\ file should be loaded by the C64. Then the code follows, with its length
+\ controlled by the file length.
+: emit-prg ( c-addr u -- )
   c64-open >R
   \ Write a 2-byte little-endian origin as a header, then the bytes starting
   \ from there. This is the format expected by emulators etc.
+  ." Start: " min-there @ hex. cr
+  min-there origin < ABORT" Writing before the origin is busted!"
   min-there 2 R@ write-file ABORT" Failed to write header to output file"
   R@ c64-emit R> c64-close ;
-: emit-cart ( a-label u-label a-filename u-filename -- )
-  c64-open   dup >R c64-cart-header
-  ." max there: " max-there @ hex. cr
-  max-there @ max-assembly >= ABORT" Too big for a 16K ROM"
-  $8000 min-there !   max-assembly max-there !
-  R> dup c64-emit
-  c64-close ;
+
+\ : emit-cart ( a-label u-label a-filename u-filename -- )
+\   c64-open   dup >R c64-cart-header
+\   ." max there: " max-there @ hex. cr
+\   max-there @ max-assembly >= ABORT" Too big for a 16K ROM"
+\   $8000 min-there !   max-assembly max-there !
+\   R> dup c64-emit
+\   c64-close ;
 

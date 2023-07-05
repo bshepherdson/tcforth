@@ -18,7 +18,7 @@ $00 register port-a
 $01 register port-b
 
 \ Data stack from $02 to $7f.
-$02 $7d claim-regs
+$02 $7e claim-regs
 
 \ The jiffy clock that's part of the IRQ routines.
 $a0 register jiffylo

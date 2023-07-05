@@ -27,9 +27,9 @@ host definitions
   $fe zp,x lda,
   $ff zp,x ora,
   eq? if,
-    here 1+ \ Point at the address, not the opcode.
+    here 1+ >R \ Point at the address, not the opcode.
     0 $ jmp,
-  then, ;
+  then, R> ;
 \ That's 9B 15c, which is a little chunky but not too bad.
 
 : !DEST       t! ;

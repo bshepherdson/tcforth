@@ -66,13 +66,13 @@ test-arm: forth-arm-tests.bin test.disk FORCE
 	$(ARM_QEMU) -kernel forth-arm-tests.bin
 
 # Commodore 64
-forth-c64.crt: host/*.ft 6502/*.ft shared/*.ft
+forth-c64.prg: host/*.ft 6502/*.ft shared/*.ft
 	$(FORTH) 6502/main.ft 6502/tail.ft
 
-c64: forth-c64.crt
+c64: forth-c64.prg
 
-run-c64: forth-c64.crt
-	$(VICE_C64) $(VICE_C64_FLAGS) forth-c64.crt
+run-c64: forth-c64.prg
+	$(VICE_C64) $(VICE_C64_FLAGS) forth-c64.prg
 
 test: test-dcpu16 test-rq16 test-mocha86k test-arm FORCE
 

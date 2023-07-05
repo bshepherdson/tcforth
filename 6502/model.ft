@@ -1,7 +1,5 @@
-\ The Forth system is compiled into an 8KiB cart image, which gets loaded into
-\ $8000-9fff at startup.
-\ The C64 expects "CBM80" in PETSCII at $8004-8008: c3 c2 cd 38 30
-\ Then it indirects through $8000-1 to start executing the cartridge code.
+\ The Forth system is compiled into a PRG disk file, which gets loaded at
+\ the ORIGIN ($0800) at startup.
 
 \ The original, standalone c64th I wrote used DTC with the system stack as
 \ the data stack.
@@ -10,7 +8,7 @@
 \ easy with zp,x and zp,y indexed reads.
 
 \ Forth registers:
-\ - W in zero page: $FA-FB
+\ - W in zero page
 \ - IP doesn't exist - using the system stack and PC.
 \ - RSP is S, the system stack.
 \ - Data stack is $02-$7f in the zero page; PSP is X.
@@ -82,11 +80,29 @@ VARIABLE 'latest
 
 
 \ Start of assembly ==========================================================
-$8000 there !
-0 asm,16 \ $8000: Reset vector
-0 asm,16 \ $8002: NMI vector
+origin there !
 
-$c3 asm, $c2 asm, $cd asm, $38 asm, $30 asm, \ "CBM80"
+\ To make the machine code Forth system callable from the startup BASIC CLI,
+\ we need a fragment of BASIC code that calls into the machine code:
+\ 10 SYS 2064
+\ That compiles to:
+$080c t,   \ 0801: 0c 08           Pointer to the next line of BASIC code.
+$000a t,   \ 0803: 0a 00           Line number (10)
+$9e   tc,  \ 0805: 9e              Bytecode for SYS command
+$20   tc,  \ 0806: 20 32 30 36 34  " 2064"
+$32   tc,
+$30   tc,
+$36   tc,
+$34   tc,
+$00   tc,  \ 080b: 00              NUL terminator
+$0000 t,   \ 080c: 00 00           Pointer to the next line, $0000 = end
+
+\ Then the machine code begins at $0810 = 2064.
+$0810 there !
+
+\ Assemble a dummy JMP $0000 here; it'll get overwritten with a JMP main at
+\ the bottom of kernel.ft
+$0000 $ jmp,
 
 
 \ Codewords ==================================================================

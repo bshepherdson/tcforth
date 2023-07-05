@@ -45,13 +45,15 @@ $f CONSTANT light-gray
 \ $d016 is control reg 2: X,    X,   RES, MCM, CSEL, XSCROLL3
 \ $d020 is the border colour
 \ $d021 is the main area background colour
-$d020 CONSTANT 'border-color
-$d021 CONSTANT 'bg-color
+$d020 CONSTANT border-color
+$d021 CONSTANT bg-color
 
 : init-screen ( -- )
-  blue  'border-color c!
-  black 'bg-color     c!
+  \ TODO: Ensure I/O is mapped in.
+  blue  border-color c!
+  black bg-color     c!
   \ Write white into all the color RAM, $d800 to $dbe7 = 1000B.
+  \ Color RAM is not banked in by default; make it visible.
   $d800 1000 white FILL ;
 
 

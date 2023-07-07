@@ -83,7 +83,7 @@ run-zm: zmachine.bin FORCE
 	$(EMULATOR) -arch rq -disk apps/zmachine/Zork1.z5 zmachine.bin
 
 clean: FORCE
-	rm -f *.bin test.disk serial.in serial.out
+	rm -f *.bin forth-c64.prg test.disk serial.in serial.out
 
 FORCE:
 

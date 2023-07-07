@@ -57,7 +57,12 @@ target : PAD ( -- addr ) $7800 ;
 \ (DOES>) runs in eg. CONSTANT to properly compile a particular constant.
 \ Inside target (DOES>), TORS points at the RTS at the end of CONSTANT.
 \ Just after it is the dodoes-code that should become the new codeword.
-\ 1+ the xt is the address to overwrite.
+
+\ Note that the value from the return stack needs 2+ because the return
+\ address on the stack is actually the byte *before* the next instruction,
+\ ie. just before the RTS. We want it to point just after it, hence the 2+.
+\ Similarly, >CFA returns the address of the JSR opcode; 1+ that to get the
+\ destination address that needs overwriting.
 target : (DOES>) R@ cell+   latest >cfa 1+   ! ;
 
 host T' (DOES>) '(DOES>) !
@@ -77,15 +82,23 @@ host definitions
   $60 tliteral  [T'] c, tcompile,
   \ Now the dodoes-code. For STC this receives the parameter field address
   \ on the return (hardware) stack. Shift this to the data stack.
+  \ However, the return address is actually 1 byte before the next opcode, so
+  \ it must be incremented as it goes onto the data stack.
   \ The code required is:
-  \ DEX DEX          = ca ca
-  \ PLA    STA 00,x  = 68 95 00
-  \ PLA    STA 01,x  = 68 95 01
-  $caca tliteral [T'] , tcompile,
-  $9568 tliteral [T'] , tcompile,
-  $6800 tliteral [T'] , tcompile,
-  $0195 tliteral [T'] , tcompile, ;
-  \ Which is 8B per word that DOES>, eg. CONSTANT, etc.
+  \ DEX DEX    = ca ca     $caca
+  \ CLC PLA    = 18 68     $6818
+  \ ADC #1     = 69 01     $0169
+  \ STA 00,x   = 95 00     $0095
+  \ PLA ADC #0 = 68 69     $6968
+  \ STA 01,x   = 00 95 01  $9500  $01
+  $caca tliteral [T'] ,  tcompile,
+  $6818 tliteral [T'] ,  tcompile,
+  $0169 tliteral [T'] ,  tcompile,
+  $0095 tliteral [T'] ,  tcompile,
+  $6968 tliteral [T'] ,  tcompile,
+  $9500 tliteral [T'] ,  tcompile,
+  $01   tliteral [T'] c, tcompile, ;
+  \ Which is 13B per word that DOES>, eg. CONSTANT, etc.
   \ It's slower and more complicated to JSR to a routine for this, since it
   \ covers the PFA on the stack.
 

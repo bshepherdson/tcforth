@@ -1,14 +1,17 @@
-\ Extra Target library words for eg. multiplication and division.
+\ Extre Target library words for eg. multiplication and division.
 \ Division based on based on SM/REM; multiplication based on UM*.
 target definitions
 
 : U*   ( u u -- p )   UM* D>S ;
-: *    ( n m -- n*m )
-  over 0< over 0< xor >R ( n m    R: neg? )
-       dup 0< IF negate THEN
-  swap dup 0< IF negate THEN ( u1 u2 )
-  U* R> IF negate THEN ;
-host acts: * ;
+\ : *    ( n m -- n*m )
+\   over 0< over 0< xor >R ( n m    R: neg? )
+\        dup 0< IF negate THEN
+\   swap dup 0< IF negate THEN ( u1 u2 )
+\   U* R> IF negate THEN ;
+\ host acts: * ;
+
+: * ( n m -- n*m ) 2dup xor $8000 and >R   U*   R> IF negate THEN ;
+  host acts: * ;
 
 target
 : /MOD ( n n -- r q ) >R S>D R> SM/REM ;

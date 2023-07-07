@@ -109,32 +109,41 @@ $0000 $ jmp,
 \ This is the default codeword for CREATEd words.
 \ A thread called the variable, which begins with `JSR DOVAR` then the
 \ parameter field. So the variable's codeword calls here, and the "return
-\ address" it pushed is the parameter field. So pop it from the return stack
-\ and push it onto the data stack instead.
+\ address" it pushed is the parameter field. Actually the PFA-1 because of how
+\ return addresses work on the 6502.
+\ So pop it from the return stack, add 1, and push it onto the data stack.
 \ Then the RTS at the end will return to the thread.
 label DOVAR
     dex, dex,
-    pla, \ lo -> A
-    0 zp,x sta,
-    pla, \ hi -> A
+    pla,        \ lo -> A
+    clc,
+    1 # adc,    \ A+1 -> A
+    0 zp,x sta, \ -> TOS_lo
+    pla,        \ hi -> A
+    0 # adc,
     1 zp,x sta,
     rts, \ Actually returning to the calling thread.
 
 \ Expects a byte with the length, then that many characters.
 \ Uses w2l to hold the length temporarily.
+\ Note that the return address from the stack is 1 byte too early!
+\ However after *char has been adjusted by len, it's 1 byte too far for
+\ an RTS. However JMP (W) will work perfectly.
 label (DOSTRING)
-    R>W,           \ *len  -> W
-    wl  zp lda,    \ len   -> W
-    w2l zp sta,    \ len   -> W2_lo
-    1 wl ZP+,      \ *char -> W
+    R>W,               \ *len-1 -> W
+    1   #      ldy,
+    wl  (zp),y lda,    \ len    -> A
+    w2l zp     sta,    \ len    -> W2_lo
+    2 wl ZP+,          \ *char  -> W   (+1 to skip the length, +1 because it was *len-1)
 
     dex, dex,
-    wl ZP>tos,     \ Push *char
+    wl ZP>tos,         \ Push *char
     dex, dex,
-    0 # lda,
-    1 zp,x sta,      \ High byte is 0
+
+    0 # lda,           \ Push len
+    1 zp,x sta,        \ High byte is 0
     w2l zp lda,
-    0 zp,x sta,      \ Low byte from w2l.
+    0 zp,x sta,        \ Low byte from w2l.
 
     \ The length is in A, and we have to increase W (which points at the first char) by that much.
     clc,
@@ -142,11 +151,8 @@ label (DOSTRING)
     wl zp sta,       \ len + wl -> wl
     0 # lda,
     wh zp adc,
-    pha,             \ Store that high byte of the resulting address right onto R.
-    wl zp lda,
-    pha,             \ And follow it with the low byte.
-    \ Now it's safe to return; will continue executing from after the string.
-    rts,
+    wh zp sta,       \ *char + len is a proper address, 1 byte too far for the
+    wl $ (jmp),      \ quirky RTS. But it's perfect for JMP (indirect)!
 
 
 
@@ -187,9 +193,12 @@ VARIABLE '(DOES>)
 
     \ Sequence 3 - parameter field address on hardware/return stack,
     \ needs to be pushed.
+    \ The PC pushed on the 6502 is unfortunately a byte too early, so increment
+    \ it as we go.
     dex, dex,
-    pla,   0 zp,x sta,
-    pla,   1 zp,x sta,
+    clc,
+    pla,   1 # adc,   0 zp,x sta,
+    pla,   0 # adc,   1 zp,x sta,
     \ Now we're set up to continue executing the DOES> code.
 ;
 

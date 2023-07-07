@@ -47,11 +47,15 @@ $f CONSTANT light-gray
 \ $d021 is the main area background colour
 $d020 CONSTANT border-color
 $d021 CONSTANT bg-color
+VARIABLE cursor
 
 : init-screen ( -- )
   \ TODO: Ensure I/O is mapped in.
+  [ host here cr cr ." init-screen breakpoint: " hex. cr cr target ]
   blue  border-color c!
   black bg-color     c!
+  0 cursor !
+
   \ Write white into all the color RAM, $d800 to $dbe7 = 1000B.
   \ Color RAM is not banked in by default; make it visible.
   $d800 1000 white FILL ;
@@ -104,8 +108,7 @@ host presume scroll target
 
 \ Wipes u bytes from start index (not an address!) with blank spaces.
 : wipe ( start u -- )
-  >R (screen-map) + R>   bl petscii>scr FILL
-  0 cursor ! ;
+  >R (screen-map) + R>   bl petscii>scr FILL ;
 
 : clear ( -- ) 0 /screen wipe   0 cursor ! ;
 
@@ -181,14 +184,14 @@ $0d CONSTANT key-return
 : ACCEPT-CHAR ( c-addr ch -- c-addr' ) dup emit   over c! char+ ;
 
 $0277           CONSTANT (keybuffer)
-host ndx target CONSTANT 'kbuf-ndx
-: >kbuf ( -- u ) (keybuffer) 'kbuf-ndx + ;
+host ndx target CONSTANT kbuf-ndx
+: >kbuf ( -- c-addr ) (keybuffer) kbuf-ndx c@ + ;
 
-: (AWAIT-KEY) ( -- ) BEGIN 'kbuf-ndx c@ UNTIL ;
+: (AWAIT-KEY) ( -- ) BEGIN kbuf-ndx c@ UNTIL ;
 : (DRAIN-KEY) ( -- ch )
   int-   >kbuf c@  ( ch )
   (keybuffer) dup 1+ swap 9 move
-  'kbuf-ndx dup c@ 1- swap c!
+  kbuf-ndx dup c@ 1- swap c!
   int+ ;
 
 : KEY ( -- ch ) (await-key) (drain-key) ;

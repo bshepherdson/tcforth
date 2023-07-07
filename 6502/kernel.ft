@@ -13,11 +13,11 @@
 : binary, ( pre-xt op-xt )
     >R
     ( pre-xt ) execute
-    0 zp,x lda,
-    2 zp,x R@ execute
+    2 zp,x lda,
+    0 zp,x R@ execute
     2 zp,x sta,
-    1 zp,x lda,
-    3 zp,x R> execute
+    3 zp,x lda,
+    1 zp,x R> execute
     3 zp,x sta,
     inx, inx, ;
 
@@ -92,43 +92,33 @@ end-code
 
 \ Comparisons ================================================================
 code =
-    1 zp,x lda,
-    3 zp,x cmp,
-    0 # ldy,
+  0 # ldy,
+  1 zp,x lda,
+  3 zp,x cmp,
+  eq? if,
+    0 zp,x lda,
+    2 zp,x cmp,
     eq? if,
-        0 zp,x lda,
-        2 zp,x cmp,
-        eq? if,
-            $ff # ldy,
-        then,
+      $ff # ldy,
     then,
-    2 zp,x sty,
-    3 zp,x sty,
-    inx, inx,
+  then,
+  2 zp,x sty,
+  3 zp,x sty,
+  inx, inx,
 end-code
 
-\ Signed inequalities are hard, since they depend on the sign bits.
-\ Unsigned ones first.
-code U<
-    0 #    ldy,   \ Assume failure.
-    1 zp,x lda,   \ TOS_hi -> A
-    3 zp,x cmp,   \ TOS_hi - NOS_hi
-    \ If N is set, NOS_hi is unsigned-larger than TOS_hi - so NOS > TOS.
-    pl? if,     \ N not set, so check Z.
-        eq? if, \ Z is set, so we need to check the lo bytes.
-            0 zp,x lda, \ TOS_lo -> A
-            2 zp,x cmp, \ TOS_lo - NOS_lo
-            \ If N is clear, NOS_lo is unsigned-smaller than TOS_lo, return true.
-            pl? if,
-                $ff # ldy,
-            then,
-            \ Here: equal hi bytes, flag set per lo bytes.
-        then,
-    then,
-    \ Flag should be set appropriately.
-    inx, inx,
-    0 zp,x sty,
-    1 zp,x sty, \ Write the flag onto TOS.
+code U<  ( lhs rhs -- ? ) \ NOS - TOS - C=0 iff NOS < TOS as desired.
+  0 #    ldy,  \ Flag
+  2 zp,x lda,
+  0 zp,x cmp,
+  3 zp,x lda,
+  1 zp,x sbc,  \ C=0 iff NOS < TOS, so if carry is clear, LDY $ff.
+  cc? if,
+    $ff # ldy,
+  then,
+  2 zp,x sty,
+  3 zp,x sty,
+  inx, inx,
 end-code
 
 \ TODO: Some kind of conditional compilation of target words - these are
@@ -155,11 +145,11 @@ code 0< ( x -- ? )
 end-code
 
 code <  ( lhs rhs -- ? ) \ Subtracting TOS from NOS.
-  0 zp,x lda,
-  2 zp,x cmp,
-  1 zp,x lda,
-  3 zp,x sbc,
-  vc? if,
+  2 zp,x lda,
+  0 zp,x cmp,
+  3 zp,x lda,
+  1 zp,x sbc,
+  vs? if,
     $80 # eor,
   then,
   \ Top bit of A is now 1 if <, 0 if >=. Convert that to a Forth flag.
@@ -288,22 +278,35 @@ code RP@
     1 zp,x sta,
 end-code
 
-code RP!
+code RP! \ Need to retrieve the return addres, fix it, and jump.
+    clc,
+    pla,
+    1 # adc,
+    wl zp sta,
+    pla,
+    0 # adc,
+    wh zp sta,  \ Return address in W
+
     0 zp,x lda, \ Low byte - the new S.
     inx, inx,   \ Drop the value off the stack.
-    wl zp stx,  \ Set PSP aside.
+    w2l zp stx, \ Set PSP aside.
     tax,        \ Put the new S in X.
     txs,        \ Then S
-    wl zp ldx,  \ And put PSP back.
-end-code
+    w2l zp ldx, \ And put PSP back.
+    wl $ (jmp), \ Jump indirect out of here.
+end-code-bare
 
 
-code >R >R, end-code
-code R> R>, end-code
+\ TODO: >R and R> are a bit slow implemented this way; is there a better way?
+code >R R>W, >R, W>R, end-code
+code R> R>W, R>, W>R, end-code
 code R@
-    R>W, W>R, \ W now holds the value.
     dex, dex,
-    wl zp>tos,
+    rsp>Y,    \ System stack is empty-descending. NORS is at $103,Y and 104,Y.
+    $104 $,Y  lda,
+    1    zp,x sta,
+    $103 $,Y  lda,
+    0    zp,x sta,
 end-code
 
 \ Depth is $80 - X, shifted right by 1.
@@ -537,10 +540,10 @@ code UM/MOD ( ulo uhi udiv -- ur uq )
   \ bits have been shifted out of the quotient, and the remainder holds exactly
   \ the remainder we want!
   \ W2 = high dividend/remainder; W = low dividend/quotient   (r0 and r1)
-  4 zp,x lda,   wl  zp,x sta,
-  5 zp,x lda,   wh  zp,x sta,  \ ulo -> W
-  2 zp,x lda,   w2l zp,x sta,
-  3 zp,x lda,   w2h zp,x sta,  \ uhi -> W2
+  4 zp,x lda,   wl  zp sta,
+  5 zp,x lda,   wh  zp sta,  \ ulo -> W
+  2 zp,x lda,   w2l zp sta,
+  3 zp,x lda,   w2h zp sta,  \ uhi -> W2
   16 # ldy,                    \ bit count -> Y
 
   label UM/MOD-loop
@@ -550,24 +553,21 @@ code UM/MOD ( ulo uhi udiv -- ur uq )
     w2l zp rol,
     w2h zp rol,
 
-    \ If the divisor is U<= the remainder, drain the remainder and put a 1 into
-    \ the quotient. That's TOS U<= W2, or W2 U> TOS. If we subtract TOS-W2, then
-    \ a borrow will be needed iff W2 U> TOS. So we check C clear = borrowed.
-    0   zp,x lda,
-    w2l zp   cmp, \ CMP first, then SBC for subsequent ones. Avoids SEC.
-    1   zp,x lda,
-    w2h zp   sbc,
-    cc? if,
-      \ divisor U<= remainder, so it's too big.
-      \ Subtract divisor (TOS) from remainder (W2),
-      \ and make the low bit of the quotient (W) a 1.
-      sec,
-      w2l zp   lda,
-      0   zp,x sbc,
-      w2l zp   sta,
-      w2h zp   lda,
-      1   zp,x sbc,
+    \ Check remainder U< divisor by subtracting remainder - divisor.
+    \ If C is set (no borrow) then we have remainder U>= divisor and must
+    \ drain the remainder and put a 1 into the quotient.
+    sec,
+    w2l zp   lda,
+    0   zp,x sbc, \ SBC rather than CMP, we want the value too.
+    w3l zp   sta, \ Save the low byte in W3_lo
+    w2h zp   lda,
+    1   zp,x sbc,
+    cs? if,
+      \ We've already got remainder - divisor! hi byte in A, lo in W3_lo
+      \ Store that properly in W2, then set low bit of the quotient (W).
       w2h zp   sta,
+      w3l zp   lda,
+      w2l zp   sta,
       wl  zp   inc, \ It was just shifted left, so the low bit is always 0.
     then,
 
@@ -778,7 +778,6 @@ code (LOOP-END) ( delta -- done?     R: old-index limit ret -- ditto )
 
   \ Get the done flag from W3_lo to both bytes of TOS.
   w3l zp   lda,
-  \ ne? if, jam, then,
   0   zp,x sta,
   1   zp,x sta,
 end-code
@@ -808,12 +807,6 @@ code J ( -- old-index   R: old-index limit ret -- old-index limit ret )
   0    zp,x sta,      \ -> TOS_lo
   $106 $,y  lda,      \ old-index_hi -> A
   1    zp,x sta,      \ -> TOS_hi
-end-code
-
-\ Cursor and screen handling =================================================
-code CURSOR ( -- a-addr ) \ The address of the cursor field itself.
-  dex, dex,
-  cursorl ZP>tos,
 end-code
 
 

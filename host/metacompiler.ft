@@ -22,7 +22,7 @@
         2dup s>number? IF ( ca u d )
           D>S >R 2drop R> ( n ) tliteral
         ELSE \ Unknown word!
-          2drop ." *** Undefined Target word: " type cr bye
+          2drop ." *** Undefined Target word: " type cr 1 (bye)
         THEN ( )
       THEN ( )
     ELSE ( c-addr ) refill 2drop THEN ( )

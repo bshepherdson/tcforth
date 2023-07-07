@@ -56,7 +56,6 @@ $f6 register keydechi \ Pointer to the keyboard decoding table in use.
 +register16 wl        wl      1+ CONSTANT wh       \ Temporary area (W)
 +register16 w2l       w2l     1+ CONSTANT w2h      \ Another temp   (X)?
 +register16 w3l       w3l     1+ CONSTANT w3h      \ A third temp
-+register16 cursorl   cursorl 1+ CONSTANT cursorh  \ Cursor pointer
 +register16 herel     herel   1+ CONSTANT hereh    \ Dictionary pointer
 +register16 indexl    indexl  1+ CONSTANT indexh   \ Loop index
 

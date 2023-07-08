@@ -158,7 +158,7 @@ host presume scroll target
 
 : (+scroll) ( +chars -- )
   \ We want to move vram+len to vram for vram-size - length words.
-  dup >R   (screen-map) +   (screen-map)   /screen R@ - [ host jam, target ] move
+  dup >R   (screen-map) +   (screen-map)   /screen R@ - move
   \ Then wipe the bottom part.
   /screen R@ - R@ wipe
   \ And adjust the cursor so its relative position stays.

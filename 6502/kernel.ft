@@ -311,7 +311,6 @@ end-code
 
 \ Depth is $80 - X, shifted right by 1.
 code DEPTH
-    jam,
     wl zp stx,  \ Put the current X into memory.
     $80 # lda,  \ $80 in A
     sec,
@@ -644,13 +643,13 @@ code MOVE< ( src dst u -- ) \ Copies from low addresses to high.
 
     \ Slow case: decrement the high byte of the length.
     \ Note that X is already 0 in this case, ready to continue.
-    wh  zp      dec, \ If that left a 0, we're done with the loop.    \ 5c   every 256 only
-    MOVE<-loop  bne, \ So continue if nonzero,                        \ 3c   same
-    pla, tax, rts,   \ or pull the old X and return if zero.
-
-\ Total to move X bytes:
-\ 5 + 6 + 2 + 3 + 2 + 3 per byte copied = 21 cycles per byte
-\ Every page = 256B, an extra 5 + 5 + -1 + -1 + 5 + 3 = 16c
+    wh zp lda,
+    ne? if, \ If the top byte of the length isn't 0, decrement and continue.
+      wh zp dec,
+      MOVE<-loop $ jmp,
+    then,
+    \ Or we're done; so pull the old X and return.
+    pla, tax, rts,
 
 
 code MOVE> ( src dst u -- ) \ Copies from high addresses to low.

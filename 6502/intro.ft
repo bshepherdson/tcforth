@@ -8,7 +8,4 @@ target definitions
   \ ."           TC-FORTH version 8            " cr ;
 '.intro !
 
-: init-hardware ( -- ) init-screen clear
-  512 0 DO i dup $4a0 + c! LOOP
-  $4a0 $400 840 move< jam
-  ;
+: init-hardware ( -- ) init-screen clear ;

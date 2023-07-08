@@ -138,9 +138,14 @@ host presume scroll target
 : +cursor ( n -- )
   cursor @ +
   dup 0< IF /row / 1-   scroll   0 ELSE
-    dup /screen >= IF /screen -   /row / 1+   scroll   /row #rows 1- * THEN THEN
+    dup /screen >= IF
+      /screen -   /row / 1+   scroll   /row #rows 1- * THEN THEN
   cursor ! ;
 
+\ START HERE: the division result is good on the way into SCROLL.
+\ Check out what's up in SCROLL that's causing issues.
+\ Sanity check the MOVE as well? Might still be a bug in MOVE< for large
+\ moves.
 
 \ Scrolling ==================================================================
 : (-scroll) ( +chars -- )
@@ -153,7 +158,7 @@ host presume scroll target
 
 : (+scroll) ( +chars -- )
   \ We want to move vram+len to vram for vram-size - length words.
-  dup >R   (screen-map) +   (screen-map)   /screen R@ - move
+  dup >R   (screen-map) +   (screen-map)   /screen R@ - [ host jam, target ] move
   \ Then wipe the bottom part.
   /screen R@ - R@ wipe
   \ And adjust the cursor so its relative position stays.
@@ -162,7 +167,7 @@ host presume scroll target
 \ Scrolls by lines. Positive scrolls down, negative scrolls up. Blanks are
 \ always scrolled in. Screen map doesn't move.
 : scroll ( lines -- )
-  [ host jam, target ] /row * chars dup 0< IF negate (-scroll) ELSE (+scroll) THEN ;
+  /row * chars dup 0< IF negate (-scroll) ELSE (+scroll) THEN ;
 
 
 VARIABLE (cur-ch)
@@ -185,7 +190,7 @@ VARIABLE (cur-ch)
 : EMIT ( petscii-ch -- ) petscii>scr display ;
 
 : CR ( -- )
-  (vacate)   cursor @ dup /row mod   /row swap -   +cursor   (arrive) ;
+  (vacate)   cursor @ /row mod   /row swap -   +cursor   (arrive) ;
 
 
 \ Keyboard input =============================================================

@@ -3,9 +3,9 @@
 \ ANS Forth standard names and arguments where practical.
 target definitions
 
-\ LATEST gives the name token. Skip over the link pointer and check the length.
 target : LATEST 'latest @ ;
   host acts: latest ;
+\ LATEST gives the name token. Skip over the link pointer and check the length.
 target : IMMEDIATE
     latest cell+   dup c@   f_immed or   swap c! ;
   host acts: latest tcell+ dup tc@   f_immed or   swap tc! ;

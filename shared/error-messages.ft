@@ -33,4 +33,3 @@ target : .ERROR ( exc# -- )
 
 \ Prints the names of all words, from LATEST back to the end.
 : words ( -- ) latest BEGIN ?dup WHILE ( nt ) dup id. cr @ REPEAT ;
-

@@ -311,6 +311,7 @@ end-code
 
 \ Depth is $80 - X, shifted right by 1.
 code DEPTH
+    jam,
     wl zp stx,  \ Put the current X into memory.
     $80 # lda,  \ $80 in A
     sec,
@@ -590,19 +591,36 @@ end-code
 
 
 \ MOVEs ======================================================================
+
+\ Helper that pops the stack and returns to the caller's caller if Z is set.
+\ Saving some space at the cost of a few cycles.
+\ Pops *3* stack cells, since this is called from MOVE< MOVE> and FILL.
+label (bail-if-empty)
+  0 zp,x lda,
+  1 zp,x ora,
+label (bail-if-0)
+  eq? if,
+    txa,
+    clc,
+    6 # adc,
+    tax,
+    pla, pla, \ Destroy one return address (inside MOVE< etc.)
+  then,
+  rts,
+
 code MOVE< ( src dst u -- ) \ Copies from low addresses to high.
   \ This uses (zp),Y addressing to copy bytes relatively painlessly.
   \ It can use 8-bit INYs most of the time, and use the Z flag to determine
   \ if carrying if necessary.
   \ First check if the length is all 0.
-  0 zp,x lda,   1 zp,x ora,
-  eq? if, txa, clc, 6 # adc, tax, rts, then, \ Pop all 3 and return if so.
+  (bail-if-empty) $ jsr,
 
   wl  tos>ZP,   \ len -> W
   inx, inx,
   w3l tos>ZP,   \ dst -> W3
   inx, inx,
   w2l tos>ZP,   \ src -> W2
+  inx, inx,
 
   txa, pha,     \ Push PSP (X).
 
@@ -643,72 +661,86 @@ code MOVE> ( src dst u -- ) \ Copies from high addresses to low.
   \ should be preferred if memory regions don't overlap.
 
   \ First check if the length is all 0.
-  0 zp,x lda,   1 zp,x ora,
-  eq? if, txa, clc, 6 # adc, tax, rts, then, \ Pop all 3 and return if so.
+  (bail-if-empty) $ jsr,
 
   wl  tos>ZP,   \ len -> W
   inx, inx,
-  w3l tos>ZP,   \ dst -> W3
+
+  0   zp,x lda,
+  w3l zp   sta,
+  1   zp,x lda,
+  clc,
+  wh  zp   adc, \ Add the high byte of the length to the src and dst.
+  w3h zp   sta, \ dst -> W3
   inx, inx,
-  w2l tos>ZP,   \ src -> W2
 
-  txa, pha,     \ Push PSP (X).
+  0   zp,x lda,
+  w2l zp   sta,
+  1   zp,x lda,
+  clc,
+  wh  zp   adc, \ Add the high byte of the length to the src and dst.
+  w2h zp   sta, \ src -> W3
+  inx, inx,
 
-  \ Len in X counting down; memory offset in Y
-  \ Offset starts at 0; when it is 0 and gets decremented to $ff, we decrement
-  \ the pointers as well.
-  0  #  ldy,
-  wl zp ldx,
+  \ Len slash memory offset in Y.
+  wl  zp ldy,
 
   label MOVE>-loop
+    \ Start with DEY, because it's pointing past the end.
+    dey,
     w2l (zp),Y  lda,
     w3l (zp),Y  sta,
     tya,
-    eq? if, \ If Y is 0 and about to go to $FF, decrement the pointers.
-      w2h zp dec,
-      w3h zp dec,
-    then,
-    dey,    \ Then actually decrement the offset
-    dex,    \ and the length.
-
-    \ Fast case: if that DEX left it nonzero, continue.
     MOVE>-loop bne,
+    \ If Y is 0 and about to go to $FF, decrement the pointers.
+    w2h zp dec,
+    w3h zp dec,
 
-    \ Slow case: decrement the high byte o the length.
-    \ Note that X is already 0 in this case, ready to continue.
-    wh  zp     dec,  \ If that left a 0, we're done with the loop.
-    MOVE>-loop bne,  \ So continue if nonzero,
-    pla, tax, rts,   \ or pull the old X and return if zero.
+    \ If the high byte of the length is 0, return.
+    wh  zp lda,
+    eq? if, rts, then,
+
+    \ If not, decrement it and continue.
+    wh  zp dec,
+    MOVE>-loop $ jmp,
 
 
 code FILL ( c-addr u char -- )
+  \ Bail if the length is 0. Can't use bail-if-empty because of different
+  \ stacking order.
+  2 zp,x lda, 3 zp,x ora,
+  (bail-if-0) $ jsr,
+
   wl  tos>zp,   \ char -> W
   inx, inx,
   w2l  tos>zp,  \ len  -> W2
   inx, inx,
   w3l  tos>zp,  \ addr -> W3
   inx, inx,
+  txa, pha,     \ Save X to hardware stack.
 
-  \ Put the low byte of the length into Y.
-  w2l zp ldy,
+  0   #  ldy, \ Memory offset Y starts at 0.
+  w2l zp ldx, \ len_lo -> X
   label FILL-loop
-    eq? if, \ Low byte of length in Y is 0.
+    eq? if, \ Low byte of length in X is 0.
       w2h zp lda, \ len_hi -> A
       eq? if,     \ If *that* is 0, we're done.
-        rts,
+        pla, tax, rts,
       then,
       \ If we're still here, decrement the high byte and continue.
-      \ Y is still 0, which is fine.
+      \ X is still 0, which is fine.
       w2h zp dec,
     then,
 
-    wl  zp lda, \ ch -> A
-    w3l $  sta, \ A  -> mem
-    w3l zp inc, \ Bump addr_lo
-    eq? if,     \ If it just rolled over to 0, bump hi as well.
+    wl  zp     lda, \ ch -> A
+    w3l (zp),y sta, \ A  -> mem
+
+    iny,
+    eq? if, \ If Y just rolled over to 0, increment addr_hi
       w3h zp inc,
     then,
-    dey,
+
+    dex,
   FILL-loop $ jmp,
 end-code-bare   \ It jumps out of the middle when done.
 

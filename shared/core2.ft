@@ -176,6 +176,24 @@ target : DO ( m i -- )
     R@ t@ swap ( old-top top-slot   R: 'loop-top ) R> t!  ( old-top )
     ; IMPERATIVE
 
+\ TODO: Figure out conditional compilation of target words.
+
+\ host target-?do? [IF]
+\ \ ?DO works just like DO except it has a real <> check instead of `1 (0branch)`
+\ \ at the top.
+\ target : ?DO ( m i -- )
+\     ['] 2dup compile,
+\     ['] (DO) compile, ['] <> compile,
+\     0BRANCH,                        ( C: new-loop-top )
+\     (loop-top) @ swap (loop-top) !  ( C: old-jump-addr )
+\     ; IMMEDIATE
+\   host acts:
+\     [T'] 2dup tcompile,
+\     [T'] (DO) tcompile,   [T'] <> tcompile,   0branch,
+\     [T'] (loop-top) t>body >R  ( top-slot   R: 'loop-top )
+\     R@ t@ swap ( old-top top-slot   R: 'loop-top ) R> t!  ( old-top )
+\     ; IMPERATIVE
+\ [THEN]
 
 host definitions
 : (+LOOP)
@@ -219,9 +237,9 @@ target : LEAVE ( --    R: loop-sys --   C: -- )
     0 tliteral BRANCH, !dest ; IMPERATIVE
 
 \ Miscellany =================================================================
-target : FILL ( c-addr u ch -- )
-  -rot ( ch c-addr u ) dup 0 <= IF drop 2drop EXIT THEN
-  over + swap ( ch top bottom ) DO dup i c! LOOP drop ;
+\ target : FILL ( c-addr u ch -- )
+\   -rot ( ch c-addr u ) dup 0 <= IF drop 2drop EXIT THEN
+\   over + swap ( ch top bottom ) DO dup i c! LOOP drop ;
 
 target : ERASE ( c-addr u -- ) 0 fill ;
 

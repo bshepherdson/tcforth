@@ -3,9 +3,12 @@ target definitions
 : spin ( -- ) BEGIN AGAIN ;
 : jam  ( -- ) [ host jam, target ] ;
 
-:noname ( -- )
+:noname ( -- ) ;
   \  0123456789012345678901234567890123456789
-  ."           TC-FORTH version 8            " cr ;
+  \ ."           TC-FORTH version 8            " cr ;
 '.intro !
 
-: init-hardware ( -- ) init-screen clear here jam ;
+: init-hardware ( -- ) init-screen clear
+  512 0 DO i dup $4a0 + c! LOOP
+  $4a0 $400 840 move< jam
+  ;

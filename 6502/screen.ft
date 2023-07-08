@@ -45,6 +45,7 @@ $f CONSTANT light-gray
 \ $d016 is control reg 2: X,    X,   RES, MCM, CSEL, XSCROLL3
 \ $d020 is the border colour
 \ $d021 is the main area background colour
+$d018 CONSTANT vmcsb \ VIC-II chip memory control register
 $d020 CONSTANT border-color
 $d021 CONSTANT bg-color
 VARIABLE cursor
@@ -54,6 +55,7 @@ VARIABLE cursor
   [ host here cr cr ." init-screen breakpoint: " hex. cr cr target ]
   blue  border-color c!
   black bg-color     c!
+  vmcsb c@ 2 or vmcsb c!
   0 cursor !
 
   \ Write white into all the color RAM, $d800 to $dbe7 = 1000B.
@@ -61,8 +63,9 @@ VARIABLE cursor
   $d800 1000 white FILL ;
 
 
-\ 256-byte table mapping ASCII/PETSCII characters to their best equivalent
+\ 128-byte table mapping ASCII/PETSCII characters to their best equivalent
 \ screen code, ie. character number in the default font.
+\ NOTE: This is for the second character ROM table - with lower case letters.
 CREATE screen-codes
 \ $00-1f Control codes: mapped to $80
 $80 c, $81 c, $82 c, $83 c,   $84 c, $85 c, $86 c, $87 c,
@@ -75,22 +78,40 @@ $28 c, $29 c, $2a c, $2b c,   $2c c, $2d c, $2e c, $2f c,
 $30 c, $31 c, $32 c, $33 c,   $34 c, $35 c, $36 c, $37 c,
 $38 c, $39 c, $3a c, $3b c,   $3c c, $3d c, $3e c, $3f c,
 \ $40-5f Upper case letters and a few friends: mapped to $00s
-\   Backslash is a GBP sign; Map it to a diagonal line.
-$00 c, $01 c, $02 c, $03 c,   $04 c, $05 c, $06 c, $07 c,
-$08 c, $09 c, $0a c, $0b c,   $0c c, $0d c, $0e c, $0f c,
-$10 c, $11 c, $12 c, $13 c,   $14 c, $15 c, $16 c, $17 c,
-$18 c, $19 c, $1a c, $1b c,   $4d c, $1d c, $1e c, $1f c,
-\ $60-7f Backtick -> lowercases->uppercases, {|}->line drawing
-\   ~ -> white circle, DEL -> PI
+\ $40 is @, $5b-5f are [\]^_
+\ There's not really a backslash, so it's mapped to a diagonal line $5f
+\ Likewise ^ is mapped to an up arrow.
+$00 c, $41 c, $42 c, $43 c,   $44 c, $45 c, $46 c, $47 c,
+$48 c, $49 c, $4a c, $4b c,   $4c c, $4d c, $4e c, $4f c,
+$50 c, $51 c, $52 c, $53 c,   $54 c, $55 c, $56 c, $57 c,
+$58 c, $59 c, $5a c, $1b c,   $5f c, $1d c, $1e c, $68 c,
+\ $60-7f Lower case letters and friends
+\ $60 is backtick = $7d, a SE corner symbol?
+\ $7b-7f are {|}~ and (DEL)
+\ { is written as a W tee $73, } as an E tee $6b.
+\ | is a vertical line, $5d.
+\   ~ -> lower checkerboard $68, DEL -> PI
 $4a c, $01 c, $02 c, $03 c,   $04 c, $05 c, $06 c, $07 c,
 $08 c, $09 c, $0a c, $0b c,   $0c c, $0d c, $0e c, $0f c,
 $10 c, $11 c, $12 c, $13 c,   $14 c, $15 c, $16 c, $17 c,
-$18 c, $19 c, $1a c, $4c c,   $42 c, $7a c, $57 c, $5e c,
+$18 c, $19 c, $1a c, $74 c,   $5d c, $6b c, $68 c, $66 c,
 
-\ Note that $80 and up become $a6 greyscale grids. Saving space by dropping
+\ Note that $80 and up become $66 greyscale grids. Saving space by dropping
 \ that half of the table.
 : petscii>scr ( ch -- scr )
-  dup $80 < IF screen-codes + c@ ELSE drop $a6 THEN ;
+  dup $80 < IF screen-codes + c@ ELSE drop $66 THEN ;
+
+
+\ The KERNAL converts the raw keyboard-scanning codes into not-quite-PETSCII values.
+\ I think it's only the lower-case letters that are nonstandard:
+\ A = $41, a = $c1, ie. lower-case are upper-case OR $80; they should be $
+: (convert-key) ( kb-key -- ch )
+  dup $41 $5b WITHIN IF ( lower-case ) $20 or  EXIT THEN \ $41 -> $61 = 'a'
+  dup $c1 $db WITHIN IF ( upper-case ) $7f and EXIT THEN \ $c1 -> $41 = 'A'
+  \ _ is typed as $db - convert it to $5f
+  dup $a4 = IF $5f EXIT THEN
+  ( unchanged-ch ) ;
+
 
 $0400        CONSTANT (screen-map)
 40           CONSTANT /row
@@ -141,7 +162,7 @@ host presume scroll target
 \ Scrolls by lines. Positive scrolls down, negative scrolls up. Blanks are
 \ always scrolled in. Screen map doesn't move.
 : scroll ( lines -- )
-  /row * chars dup 0< IF negate (-scroll) ELSE (+scroll) THEN ;
+  [ host jam, target ] /row * chars dup 0< IF negate (-scroll) ELSE (+scroll) THEN ;
 
 
 VARIABLE (cur-ch)
@@ -189,12 +210,13 @@ host ndx target CONSTANT kbuf-ndx
 
 : (AWAIT-KEY) ( -- ) BEGIN kbuf-ndx c@ UNTIL ;
 : (DRAIN-KEY) ( -- ch )
-  int-   >kbuf c@  ( ch )
-  (keybuffer) dup 1+ swap 9 move
+  int-   (keybuffer) c@   ( ch )
+  \ Slide the buffer left by 1.
+  (keybuffer) dup 1+ swap   kbuf-ndx c@ 1- move<
   kbuf-ndx dup c@ 1- swap c!
   int+ ;
 
-: KEY ( -- ch ) (await-key) (drain-key) ;
+: KEY ( -- ch ) (await-key) (drain-key) (convert-key) ;
 : ACCEPT ( c-addr max -- len )
   drop dup >R  \ TODO Ignores the max length!
   BEGIN key   dup key-return <> WHILE \ ( c-addr key )

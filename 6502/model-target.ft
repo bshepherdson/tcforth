@@ -38,7 +38,7 @@ target : ,DOSTRING ( c-addr u -- )
 
 \ For STC, this is an IMMEDIATE word that compiles an RTS.
 target : EXIT [ host $60 tliteral target ] c, ; IMMEDIATE
-  host acts: $60 c, ; IMPERATIVE
+  host acts: $60 tc, ; IMPERATIVE
 
 \ No alignment on 6502.
 target : ALIGNED ;

@@ -469,6 +469,8 @@ code TIB          input-buf      lit, end-code
 code LAST-PARSE   var_last_parse lit, end-code
 code F_IMMED      f_immed        lit, end-code
 
+\ TIB 0c42 'SOURCE 0c3a
+\ >IN 0c3e
 
 \ More arithmetic ============================================================
 code 1+
@@ -479,10 +481,14 @@ code 1+
 end-code
 
 code 1-
-  0 zp,x dec,
-  eq? if,
-    1 zp,x dec,
-  then,
+  \ The eq? trick used for 1+ carrying doesn't work for 1-; so use actual SBCs.
+  sec,
+  0 zp,x lda,
+  1 #    sbc,
+  0 zp,x sta,
+  1 zp,x lda,
+  0 #    sbc,
+  1 zp,x sta,
 end-code
 
 code CELL   2 lit,                    end-code
@@ -871,7 +877,10 @@ label main
   \ TODO: Adjust the memory banks at this point, if we're going to.
 
   \ Set the initial DP into the ZP slot.
-  var_dp_ptr herel w!,
+  var_dp_ptr    $  lda,
+  herel         zp sta,
+  var_dp_ptr 1+ $  lda,
+  hereh         zp sta,
 
   \ The hardware stack starts configured - set up the data stack by setting X to $80.
   sp0 # ldx,

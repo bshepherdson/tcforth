@@ -240,6 +240,15 @@ VARIABLE '(DOES>)
 label entry-point 0 asm,16
 
 
+\ Space for : and ; ==========================================================
+\ : :   (CREATE) ,docol smudge ] exit    4 calls and RTS = 13 bytes
+: allot-: ( -- ) 13 there +! ;
+\ : ;   EXIT-compile, smudge [ exit      2 literals, 3 calls, RTS
+\ Literals are DEX DEX LDA lo STA lo LDA hi STA hi = 10 bytes!
+\ So 20 for literals, 6 for calls, and RTS = 27 bytes.
+: allot-; ( -- ) 27 there +! ;
+
+
 \ Tail calls =================================================================
 \ It seems reasonably straightforward, while metacompiling 6502 STC
 \ definitions, to replace a final JSR some-word; RTS with a tail call:

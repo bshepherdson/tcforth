@@ -279,21 +279,17 @@ T' (CREATE) tcompile,
 T' ,docol   tcompile,
 T' smudge   tcompile,
 T' ]        tcompile,
-T' EXIT     tcompile,
+exit,
 \ That's 6 cells with a 1-cell DOCOL.
 
 
 T' ;
-( old-dp t-xt )
-\ First make it immediate; the length is 2 cells back. DCPU-specific!
-\ dup 2 tcells -   dup t@ f_immed or swap t!
 ( old-dp t-xt ) dp !    \ Pretend we're compiling at semicolon
 ,docol
-T' EXIT tliteral \ NB That's two cells wide
-T' compile, tcompile,
+EXIT-compile,
 T' smudge   tcompile,
 T' [        tcompile,
-T' EXIT     tcompile,
+exit,
 \ That's 7 cells with a 1-cell DOCOL.
 
 ( old-dp ) dp !

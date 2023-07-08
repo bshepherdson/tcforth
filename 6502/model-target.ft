@@ -74,12 +74,17 @@ host definitions
 \ stack (low address first).
 : asm-lit ( u -- w ... ) dup negate there +!   0 DO there @ i + t@ LOOP ;
 
+\ Compiles code that will itself compile an exit.
+\ Runs while assembling ; for example.
+: EXIT-compile, ( -- )
+  \ RTS is $60
+  $60 tliteral  [T'] c, tcompile, ;
+
 \ Runs during compilation TARGET : DOES> - compile code into its thread!
-host definitions
+
 : TDOES,
   [T'] (DOES>) tliteral  [T'] compile, tcompile,
-  \ RTS is $60
-  $60 tliteral  [T'] c, tcompile,
+  EXIT-compile,
   \ Now the dodoes-code. For STC this receives the parameter field address
   \ on the return (hardware) stack. Shift this to the data stack.
   \ However, the return address is actually 1 byte before the next opcode, so

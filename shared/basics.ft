@@ -3,6 +3,7 @@
 \ ANS Forth standard names and arguments where practical.
 target definitions
 
+host ." Latest: " here hex. cr
 target : LATEST 'latest @ ;
   host acts: latest ;
 \ LATEST gives the name token. Skip over the link pointer and check the length.

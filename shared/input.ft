@@ -169,22 +169,3 @@ target : ABORTED ( -- )
 host presume ACCEPT presume EMIT presume REVERSE
 target
 
-\ REFILL is clever and does the Right Thing for each source type:
-\ Keyboard: ACCEPT
-\ EVALUATE: just return 0
-\ File:     read the next line; return 0 if no more
-\ Block:    chain to the next block, I guess. (: -> refill drop ;)
-target : REFILL ( -- ? )
-  SOURCE-ID -1 = IF 0 EXIT THEN \ EVALUATE - just return 0
-  \ Keyboard - ACCEPT a complete line
-  tib 128 accept ( u )
-  0 >IN !   tib swap 'SOURCE 2! \ Set it up as the new input
-  state @ 0= IF bl emit THEN    \ If interpreting, append a space separator.
-  -1 ;                          \ And return true
-
-target : EVALUATE ( ... c-addr u -- ... )
-  'source 2@ >R >R >IN @ >R
-  0 >IN !   'source 2!
-  interpret
-  R> >IN !   R> R> 'source 2! ;
-

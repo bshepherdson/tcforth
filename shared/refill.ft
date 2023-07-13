@@ -1,0 +1,46 @@
+target definitions
+
+target -1 CONSTANT SRC-EVALUATE
+target  0 CONSTANT SRC-KEYBOARD
+
+\ REFILL is vectored based on the SOURCE-ID. Replace these vectors with
+\ platform-specific ones as needed.
+\ There's room for -2 through +5.
+host definitions
+
+1 tcellbits  1- lshift                 CONSTANT top-bit
+1 tcellbits  lshift 1- invert   -1 and CONSTANT signed-mask
+
+\ Properly sign-extends a target signed number into a host signed number,
+\ should the host's integers be wider than the target's.
+: signed ( tn -- n ) dup top-bit and IF signed-mask or THEN ;
+
+: hex.s ( -- ) base @ >R   hex .s   R> base ! ;
+
+target definitions
+CREATE refillers 8 cells allot
+: refiller ( src-id -- 'refiller-xt ) 2 + cells refillers + ;
+  host acts: signed 2 + tcells [T'] refillers t>body + ;
+target
+
+: REFILL ( -- ? ) source-id refiller @ execute ;
+
+\ Refill for keyboard: ACCEPT a complete line.
+:noname ( -- ? )
+  tib 128 accept ( u )
+  0 >IN !   tib swap 'SOURCE 2! \ Set it up as the new input
+  state @ 0= IF bl emit THEN    \ If interpreting, append a space separator.
+  -1 ; src-keyboard refiller ! \ And return true
+
+\ Refill for EVALUATE: just return 0.
+:noname 0 ; src-evaluate refiller !
+
+\ Pushes a new source and INTERPRETs it.
+target : +SRC ( i*x c-addr u src-id -- j*x )
+  'source 2@ >R >R   >IN @ >R   source-id >R
+  0 >IN !   'source-id !   'source 2!
+  interpret
+  R> 'source-id !   R> >IN !   R> R> 'source 2! ;
+
+target : EVALUATE ( ... c-addr u -- ... ) src-evaluate +SRC ;
+

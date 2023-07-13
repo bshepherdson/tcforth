@@ -60,7 +60,7 @@ VARIABLE loaded-block \ Block number currently loaded
 : +byte ( ch -- ) tib >in @ + c!   1 >in +! ;
 
 \ Reads the next line of text from the disk into TIB.
-: refill-disk ( -- ? )
+:noname ( -- ? )
   0 >IN !
   BEGIN
     disk@ dup 0= IF false EXIT THEN
@@ -69,19 +69,10 @@ VARIABLE loaded-block \ Block number currently loaded
   \ At end of line, set the source length. Then reset >IN to 0.
   \ If >IN is already 0, we've run out of disk and return false.
   tib >in @ 'source 2!   0 >in !   true ;
-
-\ Override the core REFILL with a wrapper.
-refill-xt @
-:noname ( -- ? ) source-id disk-source-id = IF refill-disk EXIT THEN
-  [ host ( old-refill new-refill ) swap tcompile, target ] ;
-refill-xt !
+disk-source-id refillers !
 
 : run-disk ( "[destroys keyboard input]" -- )
   -1 loaded-block ! \ Signals we're at the start of the disk.
-  source-id >R
-  disk-source-id 'source-id !
-  (quit) \ Runs until the disk fails to refill.
-  R> 'source-id !
-  \ That trashed SOURCE, so write an empty source back in.
+  0 0 disk-source-id +src
+  \ That trashed TIB, so write an empty source back in.
   tib 0 'source 2!   0 >IN ! ;
-

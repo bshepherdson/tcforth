@@ -24,16 +24,15 @@ VARIABLE embedding-ptr
   embedding-ptr @ - ( u )
   embedding-ptr @ swap ( c-addr u ) ;
 
+-2 CONSTANT src-embed
+
 \ Loads the next line into TIB ready for input.
-: refill-embed ( -- ready? )
+:noname ( -- ready? )
   next-line ( c-addr u )
   dup char+ embedding-ptr +! \ Gotta skip over the newline
   'source 2!   -2 'source-id !   0 >IN !
   source drop embedded-top < ; \ Still more if the line start if before the end.
-
-: refill-2 ( -- ready? ) source-id -2 = IF refill-embed ELSE refill THEN ;
-' refill-2 refill-xt !
-
+src-embed refillers !
 
 : run-tests ( -- )
   init-hardware

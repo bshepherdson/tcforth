@@ -19,6 +19,7 @@ VARIABLE max-there   0       max-there !
 clean-output
 
 : endpoints! ( t-addr -- )
+  dup $10000 >= ABORT" address too large"
   dup max-there @ max max-there !
       min-there @ min min-there ! ;
 

@@ -26,6 +26,9 @@ $a1 register jiffymd
 $a2 register jiffyhi
 $91 register stopkey \ Flags set by the keyboard registers.
 
+\ Disk and file things.
+$ba register last-dev
+
 \ Keyboard reading and buffer things.
 $c5 register lstx \ Matrix coordinate of last key pressed
 $c6 register ndx  \ Number of characters in keyboard buffer (queue)

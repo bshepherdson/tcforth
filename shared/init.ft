@@ -1,10 +1,6 @@
 \ Last file for the topmost words like QUIT
 target definitions
 
-\ TODO Add DEFER, then use it for things like this refill-xt.
-target VARIABLE refill-xt
-host T' refill   T' refill-xt t>body t! target
-
 target : \   source >in ! drop ; IMMEDIATE
   host acts: native postpone \ host ; IMPERATIVE-BOTH
 
@@ -14,7 +10,7 @@ target : (   41 parse 2drop ; IMMEDIATE
 \ Fundamental multi-line interpreter loop.
 \ Separate from QUIT because it gets called by file readers as well.
 target : (QUIT) ( -- )
-  BEGIN refill-xt @ execute WHILE
+  BEGIN refill WHILE
     [ host T' INTERPRET tliteral target ] catch
     CASE
     0   OF state @ 0=   source-id 0= and IF ."  ok" cr THEN ENDOF
@@ -29,7 +25,7 @@ target : QUIT ( -- )
   [ host rp0 tliteral target ] rp!
   [ host T' [ tcompile, target ]
   10 base !
-  0  'source-id !
+  src-keyboard 'source-id !
   (QUIT) ;
 
 \ Initiates a cold start - locate and init the hardware, then QUIT.
@@ -37,3 +33,5 @@ target : QUIT ( -- )
 
 host   T' COLD   entry-point t!
 
+\ START HERE: Binary search the starting things - it doesn't reach the
+\ prompt because of some bug somewhere.

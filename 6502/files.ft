@@ -1,0 +1,33 @@
+target definitions
+
+-2 CONSTANT SRC-FILE
+
+\ Enough room for 4 files deep nesting.
+\ First cell is the next line start; second is the end pointer.
+\ If they're equal, the file is done.
+CREATE input-files 8 cells allot
+VARIABLE >file-end
+
+:noname ( -- ? )
+  >file-end @
+  dup cell+ @   swap @   dup >R \ ( end curr    R: start )
+  BEGIN 2dup <> WHILE ( end curr )
+    \ Search for a newline, or keep looping.
+    dup c@ $0a = IF \ Found a newline!
+      over 1+   >file-end @ ! \ Overwrite start pointer. ( end curr )
+      tuck -   'source 2!     ( )
+      -1 EXIT
+    THEN
+    1+
+  REPEAT ( end curr )
+  2drop 0 ;
+  src-evaluate refiller @   src-file refiller !
+
+\ TODO: No recursive includes; there isn't the memory for it.
+\ All the files are being written to $c000-cfff (4K max).
+: INCLUDED ( i*x c-addr u -- j*x )
+  $c000 -rot load-file  ( len )
+  $c000 swap src-file ( c-addr u src-id )
+  +src ;
+
+: INCLUDE ( i*x "file" -- j*x ) parse-name included ;

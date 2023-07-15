@@ -88,10 +88,6 @@ $aa implied tax, $a8 implied tay, $ba implied tsx,
 $8a implied txa, $9a implied txs, $98 implied tya,
 
 
-\ START HERE: Adjust the above to STC with the system stack for return stack and
-\ zero page for data stack.
-
-
 \ Constructing a table of bytes indexed by operation index then addressing mode.
 \ There are 23 unique ops.
 23 CONSTANT #addressed

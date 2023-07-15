@@ -38,7 +38,7 @@ $7f CONSTANT mask_len_hidden
 $3f CONSTANT mask_len
 
 \ Other constants
-$0080 CONSTANT sp0
+$0090 CONSTANT sp0
 $ff   CONSTANT rp0
 \ System stack (used for RSP) is empty-descending, so $FF is an empty stack.
 

@@ -8,4 +8,6 @@ target definitions
   ."           TC-FORTH version 8            " cr ;
 '.intro !
 
-: init-hardware ( -- ) init-screen clear ;
+: init-hardware ( -- ) init-screen clear
+  \ $c000 S" sample.ft"
+;

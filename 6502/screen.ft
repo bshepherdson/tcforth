@@ -142,11 +142,6 @@ host presume scroll target
       /screen -   /row / 1+   scroll   /row #rows 1- * THEN THEN
   cursor ! ;
 
-\ START HERE: the division result is good on the way into SCROLL.
-\ Check out what's up in SCROLL that's causing issues.
-\ Sanity check the MOVE as well? Might still be a bug in MOVE< for large
-\ moves.
-
 \ Scrolling ==================================================================
 : (-scroll) ( +chars -- )
   \ Move vram to vram+len for vram-size - length words.

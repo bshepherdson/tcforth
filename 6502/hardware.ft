@@ -1,0 +1,58 @@
+\ Wrappers for KERNAL routines on the C64.
+host definitions
+
+$ffbd CONSTANT k-setnam
+$ffba CONSTANT k-setlfs
+$ffd5 CONSTANT k-load
+
+\ Loading an entire file to memory at a specified address.
+code LOAD-FILE ( dst c-addr u -- len )
+  \ Open the channel file with SETNAM.
+  \ A=len Y:X for the address.
+  wl  tos>ZP,
+  inx, inx,
+  w2l tos>ZP,
+  inx, inx,
+  w3l tos>ZP,
+  txa, pha,
+
+  jam,
+  w2h zp ldy,
+  w2l zp ldx,
+  wl  zp lda,
+  k-setnam $ jsr,
+
+  $01       #  lda, \ Logical file number
+  curdevice zp ldx, \ Device number
+  eq? if,
+    $09 # ldx, \ Defaulting to device 9.
+    curdevice zp stx,
+  then,
+  0   #  ldy,  \ Load to specified address, not per the file.
+  k-setlfs $ jsr,
+
+  w3h zp ldy,   \ Y:X for the dest address
+  w3l zp ldx,
+  0   #  lda,   \ 0 means load, not verify.
+  k-load $ jsr,
+
+  cs? if,       \ Error occurred if carry set.
+    \ A contains the BASIC error code.
+    \ $05 device not present, $04 file not found, $1d load error
+    \ $00 run/stop pressed during loading, which aborts.
+    jam, \ TODO: Error reporting?
+  then,
+
+  \ Y:X is the last byte read. Subtract the starting address from it.
+  sec,
+  tya,
+  w3l zp   sbc,
+  wl  zp   sta,
+  txa,
+  w3h zp   sbc,
+  wh  zp   sta,
+
+  pla, tax,     \ Bring back PSP.
+  wl ZP>tos,    \ And read length to TOS.
+end-code
+

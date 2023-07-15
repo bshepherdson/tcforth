@@ -309,14 +309,14 @@ code R@
     0    zp,x sta,
 end-code
 
-\ Depth is $80 - X, shifted right by 1.
+\ Depth is sp0 - X, shifted right by 1.
 code DEPTH
     wl zp stx,  \ Put the current X into memory.
-    $80 # lda,  \ $80 in A
+    sp0 # lda,  \ top in A
     sec,
-    wl zp sbc,  \ $80-X in A now.
+    wl zp sbc,  \ top-X in A now.
     dex, dex,
-    acc lsr,        \ ($80-X)/2 in A
+    acc lsr,        \ (top-X)/2 in A
     0 zp,x sta, \ That's the low byte.
     0 #    lda,
     1 zp,x sta, \ High byte is always 0.
@@ -913,7 +913,7 @@ label main
   var_dp_ptr 1+ $  lda,
   hereh         zp sta,
 
-  \ The hardware stack starts configured - set up the data stack by setting X to $80.
+  \ The hardware stack starts configured - set up the data stack by setting X.
   sp0 # ldx,
 
   \ Write 7 into $0000 (PLA control) so the low bits of $0001 are outputs.

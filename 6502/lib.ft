@@ -22,3 +22,7 @@ target
 : U/    ( u u -- uq )    U/MOD nip ;
 : UMOD  ( u u -- uq )    U/MOD drop ;
 
+: LSHIFT ( x u -- x' ) ?DUP IF 0 DO 2* LOOP THEN ;
+: RSHIFT ( x u -- x' ) ?DUP IF 0 DO 2/ LOOP THEN ;
+\ TODO: ARSHIFT
+

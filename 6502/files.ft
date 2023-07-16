@@ -1,33 +1,79 @@
 target definitions
 
+VARIABLE DISK
+8 disk !
+
+\ File numbers 2 to 14 are available, so here's 12 bytes.
+\ The records are in INCLUDE stack order, oldest to newest, and each byte holds
+\ the corresponding logical file number.
+CREATE FILES 12 allot
+VARIABLE >FILE
+host T' FILES t>body 1- target >FILE !
+
+VARIABLE FREE-FILES
+$7ffc free-files !
+
+: CLAIM-FILE ( fnum --) 1 swap lshift invert   free-files @ and free-files ! ;
+: FREE-FILE  ( fnum --) 1 swap lshift          free-files @ or  free-files ! ;
+
+: FIND-FILE-SLOT ( -- fnum|0 )
+  15 2 DO 1 i lshift free-files @ and IF
+    i dup claim-file UNLOOP EXIT THEN LOOP 0 ;
+
+
+: R/O 1 ;
+: R/W abort ;
+: W/O abort ;
+: BIN ;
+
+
+: OPEN-FILE ( c-addr u fam -- fnum ior )
+  drop setnam ( )
+  find-file-slot dup
+  disk @ setlfs open   0 ;
+
+: ftest ( -- )
+  S" sample.ft" r/o open-file IF -37 throw THEN
+  $c000 100 rot read-line ;
+
+\ CLOSE-FILE is defined in machine code.
+\ READ-LINE  is defined in machine code.
+
+\ START HERE - Rehab the code below to be based on the new line-by-line reading
+\ of the open file. Reading the lines to $c000 + 256*(fnum-2) so they nest
+\ cleanly. Refill is fairly easy - just watching for the EOF flag!
+
 -2 CONSTANT SRC-FILE
 
-\ Enough room for 4 files deep nesting.
-\ First cell is the next line start; second is the end pointer.
-\ If they're equal, the file is done.
-CREATE input-files 8 cells allot
-VARIABLE >file-end
+\ Lines from files are read to $c000 + 256*(fnum-2) so they don't overlap.
+\ $c000 is 4K = 16 files.
 
-:noname ( -- ? )
-  >file-end @
-  dup cell+ @   swap @   dup >R \ ( end curr    R: start )
-  BEGIN 2dup <> WHILE ( end curr )
-    \ Search for a newline, or keep looping.
-    dup c@ $0a = IF \ Found a newline!
-      over 1+   >file-end @ ! \ Overwrite start pointer. ( end curr )
-      tuck -   'source 2!     ( )
-      -1 EXIT
-    THEN
-    1+
-  REPEAT ( end curr )
-  2drop 0 ;
-  src-evaluate refiller @   src-file refiller !
-
-\ TODO: No recursive includes; there isn't the memory for it.
-\ All the files are being written to $c000-cfff (4K max).
-: INCLUDED ( i*x c-addr u -- j*x )
-  $c000 -rot load-file  ( len )
-  $c000 swap src-file ( c-addr u src-id )
-  +src ;
-
-: INCLUDE ( i*x "file" -- j*x ) parse-name included ;
+\ \ Enough room for 4 files deep nesting.
+\ \ First cell is the next line start; second is the end pointer.
+\ \ If they're equal, the file is done.
+\ CREATE input-files 8 cells allot
+\ VARIABLE >file-end
+\ 
+\ :noname ( -- ? )
+\   >file-end @
+\   dup cell+ @   swap @   dup >R \ ( end curr    R: start )
+\   BEGIN 2dup <> WHILE ( end curr )
+\     \ Search for a newline, or keep looping.
+\     dup c@ $0a = IF \ Found a newline!
+\       over 1+   >file-end @ ! \ Overwrite start pointer. ( end curr )
+\       tuck -   'source 2!     ( )
+\       -1 EXIT
+\     THEN
+\     1+
+\   REPEAT ( end curr )
+\   2drop 0 ;
+\   src-evaluate refiller @   src-file refiller !
+\ 
+\ \ TODO: No recursive includes; there isn't the memory for it.
+\ \ All the files are being written to $c000-cfff (4K max).
+\ : INCLUDED ( i*x c-addr u -- j*x )
+\   $c000 -rot load-file  ( len ) [ host jam, target ]
+\   $c000 swap src-file ( c-addr u src-id )
+\   +src ;
+\ 
+\ : INCLUDE ( i*x "file" -- j*x ) parse-name included ;

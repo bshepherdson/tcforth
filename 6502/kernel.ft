@@ -29,8 +29,6 @@ code AND  ' noop ' and, binary, end-code
 code OR   ' noop ' ora, binary, end-code
 code XOR  ' noop ' eor, binary, end-code
 
-\ TODO: LSHIFT RSHIFT ARSHIFT as Forth loops.
-
 code 2* label 2*-inner  0 zp,x asl,   1 zp,x rol,   end-code
 code 2/                 1 zp,x lsr,   0 zp,x ror,   end-code
 

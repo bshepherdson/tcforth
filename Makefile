@@ -13,7 +13,12 @@ ARM_QEMU ?= qemu-system-arm -M versatilepb -m 128M -nographic
 ARM_PREFIX ?= arm-none-eabi-
 
 VICE_C64 ?= x64sc
-VICE_C64_FLAGS ?=
+VICE_C64_FLAGS ?= -nativemonitor \
+		  -autostartprgmode 1 \
+		  -iecdevice8 \
+		  -drive8type 1541 \
+		  -device8 1 \
+		  -fs8 .
 
 # DCPU cinematic universe - DCPU-16, Risque-16, Mocha 86k
 forth-dcpu16.bin: host/*.ft dcpu16/*.ft shared/*.ft

@@ -17,7 +17,7 @@ target : (QUIT) ( -- )
     -1  OF aborted ENDOF
     ( exc# ) .ERROR cr aborted \ Print error message, clear stacks, and continue
     0 ENDCASE
-  REPEAT ( TODO: BYE ) ;
+  REPEAT ;
 
 \ Empties the return stack, selects keyboard input, forces interpreter state,
 \ and (QUIT)s to keep interpreting.
@@ -26,7 +26,7 @@ target : QUIT ( -- )
   [ host T' [ tcompile, target ]
   10 base !
   src-keyboard 'source-id !
-  (QUIT) ;
+  (QUIT) ( TODO: BYE ) ;
 
 \ Initiates a cold start - locate and init the hardware, then QUIT.
 : cold ( -- ) init-hardware   '.intro @ execute   QUIT ;

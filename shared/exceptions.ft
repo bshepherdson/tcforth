@@ -47,8 +47,8 @@ target : ERR-?COMP     ( -- exc# ) -14 ;
 \ -34 block write exception
 \ -35 invalid block number
 \ -36 invalid file position
-\ -37 file I/O exception
-\ -38 non-existent file
+target : ERR-file-i/o       ( -- exc# ) -37 ;
+target : ERR-no-such-file   ( -- exc# ) -38 ;
 target : ERR-unexpected-EOF ( -- exc# ) -39 ;
 
 target : ABORT ( -- ) -1 throw ;

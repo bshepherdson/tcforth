@@ -35,12 +35,22 @@ target
 \ Refill for EVALUATE: just return 0.
 :noname 0 ; src-evaluate refiller !
 
-\ Pushes a new source and INTERPRETs it.
-target : +SRC ( i*x c-addr u src-id -- j*x )
+\ HACK: Do not call +SRC or -SRC directly; they are tightly coupled and must
+\ be called with care. Use evaluate or (evalmany).
+target : +SRC ( i*x src-id -- j*x )
+  R> ( src-id ret )
   'source 2@ >R >R   >IN @ >R   source-id >R
-  0 >IN !   'source-id !   'source 2!
-  interpret
-  R> 'source-id !   R> >IN !   R> R> 'source 2! ;
+  10000 >IN !   swap 'source-id !
+  ( ret ) >R ;
 
-target : EVALUATE ( ... c-addr u -- ... ) src-evaluate +SRC ;
+target : -SRC ( -- )
+  R> ( ret ) R> 'source-id !   R> >IN !   R> R> 'source 2!   >R ;
+
+target : EVALUATE   ( ... c-addr u -- ... )
+  src-evaluate +SRC 'source 2! interpret -SRC ;
+
+host presume (quit)
+
+\ Begins with REFILL, so doesn't expect an existing string.
+target : (EVALMANY) ( ... src-id -- ... ) +SRC (quit) -SRC ;
 

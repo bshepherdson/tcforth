@@ -477,6 +477,23 @@ label (MOVE>)
   {{ tos }} pop,
 end-code
 
+code FILL ( c-addr u ch -- )
+  \ Character is in TOS
+  {{ r1 r0 }} pop, \ r1 is address, r0 is length
+
+  0 # r0 cmp,
+  fwd b, \ Jump ahead to the loop tail, in case length is 0.
+
+  label FILL-loop
+    1 # r1 []+ tos str,
+    1 # r0 sub,
+    resolve
+    FILL-loop bne, \ Loop until it's 0
+
+  \ Pop a new TOS
+  {{ tos }} pop,
+end-code
+
 
 code (DO) ( limit index --   R: -- limit index )
   {{ r0 }} pop, \ limit -> r0

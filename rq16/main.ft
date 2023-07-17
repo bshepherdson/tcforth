@@ -25,6 +25,7 @@ host REQUIRE ../shared/exceptions.ft
 host REQUIRE model-target.ft
 host REQUIRE ../shared/input.ft
 host REQUIRE ../shared/core2.ft
+host REQUIRE ../shared/refill.ft
 host REQUIRE lib.ft                    \ Division etc. helpers
 host REQUIRE ../dcpu16/hardware.ft     \ DCPU-16 files, but the same HW.
 host REQUIRE ../dcpu16/screen.ft

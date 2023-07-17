@@ -53,9 +53,11 @@ $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
 : tchar+    ( n -- n2 ) 1+ ;
 : tcells    ( n -- n2 ) ;
 : tcell+    ( n -- n2 ) 1+ ;
-: tcompile, t, ;
 : taligned  ( x -- x2 ) ;
 : talign    ( -- ) ;
+
+: tcompile,  ( xt -- )      t, ;
+: tdecompile ( slot -- xt ) t@ ;
 
 16 CONSTANT tcellbits  \ 16 bits per cell
 16 CONSTANT tbits      \ 16 bits per address unit
@@ -168,3 +170,9 @@ $ff80 CONSTANT sp0
 
 label entry-point 0 asm,
 
+\ Space for : and ; ==========================================================
+\ : :   (CREATE) ,docol smudge ] exit    5 cells and the codeword
+: allot-: ( -- ) 6 tcells there +! ;
+\ : ;   EXIT-compile, smudge [ exit
+\ EXIT-compile, pushes: lit + xt + compile, = 3, plus smuge [ exit for 6, plus the codeword = 7
+: allot-; ( -- ) 7 tcells there +! ;

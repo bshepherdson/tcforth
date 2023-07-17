@@ -25,6 +25,8 @@ forth-dcpu16.bin: host/*.ft dcpu16/*.ft shared/*.ft
 	$(FORTH) dcpu16/main.ft dcpu16/disks.ft dcpu16/tail.ft
 
 dcpu16: forth-dcpu16.bin
+run-dcpu16: forth-dcpu16.bin
+	$(EMULATOR) -disk $(DCPU_DISK) forth-dcpu16.bin
 
 forth-rq16.bin: host/*.ft rq16/*.ft shared/*.ft dcpu16/*
 	$(FORTH) rq16/main.ft dcpu16/disks.ft rq16/tail.ft

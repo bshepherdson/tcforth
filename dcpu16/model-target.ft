@@ -43,8 +43,14 @@ target : (DOES>) latest >cfa   $7c20 over !    cell+ R@ cell+ swap ! ;
 host T' (DOES>) '(DOES>) !
 host T' EXIT    'EXIT !
 
-\ Runs during compilation TARGET : DOES> - compile code into its thread!
 host definitions
+
+\ Compiles code that will itself compile an exit.
+\ Runs while assembling ; for example.
+: EXIT-compile, ( -- )
+  'EXIT @ tliteral   [T'] compile, tcompile, ;
+
+\ Runs during compilation TARGET : DOES> - compile code into its thread!
 : TDOES,
   [T'] (DOES>) tliteral  [T'] compile, tcompile,
   [T'] EXIT    tliteral  [T'] compile, tcompile,

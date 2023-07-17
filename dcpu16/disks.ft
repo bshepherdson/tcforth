@@ -69,10 +69,10 @@ VARIABLE loaded-block \ Block number currently loaded
   \ At end of line, set the source length. Then reset >IN to 0.
   \ If >IN is already 0, we've run out of disk and return false.
   tib >in @ 'source 2!   0 >in !   true ;
-disk-source-id refillers !
+disk-source-id refiller !
 
 : run-disk ( "[destroys keyboard input]" -- )
   -1 loaded-block ! \ Signals we're at the start of the disk.
-  0 0 disk-source-id +src
+  disk-source-id (evalmany)
   \ That trashed TIB, so write an empty source back in.
   tib 0 'source 2!   0 >IN ! ;

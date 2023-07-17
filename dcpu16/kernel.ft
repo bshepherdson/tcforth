@@ -385,7 +385,6 @@ end-code
 
 \ Copies src to dst from lower addresses to higher.
 code MOVE< ( src dst u -- )
-label (MOVE<)
   ri ra set, \ Save IP to A for now.
 
   pop rc set, \ Length in C
@@ -407,7 +406,6 @@ end-code
 
 \ Copies src to dst from higher addresses to lower.
 code MOVE> ( src dst u -- )
-label (MOVE>)
   ri ra set, \ Save IP to A for now.
 
   pop rc set, \ Length in C
@@ -430,6 +428,25 @@ label (MOVE>)
   \ Ran out of copy.
   ra ri set, \ Restore IP before NEXT.
 end-code
+
+code FILL ( c-addr u ch -- )
+  ri ra set,  \ Save IP
+  pop rb set, \ Value in B
+  pop rc set, \ Length in C
+  pop ri set, \ Address in I
+
+  fwd pc set, \ Jump ahead to the tail
+
+  label FILL-loop
+    rb [i] sti, \ Store and increment
+    1 # rc sub,
+    resolve
+    0 # rc ifn,
+      FILL-loop # pc set, \ Loop if nonzero.
+
+  ra ri set,
+end-code
+
 
 \ A jsr docol for reference.
 label jsr_docol   docol # jsr,

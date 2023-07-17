@@ -29,8 +29,15 @@ code AND  ' noop ' and, binary, end-code
 code OR   ' noop ' ora, binary, end-code
 code XOR  ' noop ' eor, binary, end-code
 
-code 2* label 2*-inner  0 zp,x asl,   1 zp,x rol,   end-code
-code 2/                 1 zp,x lsr,   0 zp,x ror,   end-code
+code 2*  label 2*-inner  0 zp,x asl,   1 zp,x rol,   end-code
+code 2U/                 1 zp,x lsr,   0 zp,x ror,   end-code
+code 2/
+  clc,
+  1 zp,x lda, \ N is now set accordingly.
+  mi? if,   sec,   then,
+  1 zp,x ror,
+  0 zp,x ror,
+end-code
 
 code LO
   0 #    lda,
@@ -517,6 +524,8 @@ end-code
 code S>D
   dex, dex,
   0 #    lda,
+  3 zp,x ldy, \ Sets N based on the top bit.
+  mi? if,   $ff # lda,   then,
   0 zp,x sta,
   1 zp,x sta,
 end-code
@@ -555,7 +564,13 @@ code UM/MOD ( ulo uhi udiv -- ur uq )
   5 zp,x lda,   wh  zp sta,  \ ulo -> W
   2 zp,x lda,   w2l zp sta,
   3 zp,x lda,   w2h zp sta,  \ uhi -> W2
-  16 # ldy,                    \ bit count -> Y
+  16 # ldy,                  \ bit count -> Y
+
+  0 zp,x lda,
+  1 zp,x ora,
+  eq? if,
+    inx, inx,
+  then,
 
   label UM/MOD-loop
     \ Shift W2:W left as a 32-bit value.

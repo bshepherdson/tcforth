@@ -93,5 +93,3 @@ T{ 3 GI4 -> 3 4 5 6 }T
 T{ 5 GI4 -> 5 6 }T
 T{ 6 GI4 -> 6 7 }T
 
-: done cr cr ." Tests complete" ; done
-bye

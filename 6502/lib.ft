@@ -3,14 +3,7 @@
 target definitions
 
 : U*   ( u u -- p )   UM* D>S ;
-\ : *    ( n m -- n*m )
-\   over 0< over 0< xor >R ( n m    R: neg? )
-\        dup 0< IF negate THEN
-\   swap dup 0< IF negate THEN ( u1 u2 )
-\   U* R> IF negate THEN ;
-\ host acts: * ;
-
-: * ( n m -- n*m ) 2dup xor $8000 and >R   U*   R> IF negate THEN ;
+: *    ( n m -- n*m ) U* ;
   host acts: * ;
 
 target
@@ -22,7 +15,7 @@ target
 : U/    ( u u -- uq )    U/MOD nip ;
 : UMOD  ( u u -- uq )    U/MOD drop ;
 
-: LSHIFT ( x u -- x' ) ?DUP IF 0 DO 2* LOOP THEN ;
-: RSHIFT ( x u -- x' ) ?DUP IF 0 DO 2/ LOOP THEN ;
+: LSHIFT ( x u -- x' ) ?DUP IF 0 DO 2*  LOOP THEN ;
+: RSHIFT ( x u -- x' ) ?DUP IF 0 DO 2U/ LOOP THEN ;
 \ TODO: ARSHIFT
 

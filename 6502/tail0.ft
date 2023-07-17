@@ -1,0 +1,7 @@
+\ Final file that goes last in the process.
+\ This sets Target's LATEST and DP properly, then emits the assembled image.
+
+host definitions
+\ This needs to be the last lines in the target compilation.
+host latest var_latest t!
+host here   var_dp_ptr t!

@@ -47,7 +47,7 @@ target : -SRC ( -- )
   R> ( ret ) R> 'source-id !   R> >IN !   R> R> 'source 2!   >R ;
 
 target : EVALUATE   ( ... c-addr u -- ... )
-  src-evaluate +SRC 'source 2! interpret -SRC ;
+  src-evaluate +SRC   'source 2!   0 >IN !   interpret -SRC ;
 
 host presume (quit)
 

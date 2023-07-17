@@ -28,10 +28,9 @@ target : QUIT ( -- )
   src-keyboard 'source-id !
   (QUIT) ( TODO: BYE ) ;
 
-\ Initiates a cold start - locate and init the hardware, then QUIT.
-: cold ( -- ) init-hardware   '.intro @ execute   QUIT ;
+\ Basic startup
+: boot ( -- ) init-hardware   10 base !   '.intro @ execute ;
+\ "Cold" start, loading interactive mode.
+: cold ( -- ) boot QUIT ;
 
 host   T' COLD   entry-point t!
-
-\ START HERE: Binary search the starting things - it doesn't reach the
-\ prompt because of some bug somewhere.

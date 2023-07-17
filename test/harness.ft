@@ -38,5 +38,5 @@ VARIABLE error-xt
     THEN
   ELSE
     S" WRONG NUMBER OF RESULTS: " error
-  THEN ;
+  THEN $2e emit ;
 

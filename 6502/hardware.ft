@@ -65,6 +65,81 @@ end-code
 \ TODO: A file that ends with a nonempty line but has no newline never shows
 \ as EOF - it always claims one byte was read. Minor issue, but needs resolving
 \ eventually.
+
+\ Subtract the final dest from the original dest to get the length.
+\ Y=0 if we found a newline, and Y=1 if we found a full EOF.
+label READ-LINE-cr
+  $ff # ldy,    \ Found an actual CR
+  k-readst $ jsr, \ Read status byte
+  ne? if,
+    0 # ldy,
+  then,
+label READ-LINE-done
+  k-clrchn $ jsr, \ Clear the I/O channels; this preserves Y.
+  pla, tax,       \ Bring back the Forth stack.
+  sec,
+  w3l zp   lda,
+  4   zp,x sbc,
+  4   zp,x sta,
+  w3h zp   lda,
+  5   zp,x sbc,
+  5   zp,x sta, \ length read -> u2
+
+  \ If we found a real CR/LF, this is a blank line and Y=$ff.
+  \ The other possibility is we got here via the EOF flag, if there's no CRLF
+  \ at the end of the file.
+  4   zp,x lda,
+  5   zp,x ora,
+  ne? if,
+    $ff # ldy,  \ If we read anything, set Y to $ff.
+  then,
+
+  \ Y=00: EOF flag and nothing read; or
+  \ Y=ff: Nonzero read, or found a newline.
+  2   zp,x sty,
+  3   zp,x sty, \ more? flag
+  0   #    lda,
+  0   zp,x sta,
+  1   zp,x sta, \ 0 -> ior, no error
+  rts,
+
+label READ-LINE-loop
+  k-readst $ jsr,   \ Read status byte
+  ne? if,           \ EOF or read error
+    $40 # and,
+    ne? if,         \ EOF
+      READ-LINE-done $ jmp,
+    then,
+
+    \ Not EOF, therefore an error. Returns 0 0 1 for now.
+    \ TODO: Read the drive error channel for real details.
+    0 # lda,
+    1 zp,x sta,
+    2 zp,x sta,   3 zp,x sta,
+    4 zp,x sta,   5 zp,x sta,
+    1 #    lda,
+    0 zp,x sta,
+    rts,
+  then,
+
+  \ Ready to read: call CHRIN to get a byte.
+  k-chrin $ jsr,     \ b -> A
+  w3l    (zp),y sta, \ -> (W3)
+
+  \ Check if the read byte was a line terminator.
+  \ It's still in A.
+  $0d # cmp,
+  READ-LINE-cr beq,
+  $0a # cmp,
+  READ-LINE-cr beq,
+
+  w3l zp     inc,
+  eq? if,   w3h zp inc,   then,
+
+  \ If not, keep looping.
+  READ-LINE-loop $ jmp,
+  \ Never reaches here - the exit conditions are inside the loop.
+
 code READ-LINE ( c-addr u1 logical-file-number -- u2 flag ior )
   0 zp,x lda,   wl  zp sta, \ fnum -> Wlo
   2 zp,x lda,   w2l zp sta,
@@ -78,118 +153,7 @@ code READ-LINE ( c-addr u1 logical-file-number -- u2 flag ior )
   k-chkin $ jsr,
 
   0 # ldy, \ READST and CHRIN preserve Y, for exactly this reason.
-  label READ-LINE-loop
-    k-readst $ jsr,   \ Read status byte
-    ne? if,           \ EOF or read error
-      $40 # and,
-      ne? if,         \ EOF
-        \ Subtract the final dest from the original dest to get the length.
-        label READ-LINE-done
-        pla, tax,       \ Bring back the Forth stack.
-        sec,
-        w3l zp   lda,
-        4   zp,x sbc,
-        4   zp,x sta,
-        w3h zp   lda,
-        5   zp,x sbc,
-        5   zp,x sta, \ length read -> u2
-
-        \ At EOF, the flag is true if anything was read, false for empty read.
-        $ff #    ldy,
-        4   zp,x lda,
-        5   zp,x ora,
-        eq? if,
-          0 # ldy,
-        then,
-        2   zp,x sty,
-        3   zp,x sty, \ result -> flag
-        0   #    lda,
-        0   zp,x sta,
-        1   zp,x sta, \ 0 -> ior, no error
-        rts,
-      then,
-      \ Not EOF, therefore an error. Returns 0 0 1 for now.
-      \ TODO: Read the drive error channel for real details.
-      0 # lda,
-      1 zp,x sta,
-      2 zp,x sta,   3 zp,x sta,
-      4 zp,x sta,   5 zp,x sta,
-      1 #    lda,
-      0 zp,x sta,
-      rts,
-    then,
-
-    \ Ready to read: call CHRIN to get a byte.
-    k-chrin $ jsr,  \ b -> A
-    w3l (zp),y sta, \ -> (W3)
-
-    \ Check if the read byte was a line terminator.
-    \ It's still in A.
-    $0d # cmp,
-    READ-LINE-done beq,
-    $0a # cmp,
-    READ-LINE-done beq,
-
-    w3l zp     inc,
-    eq? if,   w3h zp inc,   then,
-
-    \ If not, keep looping.
-    READ-LINE-loop $ jmp,
-
-    \ Never reaches here - the exit conditions are inside the loop.
+  READ-LINE-loop beq,
+  jam,
 end-code-bare
-
-
-\ Reads a SEQ file from a 1541-type floppy drive one (PETSCII or ASCII) line
-\ at a time. PETSCII uses $0d carriage returns; ASCII uses Unix $0a line feeds.
-\ The big advantage here is that we can push the file pointers into the drive's
-\ own memory instead of spending C64 memory on it.
-\ Loading an entire file to memory at a specified address.
-code LOAD-FILE ( dst c-addr u -- len )
-  \ Open the channel file with SETNAM.
-  \ A=len Y:X for the address.
-  wl  tos>ZP,
-  inx, inx,
-  w2l tos>ZP,
-  inx, inx,
-  w3l tos>ZP,
-  txa, pha,
-
-  w2h zp ldy,
-  w2l zp ldx,
-  wl  zp lda,
-  k-setnam $ jsr,
-
-  $01       #  lda, \ Logical file number
-  curdevice zp ldx, \ Device number
-  eq? if,
-    $09 # ldx, \ Defaulting to device 9.
-  then,
-  0   #  ldy,  \ Load to specified address, not per the file.
-  k-setlfs $ jsr,
-
-  w3h zp ldy,   \ Y:X for the dest address
-  w3l zp ldx,
-  0   #  lda,   \ 0 means load, not verify.
-  k-load $ jsr,
-
-  cs? if,       \ Error occurred if carry set.
-    \ A contains the BASIC error code.
-    \ $05 device not present, $04 file not found, $1d load error
-    \ $00 run/stop pressed during loading, which aborts.
-    jam, \ TODO: Error reporting?
-  then,
-
-  \ Y:X is the last byte read. Subtract the starting address from it.
-  sec,
-  tya,
-  w3l zp   sbc,
-  wl  zp   sta,
-  txa,
-  w3h zp   sbc,
-  wh  zp   sta,
-
-  pla, tax,     \ Bring back PSP.
-  wl ZP>tos,    \ And read length to TOS.
-end-code
 

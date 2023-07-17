@@ -43,7 +43,7 @@ run-mocha86k: forth-mocha86k.bin
 
 test.disk: test/*.ft
 	cat test/harness.ft test/basics.ft test/comparisons.ft test/arithmetic.ft \
-		test/parsing.ft test/rest.ft > test.disk
+		test/parsing.ft test/rest.ft test/end.ft > test.disk
 
 test-dcpu16: forth-dcpu16.bin test.disk test.dcs FORCE
 	$(EMULATOR) -turbo -disk test.disk -script test.dcs forth-dcpu16.bin
@@ -74,10 +74,16 @@ test-arm: forth-arm-tests.bin test.disk FORCE
 forth-c64.prg: host/*.ft 6502/*.ft shared/*.ft
 	$(FORTH) 6502/main.ft 6502/tail.ft
 
+forth-c64-test.prg: host/*.ft 6502/*.ft shared/*.ft
+	$(FORTH) 6502/main.ft 6502/test-tail.ft
+
 c64: forth-c64.prg
 
 run-c64: forth-c64.prg
 	$(VICE_C64) $(VICE_C64_FLAGS) forth-c64.prg
+
+test-c64: forth-c64-test.prg FORCE
+	$(VICE_C64) $(VICE_C64_FLAGS) -warp forth-c64-test.prg
 
 test: test-dcpu16 test-rq16 test-mocha86k test-arm FORCE
 

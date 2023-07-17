@@ -51,7 +51,10 @@ host T' FILES t>body 1- target >FILE !
   dup 2 - pages $c000 or   dup >R   256 rot ( c-addr u fnum  R: dst )
   read-line ( len more? ior ) IF err-file-i/o throw THEN ( len more? )
   IF ( len ) 0 >IN !   R> swap 'source 2!   true
-  ELSE R> 2drop ( ) -1 >file +!   false THEN ;
+  ELSE
+    R> 2drop ( )
+    >file @ c@ close-file IF err-file-i/o throw THEN
+    -1 >file +!   false THEN ;
   src-file refiller !
 
 : INCLUDED ( i*x c-addr u -- j*x )

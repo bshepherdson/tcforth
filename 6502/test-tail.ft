@@ -1,0 +1,46 @@
+\ Target file intended to be called just before tail.ft
+\ It overrides the entry point so that the tests are run immediately.
+target definitions
+
+here 64 allot CONSTANT test-file
+VARIABLE /test-file
+
+: test-label! ( c-addr u -- )
+  dup 8 + /test-file !
+  test-file 5 +       swap move
+  S" test/" test-file swap move
+  S" .ft"   test-file /test-file @ 3 - +   swap move ;
+
+: source0 ( -- c-addr u ) source   >in @ negate /string ;
+
+VARIABLE test-failed?   0 test-failed? !
+VARIABLE empty-stack-xt
+
+: error-details ( c-addr u -- )
+  true test-failed? !
+  cr type cr source type quit ;
+
+: test-suite ( c-addr u -- )
+  2dup type test-label!
+  test-file /test-file @ included
+  ." pass" cr ;
+
+: run-tests ( -- )
+  boot
+  ." Unit test suite loading..."
+  S" test/harness.ft" included   ." ready" cr cr
+  S" ' error-details error-xt !" evaluate
+  S" basics"      test-suite cr
+  S" comparisons" test-suite cr
+  S" arithmetic"  test-suite cr
+  S" parsing"     test-suite cr
+  S" rest"        test-suite cr
+  ." Tests passed!" cr
+  quit ;
+
+host   T' run-tests   entry-point t!
+require tail0.ft
+
+here hex. cr
+S" forth-c64-test.prg" emit-prg
+bye

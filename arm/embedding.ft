@@ -32,7 +32,7 @@ VARIABLE embedding-ptr
   dup char+ embedding-ptr +! \ Gotta skip over the newline
   'source 2!   -2 'source-id !   0 >IN !
   source drop embedded-top < ; \ Still more if the line start if before the end.
-src-embed refillers !
+src-embed refiller !
 
 : run-tests ( -- )
   init-hardware

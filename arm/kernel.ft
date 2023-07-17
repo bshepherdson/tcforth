@@ -430,6 +430,23 @@ code MOVE> ( src dst u -- ) \ Copies from high addresses to low.
   {{ tos }} pop,
 end-code
 
+code FILL ( c-addr u ch -- )
+  \ Length is in TOS
+  {{ r1 r0 }} pop, \ r1 is address, r0 is length
+
+  0 # r0 cmp,
+  fwd b, \ Jump ahead to the loop tail, in case length is 0.
+
+  \ TODO Word-sized copying for speed?
+  label FILL-loop
+    1 # r1 []+ tos strb,
+    1 # r0 r0 S sub,
+    resolve
+    ne? FILL-loop b, \ Loop until it's 0
+
+  \ Pop a new TOS
+  {{ tos }} pop,
+end-code
 
 \ TODO Index in register? ARM has tons to spare, and it'll be faster.
 code (DO) ( limit index --   R: -- limit index )

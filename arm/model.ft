@@ -39,9 +39,11 @@ there @ b,
 : tchar+    ( n -- n2 ) 1+ ;
 : tcells    ( n -- n2 ) 2 lshift ;
 : tcell+    ( n -- n2 ) 4 + ;
-: tcompile, t, ;
 : taligned  ( x -- x2 ) 3 + 3 invert and ;
 : talign    ( -- )      here taligned dp ! ;
+
+: tcompile,  ( xt -- )      t, ;
+: tdecompile ( slot -- xt ) t@ ;
 
 32 CONSTANT tcellbits  \ 32 bits per cell
  8 CONSTANT tbits      \ 8 bits per address unit
@@ -157,3 +159,9 @@ $01fff7fc CONSTANT sp0 \ Fix main if this is changed.
 
 label entry-point 0 asm,
 
+\ Space for : and ; ==========================================================
+\ : :   (CREATE) ,docol smudge ] exit    5 cells and the codeword
+: allot-: ( -- ) 6 tcells there +! ;
+\ : ;   EXIT-compile, smudge [ exit
+\ EXIT-compile, pushes: lit + xt + compile, = 3, plus smuge [ exit for 6, plus the codeword = 7
+: allot-; ( -- ) 7 tcells there +! ;

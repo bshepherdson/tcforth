@@ -61,6 +61,9 @@ host definitions
 \ Moves THERE back by 1 cell and pushes the most recently compiled word.
 : asm-lit ( -- w ) -4 there +!   here t@ ;
 
+: EXIT-compile, ( -- )
+  'EXIT @ tliteral   [T'] compile, tcompile, ;
+
 : TDOES,
   [T'] (DOES>) tliteral  [T'] compile, tcompile,
   [T'] EXIT    tliteral  [T'] compile, tcompile,

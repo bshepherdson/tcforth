@@ -87,13 +87,7 @@ run-c64: forth-c64.prg
 test-c64: forth-c64-test.prg FORCE
 	$(VICE_C64) $(VICE_C64_FLAGS) -warp forth-c64-test.prg
 
-test: test-dcpu16 test-rq16 test-mocha86k test-arm FORCE
-
-zmachine.bin: forth-rq16.bin apps/zmachine/*
-	$(FORTH) rq16/main.ft dcpu16/disks.ft apps/zmachine/main.ft rq16/tail.ft
-
-run-zm: zmachine.bin FORCE
-	$(EMULATOR) -arch rq -disk apps/zmachine/Zork1.z5 zmachine.bin
+test: test-dcpu16 test-rq16 test-mocha86k test-arm test-c64 FORCE
 
 clean: FORCE
 	rm -f *.bin forth-c64.prg test.disk serial.in serial.out

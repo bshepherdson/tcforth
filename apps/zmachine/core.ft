@@ -1,7 +1,0 @@
-\ Constants and core values.
-target definitions
-$8000 CONSTANT zram
-CREATE zpc 2 cells allot
-CREATE zstack 256 cells allot
-VARIABLE zsp
-

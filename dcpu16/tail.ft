@@ -1,12 +1,10 @@
 \ Final file that goes last in the process.
-\ This sets Target's LATEST and DP properly, then emits the assembled image.
-
+\ This sets Target's LATEST and DP properly.
 host definitions
 \ This needs to be the last lines in the target compilation.
 host latest var_latest t!
 host here   var_dp     t!
 
-\ At this point the assembler's output region should be complete. Dump the
-\ resulting binary.
-S" forth-dcpu16.bin" dump
-bye
+\ The assembled image must be emitted with
+\   S" filename" dump
+\ but that's handled with -e in the Makefile

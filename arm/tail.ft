@@ -1,5 +1,5 @@
 \ Final file that goes last in the process.
-\ This sets Target's LATEST and DP properly, then emits the assembled image.
+\ This sets Target's LATEST and DP properly.
 
 host definitions
 \ This needs to be the last lines in the target compilation.
@@ -7,7 +7,4 @@ host latest var_latest t!
 host here   var_dp     t!
 
 \ At this point the assembler's output region should be complete. Dump the
-\ resulting binary.
-
-output-file-xt @ execute dump
-bye
+\ resulting binary with -e 'output-file-xt @ execute dump'

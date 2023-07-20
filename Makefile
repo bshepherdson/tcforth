@@ -11,6 +11,7 @@ DCPU_DISK ?= /dev/null
 
 ARM_QEMU ?= qemu-system-arm -M versatilepb -m 128M -nographic
 ARM_PREFIX ?= arm-none-eabi-
+ARM_DUMP ?= -e 'output-file-xt @ execute dump bye'
 
 VICE_C64 ?= x64sc
 VICE_C64_FLAGS ?= -nativemonitor \
@@ -22,21 +23,24 @@ VICE_C64_FLAGS ?= -nativemonitor \
 
 # DCPU cinematic universe - DCPU-16, Risque-16, Mocha 86k
 forth-dcpu16.bin: host/*.ft dcpu16/*.ft shared/*.ft
-	$(FORTH) dcpu16/main.ft dcpu16/disks.ft dcpu16/tail.ft
+	$(FORTH) dcpu16/main.ft dcpu16/disks.ft dcpu16/tail.ft \
+		-e 'S" forth-dcpu16.bin" dump bye'
 
 dcpu16: forth-dcpu16.bin
 run-dcpu16: forth-dcpu16.bin
 	$(EMULATOR) -disk $(DCPU_DISK) forth-dcpu16.bin
 
 forth-rq16.bin: host/*.ft rq16/*.ft shared/*.ft dcpu16/*
-	$(FORTH) rq16/main.ft dcpu16/disks.ft rq16/tail.ft
+	$(FORTH) rq16/main.ft dcpu16/disks.ft rq16/tail.ft \
+		-e 'S" forth-rq16.bin" dump bye'
 
 rq16: forth-rq16.bin
 run-rq16: forth-rq16.bin
 	$(EMULATOR) -arch rq -disk $(DCPU_DISK) forth-rq16.bin
 
 forth-mocha86k.bin: host/*.ft mocha86k/*.ft shared/*.ft dcpu16/*.ft
-	$(FORTH) mocha86k/main.ft dcpu16/disks.ft mocha86k/tail.ft
+	$(FORTH) mocha86k/main.ft dcpu16/disks.ft mocha86k/tail.ft \
+		-e 'S" forth-mocha86k.bin" dump bye'
 
 mocha86k: forth-mocha86k.bin
 
@@ -59,7 +63,7 @@ test-mocha86k: forth-mocha86k.bin test.disk test-long.dcs FORCE
 
 # Bare metal ARMv7 32-bit
 forth-arm.bin: host/*.ft arm/*.ft shared/*.ft
-	$(FORTH) arm/main.ft arm/tail.ft
+	$(FORTH) arm/main.ft arm/tail.ft $(ARM_DUMP)
 	arm-none-eabi-objdump -b binary -m armv4t -D forth-arm.bin > forth.disasm
 
 arm: forth-arm.bin
@@ -67,17 +71,18 @@ run-arm: forth-arm.bin
 	$(ARM_QEMU) -kernel forth-arm.bin
 
 forth-arm-tests.bin: host/*.ft arm/*.ft shared/*.ft test.disk
-	$(FORTH) arm/main.ft arm/embedding.ft arm/tail.ft
+	$(FORTH) arm/main.ft arm/embedding.ft arm/tail.ft $(ARM_DUMP)
 
 test-arm: forth-arm-tests.bin test.disk FORCE
 	$(ARM_QEMU) -kernel forth-arm-tests.bin
 
 # Commodore 64
 forth-c64.prg: host/*.ft 6502/*.ft shared/*.ft
-	$(FORTH) 6502/main.ft 6502/tail.ft
+	$(FORTH) 6502/main.ft 6502/tail.ft -e 'S" forth-c64.prg" emit-prg bye'
 
 forth-c64-test.prg: host/*.ft 6502/*.ft shared/*.ft
-	$(FORTH) 6502/main.ft 6502/test-tail.ft
+	$(FORTH) 6502/main.ft 6502/test-tail.ft \
+		-e 'S" forth-c64-test.prg" emit-prg bye'
 
 c64: forth-c64.prg
 

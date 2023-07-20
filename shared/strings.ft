@@ -2,6 +2,7 @@
 target definitions
 
 target : CHAR   ( "<spaces>name" -- char ) parse-name drop c@ ;
+  host acts: char ;
 target : [CHAR] ( "<spaces>name" --    X: -- char )
     parse-name drop c@   postpone literal ; IMMEDIATE
   host acts: char tliteral ; IMPERATIVE

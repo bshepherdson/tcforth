@@ -26,7 +26,7 @@ target : ,DOSTRING ( c-addr u -- )
 
 \ No alignment on Risque-16 and other wordy machines.
 target : ALIGNED ;
-target : ALIGN ;
+target : ALIGN ; host acts: ;
 
 \ This is actually portable but since it fits right here between ALIGNED and
 \ (DOES>), there's no good place to put it with splitting this file into 3.

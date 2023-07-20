@@ -41,8 +41,8 @@ target : EXIT [ host $60 tliteral target ] c, ; IMMEDIATE
   host acts: $60 tc, ; IMPERATIVE
 
 \ No alignment on 6502.
-target : ALIGNED ;
-target : ALIGN ;
+target : ALIGNED ; host acts: ;
+target : ALIGN ; host acts: ;
 
 \ This is actually portable but since it fits right here between ALIGNED and
 \ (DOES>), there's no good place to put it with splitting this file into 3.

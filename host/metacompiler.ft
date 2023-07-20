@@ -22,7 +22,7 @@
         2dup s>number? IF ( ca u d )
           D>S >R 2drop R> ( n ) tliteral
         ELSE \ Unknown word!
-          2drop ." *** Undefined Target word: " type cr 1 (bye)
+          2drop 1 ABORT" *** Undefined Target word: " type cr 1 (bye)
         THEN ( )
       THEN ( )
     ELSE ( c-addr ) refill 2drop THEN ( )
@@ -137,12 +137,18 @@ host definitions
 
 \ Some host-side actions for CODE words, like @ and !
 'mirror @
+(T') +     'mirror !   act +
+(T') -     'mirror !   act -
 (T') @     'mirror !   act t@
 (T') !     'mirror !   act t!
 (T') ,     'mirror !   act t,
 (T') c,    'mirror !   act tc,
 (T') cells 'mirror !   act tcells
 (T') dup   'mirror !   act dup
+
+\ Not all machines define * in kernel code.
+<T'> * :noname IF 'mirror ! act * THEN ; execute
+
 'mirror !
 
 \ Hand-roll the target+mirror definitions for : and ;

@@ -27,7 +27,9 @@ target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , 
 
 \ 4-byte alignment on ARM 32-bit.
 target : ALIGNED   3 + 3 invert and ;
+  host acts: 3 + 3 invert and ;
 target : ALIGN     here aligned dp ! ;
+  host acts: here 3 + 3 invert and there ! ;
 
 \ This is actually portable but since it fits right here between ALIGNED and
 \ (DOES>), there's no good place to put it with splitting this file into 3.

@@ -29,11 +29,13 @@ host REQUIRE ../shared/exceptions.ft
 host REQUIRE model-target.ft
 host REQUIRE ../shared/input.ft
 host REQUIRE ../shared/core2.ft
+host REQUIRE ../shared/refill.ft
 host REQUIRE lib.ft                    \ Division etc. helpers
 host REQUIRE hardware.ft               \ Can't borrow from DCPU-16; 32-bit values differ
 host REQUIRE ../dcpu16/screen.ft       \ Can borrow DCPU-16's screen handler
 host REQUIRE ../shared/output.ft
 host REQUIRE ../shared/error-messages.ft
+host REQUIRE ../dcpu16/disks.ft        \ DCPU-16/Risque-16 floppy drive
 host REQUIRE ../dcpu16/intro.ft        \ DCPU-16/Risque-16 HW init; intro msg
 host REQUIRE ../shared/init.ft         \ Shared init code.
 

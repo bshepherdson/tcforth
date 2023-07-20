@@ -54,7 +54,9 @@ $deadbeef # pc setl, \ Forcing an unsigned-long jump. Target will get adjusted.
 : tchar+    ( n -- n2 ) 1+ ;
 : tcells    ( n -- n2 ) 2* ;
 : tcell+    ( n -- n2 ) 2 + ;
-: tcompile, t, ;
+
+: tcompile,  ( xt -- )      t, ;
+: tdecompile ( slot -- xt ) t@ ;
 
 \ There's no longword-alignment on Mocha 86k, so alignment is a no-op.
 : taligned  ( x -- x2 ) ;
@@ -183,3 +185,10 @@ $0ff7e CONSTANT sp0 \ See discussion under DEPTH in kernel.ft
 
 label entry-point 0 t,
 
+
+\ Space for : and ; ==========================================================
+\ : :   (CREATE) ,docol smudge ] exit    5 cells and the codeword
+: allot-: ( -- ) 6 tcells there +! ;
+\ : ;   EXIT-compile, smudge [ exit
+\ EXIT-compile, pushes: lit + xt + compile, = 3, plus smuge [ exit for 6, plus the codeword = 7
+: allot-; ( -- ) 7 tcells there +! ;

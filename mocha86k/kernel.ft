@@ -444,6 +444,22 @@ code MOVE> ( src dst u -- )
   pop tos setl,
 end-code
 
+\ Copies src to dst from lower addresses to higher.
+code FILL ( c-addr u ch -- )
+  pop rc setl, \ Len in C
+  pop ra setl, \ Address in A
+  \ brk,
+
+  fwd-always,  \ Jump ahead to the loop tail.
+
+  label FILL-loop
+    tos  [a]+ setw, \ Write a word.
+    resolve         \ Resolve the above fwd reference.
+    FILL-loop   rc bnzdl, \ If length nonzero, decrement and loop.
+
+  pop tos setl,
+end-code
+
 
 code (DO) ( limit index --   R: -- limit index )
   pop pushrsp,

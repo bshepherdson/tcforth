@@ -21,23 +21,44 @@
 \ Brad Rodriguez in Moving Forth gives the example of:
 \ W=DE, IP=BC, PSP=SP, RSP=IX, TOS=memory
 
-\ First crack:
-\ W    DE, with BC as X for further scratch area
-\ IP   IY
-\ PSP  SP?
-\ RSP  IX?
+\ There's a lot of assymmetry in the various registers.
+\ For example, there's LD SP, HL but not the reverse.
+\ There's EX DE, HL but nothing for BC.
+
+\ There's EX (SP), HL/IX/IY (which makes HL) a tempting TOS-in-register target?
+
+\ IX and IY can only be loaded with:
+\ - immediates
+\ - absolute reads,
+\ - POP
+
+\ IX and IY can only be sent to:
+\ - absolute writes
+\ - PUSH
+\ - SP
+
+\ SP can only be loaded with:
+\ - Immediates
+\ - HL, IX and IY
 
 \ First the inner interpreter: NEXT, ENTER, EXIT
 \ DTC ========================================================================
 \ NEXT - jump to (IP++), post-incrementing
-\ With IP in IY, that's punishingly slow to increment.
-\ So let's try with IP=BC as BJR suggested:
+\ With IP=BC:
 bc push,   \ 1B 11c
 bc inc-rr, \ 1B  6c
 bc inc-rr, \ 1B  6c
 ret,       \ 1B 10c  = 4B 33c
 
 \ ENTER - push IP to return stack, set IP to data area
+\ Putting a CALL in the slot, that pushes the new thread onto the (data) stack.
+enter call,       \ 3B 17c
+
+\ enter: TOS is the new IP; old IP is in
+\ START HERE: EX (SP), ?? probably?
+
+
+
 ix dec,           \ 2B 10c
 0 ix b ld-(i+#),r \ 3B 19c
 ix dec,           \ 2B 10c
@@ -53,9 +74,6 @@ ix inc,           \ 2B 10c = 10B 58c
 
 \ ITC ========================================================================
 \ NEXT - Load (IP) to W or X, increment IP, jump to (X)
-
-\ START HERE and figure out a good combination
-
 
 
 
@@ -225,4 +243,3 @@ label DOSTRING
 $ff80 CONSTANT sp0
 
 label entry-point 0 asm,
-

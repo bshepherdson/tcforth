@@ -21,10 +21,11 @@ Forth.
 | Hosted ARM      | ARM v7+ | `arm`    | DTC | Working |
 | [DCPU-16](https://github.com/techcompliant/TC-Specs/blob/master/CPU/DCPU.md) | DCPU-16 | `dcpu16` | DTC | Working |
 | [Risque-16](https://github.com/bshepherdson/risque16) | Risque-16 | `rq16` | ITC | Working |
-| Commodore 64    | 6502    | `c64`    | TBD | In progress |
-| [Mocha 86k](https://github.com/bshepherdson/mocha86k) | Mocha 86k | `mocha` | TBD | Planned |
-| Apple \]\[      | 6502    | `apple2` | TBD | Planned |
-| Gameboy Advance | ARM v7  | `gba`    | TBD | Planned |
+| Commodore 64    | 6502    | `c64`    | STC | Working |
+| [Mocha 86k](https://github.com/bshepherdson/mocha86k) | Mocha 86k | `mocha` | DTC | Working |
+| Apple \]\[      | 6502    | `apple2` | STC? | Planned |
+| Bare metal ARM  | ARM v7  | `arm` | DTC | Working |
+| Gameboy Advance | ARM v7  | `gba`    | DTC? | Planned |
 
 ### Models
 
@@ -103,7 +104,7 @@ thread of bytes; and it tends to be slower than ITC.
 ## Building
 
 Generally you can `make $target` to build an image for the target machine: eg.
-`make dcpu16`.
+`make dcpu16`. `make run-$target` to run the emulator for an interactive session.
 
 
 ## Test Suite
@@ -133,7 +134,7 @@ Here are the steps for porting to a new machine:
 - Write an assembler for that machine.
 - Choose a similar target machine and duplicate its `$machine/main.ft`; the load
   order of the various metacompiler stages is a bit involved.
-- Choose the Forth model
+- Choose the Forth model and implement `model.ft`
 
 ## Target Specifics
 
@@ -164,4 +165,3 @@ It's possible to run the metacompiler over your application, rather than
 building a standalone Forth kernel for the target machine.
 
 Once I've tried to do this, I plan to write a guide.
-

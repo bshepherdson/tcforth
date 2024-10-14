@@ -147,7 +147,7 @@ host definitions
 (T') dup   'mirror !   act dup
 
 \ Not all machines define * in kernel code.
-<T'> * :noname IF 'mirror ! act * THEN ; execute
+<T'> * [IF] (T') * 'mirror ! act * [THEN]
 
 'mirror !
 

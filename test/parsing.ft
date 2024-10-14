@@ -13,4 +13,3 @@ T{ GP1-after GP1 -      ->   1 cells }T
 T{ : GP2 ['] GP1 ; ->       }T
 T{ GP2             -> ' GP1 }T
 T{ GP2 execute     -> GP1   }T
-

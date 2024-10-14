@@ -36,6 +36,8 @@ target : ALIGN     here aligned dp ! ;
 target : >CFA ( nt -- xt )
   cell+ dup c@ [ host mask_len tliteral target ] and + char+ aligned ;
 
+target : >BODY ( xt -- addr ) cell+ ;
+
 \ Compiles a string literal into a thread.
 \ On ITC/DTC that means the address of DOSTRING, the length, then the words.
 target : ,DOSTRING ( c-addr u -- )

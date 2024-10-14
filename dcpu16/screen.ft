@@ -63,17 +63,21 @@ $7 COLOUR grey
 : reverse ( -- ) (colours) @ reversed (colours) ! ;
 
 \ Wipes u cells from start index (not an address!) with blank spaces.
-: wipe ( start u -- ) >R vram + R> over + swap DO bl coloured i c! LOOP ;
+: wipe-abs ( addr u -- ) over + swap DO bl coloured i c! LOOP ;
+: wipe ( start u -- ) >R vram + R> wipe-abs ;
 
 \ Cursor handling ============================================================
 VARIABLE cursor \ Index into the VRAM
 
 12 CONSTANT #rows
 32 CONSTANT /row
+: rows ( lines -- chars ) 5 lshift ;
 
 \ Sets the whole screen to spaces in the current colour.
 \ Moves the cursor to 0 as well.
-: clear ( -- ) 0   #rows /row *   wipe   0 cursor ! ;
+: clear      ( -- ) 0   #rows /row *   wipe   0 cursor ! ;
+: home       ( -- ) cursor @ /row mod negate cursor +! ;
+: clear-line ( -- ) home   cursor @ 32 wipe ;
 
 \ Returns the pointer into VRAM of the current cursor.
 : >cursor ( -- addr ) cursor @ vram + ;
@@ -82,7 +86,8 @@ VARIABLE (cur-ch)
 : vacate ( -- ) (cur-ch) @ >cursor c! ;
 : arrive ( -- ) >cursor c@  dup (cur-ch) !   reversed >cursor c! ;
 
-: at-xy ( col row -- ) vacate   /row * + cursor !   arrive ;
+: at-xy  ( col row -- ) vacate   /row * + cursor !   arrive ;
+: cur-xy ( -- col row ) cursor @ /row /mod ;
 
 host presume scroll target
 
@@ -94,27 +99,52 @@ host presume scroll target
 
 
 \ Scrolling ==================================================================
-\ Scrolls by lines. Positive scrolls down, negative scrolls up. Blanks are
-\ always scrolled in. VRAM doesn't move.
-: (-scroll) ( +chars -- )
-  \ Move vram to vram+len for vram-size - length words.
-  >R   vram dup R@ +   384 R@ - move
-  \ Then wipe the top part.
-  0 R@ wipe
-  \ And adjust the cursor so it follows the scroll.
-  R> cursor +! ;
+\ The scroll region is those lines from SCROLL-TOP (inclusive) to
+\ SCROLL-BOTTOM (exclusive).
+\ The lines above and below are fixed and don't scroll. If the cursor is on the
+\ bottom line of a fixed region and writes off the end, the cursor remains
+\ pinned in the rightmost column of the bottom row.
+\ The default scroll region is the entire screen.
+VARIABLE scroll-top   VARIABLE scroll-bottom
+: scroll-region ( top bottom -- ) rows scroll-bottom !   rows scroll-top ! ;
+: reset-scroll  ( -- ) 0 #rows scroll-region ;
 
-: (+scroll) ( +chars -- )
-  \ We want to move vram+len to vram for vram-size - length words.
-  dup >R   vram +   vram   384 R@ - move
-  \ Then wipe the bottom part.
-  384 R@ - R@ wipe
-  \ And adjust the cursor so its relative position stays.
-  R> negate cursor +! ;
+\ Returns the address of the first word to be scrolled.
+: scroll-start ( -- vram-addr ) scroll-top    @   vram + ;
+\ Returns the address of the first word NOT to be scrolled.
+: scroll-stop  ( -- vram-addr ) scroll-bottom @   vram + ;
 
+\ There are four interesting indexes for the scroller:
+\ - the top of the scroll frame - scroll-start above
+\ - the end of the scroll frame - scroll-stop above
+\ - both of these inset by the delta: inset-start and inset-stop below.
+VARIABLE <scroll-delta> \ Always positive!
 
-: scroll ( lines -- )
-  /row * chars dup 0< IF negate (-scroll) ELSE (+scroll) THEN ;
+: inset-start ( -- vram-addr ) scroll-start <scroll-delta> @ + ;
+: inset-stop  ( -- vram-addr ) scroll-stop  <scroll-delta> @ - ;
+
+\ Scroll width is the full range, minus one delta, so inset-end minus start.
+: scroll-width ( -- u ) inset-stop scroll-start - ;
+: scroll-wipe  ( start -- ) <scroll-delta> @ wipe-abs ;
+
+: <scroll-down> ( +chars -- )
+  <scroll-delta> !
+  \ Copy from the inset (ie. second line) to the top (first line).
+  inset-start scroll-start scroll-width move
+  \ Then blank out the bottom line:
+  inset-stop scroll-wipe ;
+
+: <scroll-up> ( -chars -- )
+  negate <scroll-delta> !
+  \ Copy from the top (ie. first line) to the inset (second line).
+  scroll-start inset-start scroll-width move
+  \ Then blank out the top line.
+  scroll-top scroll-wipe ;
+
+: <scroll> ( delta-chars -- )
+  dup 0< IF <scroll-up> ELSE <scroll-down> THEN ;
+
+: scroll ( lines -- ) rows <scroll> ;
 
 
 \ Printing ===================================================================
@@ -168,16 +198,23 @@ VARIABLE key-xt
 
 \ Initialization =============================================================
 
+: reset-lem ( -- ) keyboard default-colours reset-scroll clear ;
+
 : init-lem ( -- )
   dev-lem1802 @ -1 = IF EXIT THEN \ No such device, just bail.
   keyboard
 
   \ Send an HWI with A=0, B=vram; no response regs. So that's a mask of 3.
   0 vram 3   dev-lem1802 @ >device
-  default-colours   clear ;
+  reset-lem ;
 
 : init-serial ( -- )
   dev-serial @ -1 = IF EXIT THEN \ No such device, just bail.
-  \ Send an HWI with A=1, B=0, C=20 (64Kbps)
+  \ Send an HWI with A=1, B=0, C=20 (1 octet, 64Kbps)
   1 0 20   7   dev-serial @ >device ;
 
+: semit ( ch -- )
+  \ Send an HWI with A=3 B=ch; C gets error status
+  3 swap   $403   dev-serial @ >device ;
+
+: stype ( c-addr u -- ) 0 DO dup i + c@ semit LOOP drop ;

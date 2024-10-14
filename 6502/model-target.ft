@@ -49,6 +49,8 @@ target : ALIGN ; host acts: ;
 target : >CFA ( nt -- xt )
   cell+ dup c@ [ host mask_len tliteral target ] and + char+ aligned ;
 
+target : >BODY ( xt -- addr ) 3 + ;
+
 \ TODO: Figure out a more coherent memory map - where should I put the PAD?
 target : PAD ( -- addr ) $7800 ;
 

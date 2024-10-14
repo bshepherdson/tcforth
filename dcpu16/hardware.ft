@@ -59,3 +59,9 @@ VARIABLE dev-serial
   -1 dup dev-lem1802 !   dup dev-keyboard !   dup dev-m35fd !   dev-serial !
   #devices BEGIN ?dup WHILE 1- dup identify REPEAT ;
 
+: find-dev ( id-lo id-hi -- devnum|-1 )
+  #devices 0 DO
+    i devinfo 2swap 2drop rot drop ( d-target d-id )
+    2over rot = >R = R> and IF 2drop i UNLOOP EXIT THEN
+  LOOP 2drop -1 ;
+

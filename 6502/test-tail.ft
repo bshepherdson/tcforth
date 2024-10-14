@@ -26,7 +26,7 @@ VARIABLE empty-stack-xt
   ." pass" cr ;
 
 : run-tests ( -- )
-  boot
+  boot intro
   ." Unit test suite loading..."
   S" test/harness.ft" included   ." ready" cr cr
   S" ' error-details error-xt !" evaluate

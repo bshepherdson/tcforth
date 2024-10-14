@@ -121,4 +121,3 @@ T{  1      -1 MAX ->       1 }T
 T{  0 MIN-INT MAX ->       0 }T
 T{ MAX-INT  0 MAX -> MAX-INT }T
 T{ MAX-INT MIN-INT MAX -> MAX-INT }T
-

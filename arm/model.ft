@@ -104,6 +104,7 @@ VARIABLE 'EXIT   \ These get populated later.
 
 \ Not really words, just assembler routines.
 \ TODO Maybe these are better as mirror words without Target-side headers?
+cr cr S" LIT at " type there @ hex. cr cr
 label LIT
   {{ tos }} push,
   4 # ip []+ tos ldr,

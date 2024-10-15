@@ -47,6 +47,22 @@ VARIABLE org-point
 
 : label ( "name" --    X: -- t-addr ) there @ CONSTANT ;
 
+\ Writable data ==============================================================
+\ If the code is going into ROM then we need a separate .bss uninitialized
+\ data space.
+\ NOTE: Expects the word ROM? to have been defined already by main.
+rom? [IF]
+  VARIABLE bss-there
+[ELSE]
+  : bss-there ( -- host-addr ) there ;
+[THEN]
+
+: bss-allot ( u -- ) bss-there +! ;
+
+: bss-var ( "name" --   X: -- t-addr )
+  bss-there @ CONSTANT   instr-width bss-allot ;
+
+
 \ Condition Fields ===========================================================
 \ These are available on every instruction. These condition code words set a
 \ variable that applies to the next instruction and then gets reset to AL(ways).
@@ -390,5 +406,3 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
   R@ write-file ABORT" Failed to write"
   R@ flush-file ABORT" Failed to flush"
   R> close-file ABORT" Failed to close" ;
-
-

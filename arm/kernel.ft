@@ -225,17 +225,25 @@ end-code
 
 
 \ Variables and core states ==================================================
-label var_dp          0 asm,
-label var_latest      0 asm,
-label var_base        0 asm,
-label var_state       0 asm,
-label var_handler     0 asm,
+\ Values in ROM giving the initial LATEST and DP.
+label dp0     0 asm,
+label latest0 0 asm,
 
-label var_last_parse  0 asm, 0 asm,
-label var_source      0 asm, 0 asm,
-label var_in_ptr      0 asm,
-label var_source_id   0 asm,
-label input-buf       128 there +!
+\ Space in the RAM for system variables.
+bss-var var_dp
+bss-var var_latest
+bss-var var_base
+bss-var var_state
+bss-var var_handler
+
+\ TODO: The input system is not necessary on non-interactive systems like GBA!
+\ I'm leaving it in for now for simpler compilation.
+bss-there @ CONSTANT var_last_parse   instr-width 2* bss-allot
+bss-there @ CONSTANT var_source       instr-width 2* bss-allot
+bss-var var_in_ptr
+bss-var var_source_id
+
+bss-there @ CONSTANT input-buf   128 bss-allot
 
 code DP
   var_dp push-nearby,
@@ -529,6 +537,7 @@ label main
   \ Starts with interrupts disabled.
   rp0 # rsp mov,
   'sp0  sp  ldr-pc,
+
   \ We need to pretend to do SP! which pops the new TOS off the stack.
   {{ tos }} pop,
   \ Then we overwrite TOS with a marker $deadbeef that helps indicate where the
@@ -538,3 +547,5 @@ label main
   entry-point r0 ldr-pc, \ entry-point is a variable holding an xt; xt -> r0
   r0 bx,                 \ Jump right into that word's code field.
 
+
+cr cr S" kernel ends at " type   there @ hex. cr cr

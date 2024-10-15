@@ -3,10 +3,12 @@
 
 REQUIRE ../host/vocabularies.ft
 
-host definitions REQUIRE assembler.ft
+host definitions
+: rom? false ;
+REQUIRE assembler.ft
 
 \ The QEMU ARM system starts executing user code at $10000.
-\ We need to assemble at that location, then 
+\ We need to assemble at that location, then
 $10000 org!
 
 host REQUIRE ../host/helpers.ft
@@ -52,4 +54,3 @@ VARIABLE output-file-xt
 
 \ Known-missing words ========================================================
 \ Core: ENVIRONMENT? WORD
-

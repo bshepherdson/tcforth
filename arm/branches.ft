@@ -14,14 +14,15 @@
 
 \ First the host side words.
 host definitions
-: 0BRANCH,    [T'] (0BRANCH) tcompile,   here 0 t, ;
-: BRANCH,     [T'] (BRANCH)  tcompile,   here 0 t, ;
-: !DEST       t! ;
+: 0BRANCH,    [T'] (0BRANCH) tcompile,   here 0 tcode, ;
+: BRANCH,     [T'] (BRANCH)  tcompile,   here 0 tcode, ;
+: !DEST       tcode! ;
 : DEST>BRANCH 1 tcells - ;
 : DEST>POST   tcell+ ;
 
-target definitions
 
+interactive? [IF]
+target definitions
 target : 0BRANCH,
     [ host T' (0BRANCH) tliteral target ] compile,   here 0 , ;
   host acts: 0branch, ;
@@ -33,4 +34,4 @@ target : BRANCH,
 target : !DEST ( dest slot -- ) !  ;          host acts: !dest ;
 target : DEST>BRANCH            1 cells - ;   host acts: dest>branch ;
 target : DEST>POST              cell+ ;       host acts: dest>post ;
-
+[THEN]

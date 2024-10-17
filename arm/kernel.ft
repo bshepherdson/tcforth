@@ -15,7 +15,7 @@
 \ variables in the kernel.
 : nearby, ( value reg -- )
   2>R
-  there @ 8 + - dup 0< IF negate # pc 2R> sub, ELSE # pc 2R> add, THEN ;
+  code-there @ 8 + - dup 0< IF negate # pc 2R> sub, ELSE # pc 2R> add, THEN ;
 
 : push-nearby, ( value -- ) {{ tos }} push,   tos nearby, ;
 
@@ -230,56 +230,80 @@ label dp0     0 asm,
 label latest0 0 asm,
 
 \ Space in the RAM for system variables.
-bss-var var_dp
-bss-var var_latest
-bss-var var_base
-bss-var var_state
-bss-var var_handler
+TVARIABLE var_dp
+TVARIABLE var_latest
+TVARIABLE var_base
+TVARIABLE var_state
+TVARIABLE var_handler
 
 \ TODO: The input system is not necessary on non-interactive systems like GBA!
 \ I'm leaving it in for now for simpler compilation.
-bss-there @ CONSTANT var_last_parse   instr-width 2* bss-allot
-bss-there @ CONSTANT var_source       instr-width 2* bss-allot
-bss-var var_in_ptr
-bss-var var_source_id
+data-there @ CONSTANT var_last_parse   instr-width 2* tdata-allot
+data-there @ CONSTANT var_source       instr-width 2* tdata-allot
+TVARIABLE var_in_ptr
+TVARIABLE var_source_id
 
-bss-there @ CONSTANT input-buf   128 bss-allot
+data-there @ CONSTANT input-buf   128 tdata-allot
 
+
+
+label dp-indirect   var_dp asm,
 code DP
-  var_dp push-nearby,
+  {{ tos }}       push,
+  dp-indirect r0  nearby,
+  r0 []       tos ldr,
 end-code
 
 code ,
 label (compile)
-  var_dp r0 nearby,    \ 'dp -> r0
-  r0     []  r1  ldr,  \ dp  -> r1
-  4 # r1 []+ tos str,  \ tos -> [dp], bump dp
-  r0     []  r1  str,  \ Write back dp
+  dp-indirect r0 nearby, \ ''dp -> r0
+  r0     []  r0  ldr,    \ 'dp -> r0
+  r0     []  r1  ldr,    \ dp  -> r1
+  4 # r1 []+ tos str,    \ tos -> [dp], bump dp
+  r0     []  r1  str,    \ Write back dp
   {{ tos }} pop,
 end-code
 
 \ COMPILE, is identical to , so just jump there.
+\ XXX: This should be tackled with a metacompiler configuration flag.
+\ Builds without runtime-writeable code spaces can exclude this word.
+\ But that needs end-to-end exclusion of the input system, since it contains
+\ COMPILE, calls.
 code COMPILE, (compile) b, end-code-bare
 
 code C,
-  var_dp r0 nearby,    \ 'dp -> r0
-  r0     []  r1  ldr,  \ dp  -> r1
-  1 # r1 []+ tos strb, \ tos -> [dp], bump dp
-  r0     []  r1  str,  \ Write back dp
+  dp-indirect r0 nearby, \ ''dp -> r0
+  r0     []  r0  ldr,    \ 'dp  -> r0
+  r0     []  r1  ldr,    \ dp   -> r1
+  1 # r1 []+ tos strb,   \ tos  -> [dp], bump dp
+  r0     []  r1  str,    \ Write back dp
   {{ tos }} pop,
 end-code
 
 
-code HANDLER      var_handler    push-nearby, end-code
-code 'LATEST      var_latest     push-nearby, end-code
-code STATE        var_state      push-nearby, end-code
-code BASE         var_base       push-nearby, end-code
-code 'SOURCE      var_source     push-nearby, end-code
-code 'SOURCE-ID   var_source_id  push-nearby, end-code
-code >IN          var_in_ptr     push-nearby, end-code
-code TIB          input-buf      push-nearby, end-code
-code LAST-PARSE   var_last_parse push-nearby, end-code
-code F_IMMED      f_immed # tos mov, end-code
+: var-pusher ( var "name" -- )
+  code-there @ >R   asm,   code
+  {{ tos }} push,
+  R>    r0  nearby,
+  r0 [] tos ldr,
+  end-code ;
+
+var_handler    var-pusher HANDLER
+var_latest     var-pusher 'LATEST
+var_state      var-pusher STATE
+var_base       var-pusher BASE
+
+\ TODO: These can also be skipped for non-interactive builds.
+var_source     var-pusher 'SOURCE
+var_source_id  var-pusher 'SOURCE-ID
+var_in_ptr     var-pusher >IN
+input-buf      var-pusher TIB
+var_last_parse var-pusher LAST-PARSE
+
+code F_IMMED
+   {{ tos }}     push,
+   f_immed # tos mov,
+end-code
 
 
 \ More arithmetic ============================================================
@@ -524,28 +548,3 @@ code H. ( x -- )
   pl? H.-loop b,
   {{ tos }} pop,
 end-code
-
-
-\ TODO Interrupt handling? The current system doesn't actually use them.
-label interrupt-handler
-  here b,   \ Just spin, we're not really handling these.
-
-
-\ Main =======================================================================
-\ Machine code entry point, jumped to be the first instructions.
-label main
-  \ Starts with interrupts disabled.
-  rp0 # rsp mov,
-  'sp0  sp  ldr-pc,
-
-  \ We need to pretend to do SP! which pops the new TOS off the stack.
-  {{ tos }} pop,
-  \ Then we overwrite TOS with a marker $deadbeef that helps indicate where the
-  \ top of the stack is.
-  'deadbeef tos ldr-pc, \ Marker for debugging the stack.
-
-  entry-point r0 ldr-pc, \ entry-point is a variable holding an xt; xt -> r0
-  r0 bx,                 \ Jump right into that word's code field.
-
-
-cr cr S" kernel ends at " type   there @ hex. cr cr

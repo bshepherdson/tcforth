@@ -4,26 +4,35 @@
 REQUIRE ../host/vocabularies.ft
 
 host definitions
-: rom? false ;
-REQUIRE assembler.ft
+
+\ TODO: Probably this should be called separate-names?
+false CONSTANT rom?
+true  CONSTANT interactive?
 
 \ The QEMU ARM system starts executing user code at $10000.
-\ We need to assemble at that location, then
-$10000 org!
+\ We need to assemble at that location, then.
+REQUIRE spaces.ft
+
+\ This system uses a single contiguous dictionary. It goes in the file at $0
+\ but gets loaded at $10000 in the target address space.
+new-space dict-space
+0 $10000 dict-space THERE-PTR name-there
+
+name-there CONSTANT code-there
+name-there CONSTANT data-there
+
+REQUIRE assembler.ft
 
 host REQUIRE ../host/helpers.ft
+?stack-clear
 host REQUIRE model.ft
 host REQUIRE ../host/dictionary.ft
 host REQUIRE ../host/mirrors.ft
 
 \ Now we have what we need to metacompile the CODE definitions at the heart of
 \ the new kernel.
-host REQUIRE kernel.ft
-
-\ Overwrite the jump target of the entry point at $10000 to be main.
-there @   $10000 there !
-main b,
-there !
+host REQUIRE kernel.ft   ?stack-clear
+host REQUIRE startup.ft  ?stack-clear
 
 \ The main part of the metacompiler
 host REQUIRE ../host/metacompiler.ft
@@ -48,6 +57,15 @@ host REQUIRE ../shared/init.ft         \ Shared init code.
 host definitions
 VARIABLE output-file-xt
 :noname S" forth-arm.bin" ; output-file-xt !
+
+: dump ( c-addr u -- )
+  cr cr ." Assembling to " 2dup type cr
+  W/O BIN create-file ABORT" Failed to open output file" ( file )
+
+  \ Write the single zone.
+  name-there over dump-space
+  dup flush-file ABORT" Failed to flush"
+      close-file ABORT" Failed to close" ;
 
 \ NB: You should always include tail.ft as the last stage of your build.
 \ It actually emits the assembled image.

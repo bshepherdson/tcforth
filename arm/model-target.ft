@@ -2,11 +2,13 @@
 \ Forth model (eg. ITC vs. DTC vs. STC)
 \ This file: DTC on ARMv4 32-bit.
 
+\ TODO: Most of these are not needed on a non-interactive target.
+
 \ ,DOCOL is already defined.
 target definitions
 
 \ ARM BL  is cccc 101L + 24-bit signed offset in words.
-\ XXX Assumes the target is in range!
+\ XXX: Assumes the target is in range!
 target : !CF ( codeword-addr xt -- )
   dup >R \ Save the slot address.
   8 + -    ( delta-bytes )
@@ -29,7 +31,7 @@ target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , 
 target : ALIGNED   3 + 3 invert and ;
   host acts: 3 + 3 invert and ;
 target : ALIGN     here aligned dp ! ;
-  host acts: here 3 + 3 invert and there ! ;
+  host acts: data-there @ 3 + 3 invert and data-there ! ;
 
 \ This is actually portable but since it fits right here between ALIGNED and
 \ (DOES>), there's no good place to put it with splitting this file into 3.
@@ -63,7 +65,7 @@ host T' EXIT    'EXIT !
 host definitions
 
 \ Moves THERE back by 1 cell and pushes the most recently compiled word.
-: asm-lit ( -- w ) -4 there +!   here t@ ;
+: asm-lit ( -- w ) -4 code-there +!   here tcode@ ;
 
 : EXIT-compile, ( -- )
   'EXIT @ tliteral   [T'] compile, tcompile, ;
@@ -78,4 +80,3 @@ host definitions
   [ {{ tos }} push, asm-lit tliteral ] [T'] , tcompile,
   [ lr tos mov,     asm-lit tliteral ] [T'] , tcompile,
   [ docol bl,       asm-lit tliteral ] [T'] , tcompile, ;
-

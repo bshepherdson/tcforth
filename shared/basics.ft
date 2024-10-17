@@ -9,7 +9,7 @@ target : LATEST 'latest @ ;
 \ LATEST gives the name token. Skip over the link pointer and check the length.
 target : IMMEDIATE
     latest cell+   dup c@   f_immed or   swap c! ;
-  host acts: latest tcell+ dup tc@   f_immed or   swap tc! ;
+  host acts: latest tcell+ dup tcode-c@   f_immed or   swap tcode-c! ;
 
 target : [ 0 state ! ; IMMEDIATE
   host acts: 0 state ! postpone host ; IMPERATIVE
@@ -40,4 +40,3 @@ target : HERE dp @ ;
   host acts: dp @ ;
 
 target : WITHIN ( x lo hi -- ? ) over - >R   - R> U< ;
-

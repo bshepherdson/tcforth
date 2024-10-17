@@ -34,4 +34,4 @@ target : QUIT ( -- )
 \ "Cold" start, loading interactive mode.
 : cold  ( -- ) boot intro QUIT ;
 
-host   T' COLD   entry-point t!
+host   T' COLD   entry-point tcode!

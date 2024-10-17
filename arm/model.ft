@@ -18,16 +18,21 @@
 \ TARGET HERE is the mirror word that compiles the Target xt for HERE (!)
 HOST DEFINITIONS
 
-\ The assembler defines a THERE pointer for the Target dictionary.
+\ The assembler defines a DATA-THERE pointer for the Target dictionary.
 \ We capture that address as the HOST DP as well.
-there CONSTANT DP
+data-there CONSTANT DP
 : here dp @ ;
 
-: t,        ( w -- )  asm, ;
-: tc,       ( b -- )  asm-byte, ;
+\ These allocate and fill *code space*.
+: tcode,        ( w -- )  asm, ;
+: tcode-c,      ( b -- )  asm-byte, ;
 
-\ First line of code, the entry point. It'll be a jump to main eventually.
-there @ b,
+: tname,        ( w -- ) name-there @   instr-width name-there +!   tname! ;
+: tname-c,      ( b -- ) name-there @   1           name-there +!   tname-c! ;
+
+\ First line of code, the entry point. This is at $0 in code-there space, but
+\ will be loaded at $10000 by the ARM runtime.
+code-there @ b,
 
 
 \ Some assembler macros
@@ -42,8 +47,8 @@ there @ b,
 : taligned  ( x -- x2 ) 3 + 3 invert and ;
 : talign    ( -- )      here taligned dp ! ;
 
-: tcompile,  ( xt -- )      t, ;
-: tdecompile ( slot -- xt ) t@ ;
+: tcompile,  ( xt -- )      tcode, ;
+: tdecompile ( slot -- xt ) tcode@ ;
 
 32 CONSTANT tcellbits  \ 32 bits per cell
  8 CONSTANT tbits      \ 8 bits per address unit
@@ -66,6 +71,8 @@ label DOVAR
   {{ tos }} push,
   lr tos mov,
   next,
+
+cr cr ." dovar: " dovar hex. cr cr
 
 \ DOES> design for DTC =======================================================
 \ This is different from the original TC-Forth DODOES scheme.
@@ -94,8 +101,8 @@ VARIABLE 'EXIT   \ These get populated later.
 : EXIT, ( -- ) 'EXIT @ tcompile, ;
 
 : DOES, ( -- xt-does )
-  '(DOES>) @ t,
-  'EXIT    @ t,
+  '(DOES>) @ tcode,
+  'EXIT    @ tcode,
   here
   {{ tos }} push,
   lr tos mov,
@@ -104,7 +111,6 @@ VARIABLE 'EXIT   \ These get populated later.
 
 \ Not really words, just assembler routines.
 \ TODO Maybe these are better as mirror words without Target-side headers?
-cr cr S" LIT at " type there @ hex. cr cr
 label LIT
   {{ tos }} push,
   4 # ip []+ tos ldr,
@@ -137,19 +143,19 @@ label DOSTRING
 : ,dostring ( c-addr u -- )
   dup 256 >= ABORT" dostring length exceeds a byte"
   dostring tcompile,
-  dup tc,
-  ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tc,   1+ R> REPEAT drop
+  dup tcode-c,
+  ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tcode-c,   1+ R> REPEAT drop
   talign ;
 
 \ Overwrites the code field (address) of the word at word-xt to point to the
 \ ;CODE or DOES> at does-xt.
 \ On DTC ARM, this compiles bl does-xt.
 : !dodoes ( does-xt word-xt -- )
-  there @ >R   there !   bl,   R> there ! ;
+  code-there @ >R   code-there !   bl,   R> code-there ! ;
 
 \ Compile a literal. This is in the model because eg. STC doesn't use the two-
 \ cell [LIT|x] pattern.
-: tliteral ( x --    X: -- x ) lit tcompile,   t, ;
+: tliteral ( x --    X: -- x ) lit tcompile,   tcode, ;
 
 : t>body ( target-xt -- target-body ) tcell+ ;
 
@@ -162,7 +168,7 @@ label entry-point 0 asm,
 
 \ Space for : and ; ==========================================================
 \ : :   (CREATE) ,docol smudge ] exit    5 cells and the codeword
-: allot-: ( -- ) 6 tcells there +! ;
+: allot-: ( -- ) 6 tcells code-there +! ;
 \ : ;   EXIT-compile, smudge [ exit
 \ EXIT-compile, pushes: lit + xt + compile, = 3, plus smuge [ exit for 6, plus the codeword = 7
-: allot-; ( -- ) 7 tcells there +! ;
+: allot-; ( -- ) 7 tcells code-there +! ;

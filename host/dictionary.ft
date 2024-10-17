@@ -35,27 +35,48 @@ f_hidden 1-        CONSTANT mask_len
 
 
 \ Compiles a fresh Target header with an empty code field.
+\ This is a bit tricky with split spaces: the linked list and name of the word
+\ is in name space; the xt is in code space.
+
+rom? [IF]
+  : <mk-code-field> ( -- target-xt ) code-there @   dup tname, ;
+[ELSE]
+  : <mk-code-field> ( -- target-xt ) here ;
+[THEN]
+
 : (mk-header) ( c-addr u -- target-xt )
-  \ 2dup type cr
-  here   latest t,   'latest !
-  dup tc, \ Length byte
-  0 DO ( c-addr ) dup i + c@ >upper tc, LOOP drop ( )
-  talign here ( target-xt ) ;
+  \ ." (mk-header) " 2dup type   4 spaces .s cr
+  name-there @   latest tname,   'latest !
+  dup tname-c, \ Length byte
+  0 DO ( c-addr ) dup i + c@ >upper tname-c, LOOP drop ( )
+  name-there @   taligned   name-there !
+  <mk-code-field> ;
 
 : t>cfa ( target-nt -- target-xt )
-  tcell+ dup tc@ mask_len and + tchar+ taligned ;
+  tcell+ dup tcode-c@ mask_len and + tchar+ taligned ;
 
-: TNAME>STRING ( t-nt -- c-addr u ) tcell+ dup 1+ swap tc@ mask_len and ;
+rom? [IF]
+  \ Wrap the above and read out the CFA from the dictionary.
+  : t>cfa ( target-nt -- target-xt ) t>cfa tname@ ;
+[THEN]
 
-: TNAME>INT ( t-nt -- t-xt ) tname>string + taligned ;
+: TNAME>STRING ( t-nt -- c-addr u ) tcell+ dup 1+ swap tcode-c@ mask_len and ;
+
+rom? [IF]
+  \ If this is a ROM build, the name space is host-only.
+  \ The words end with an xt.
+  : TNAME>INT ( t-nt -- t-xt ) tname>string + taligned tname@ ;
+[ELSE]
+  \ Single dictionary builds the word just follows.
+  : TNAME>INT ( t-nt -- t-xt ) tname>string + taligned ;
+[THEN]
 
 : T>NAME ( target-xt -- target-nt|0 )
   'latest @ BEGIN dup WHILE ( target-xt target-nt )
     2dup tname>int = IF nip EXIT THEN
-    t@
+    tname@
   REPEAT nip ;
 
-: TTYPE ( tc-addr u -- ) over + swap ?DO i tc@ emit LOOP ;
+: TTYPE ( tc-addr u -- ) over + swap ?DO i tname-c@ emit LOOP ;
 
 : TID. ( t-nt -- ) tname>string ttype ;
-

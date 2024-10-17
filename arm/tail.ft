@@ -3,8 +3,18 @@
 
 host definitions
 \ This needs to be the last lines in the target compilation.
-host latest latest0 t!
-host here   dp0     t!
+host latest latest0 tcode!
+host here   dp0     tcode!
+
+cr cr
+\ S" LATEST " type latest hex. S" at latest0 " type latest0 hex. cr
+\ S" HERE   " type here   hex. S" at dp0     " type dp0     hex. cr cr cr
+
+S" dp0     " type dp0  hex. cr
+S" dp      " type dp   hex. cr
+S" dp @    " type dp @ hex. cr
+S" HERE    " type here hex. cr
+cr cr
 
 \ XXX: These need to be updated! To support bootstrapping on a device like GBA,
 \ these need a separate version that can't initialize writable fields. It needs

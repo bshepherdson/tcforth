@@ -108,7 +108,8 @@ host definitions
   0 mirror
   ['] mirror-forward   'mirror @ mirror>compile ! ;
 
-: (replace-xt) ( xt slot -- ) there @ >R   there !   tcompile,   R> there ! ;
+: (replace-xt) ( xt slot -- )
+  code-there @ >R   code-there !   tcompile,   R> code-there ! ;
 
 \ Resolves a forward reference when we come to define it.
 \ ?forward runs after (TCREATE), so the newest mirror word's txt is the one we
@@ -139,10 +140,10 @@ host definitions
 'mirror @
 (T') +     'mirror !   act +
 (T') -     'mirror !   act -
-(T') @     'mirror !   act t@
-(T') !     'mirror !   act t!
-(T') ,     'mirror !   act t,
-(T') c,    'mirror !   act tc,
+(T') @     'mirror !   act tdata@
+(T') !     'mirror !   act tdata!
+(T') ,     'mirror !   act tcode,
+(T') c,    'mirror !   act tcode-c,
 (T') cells 'mirror !   act tcells
 (T') dup   'mirror !   act dup
 
@@ -153,13 +154,14 @@ host definitions
 
 \ Hand-roll the target+mirror definitions for : and ;
 \ They don't work on the target yet, just making space.
+\ TODO: Target : and ; are not needed when not interactive.
 target definitions host
 code : end-code-bare allot-:
   host acts: ?forward   (TCREATE)   ?!forward   ,docol   meta] ;
 
 code ; end-code-bare allot-;
 \ Mark ; as IMMEDIATE
-latest tcell+ dup tc@ f_immed or swap tc!
+latest tcell+ dup tname-c@ f_immed or swap tname-c!
   host acts: 0 state !   EXIT, ; IMPERATIVE
 
 

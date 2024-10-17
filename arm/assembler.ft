@@ -4,63 +4,72 @@
 \ Canonical ARM:     add r0, r1, r2      ldr r4, [r6, #-12]
 \ This assembler:    r2 r1 r0 add,       -12 # r6 [+] r4 ldr,
 
-8 1024 * 1024 * allocate drop   CONSTANT output
-VARIABLE there
-0 there !
-VARIABLE max-out
-0 max-out !
+\ Target dictionary redesign =================================================
+\ There are, strictly speaking, three spaces to the dictionary: a name space,
+\ a code space, and a data space.
+\ Programs can only explicitly fetch/store from data space!
+\
+\ The relationship between name space and data space is unspecified.
+\ The relationship between code space and data space is unspecified.
+\ Therefore we can do things like: not include name space in the compiled form,
+\ put data space in RAM and code space in ROM.
+
+\ So HERE, CREATE, ALLOT and so on are all dealing with *data space*, which
+\ doesn't necessarily overlap with name space or code space.
+
+\ In the general assembler, we allocate the spaces separately; they may not
+\ get used.
+\ data-space is not declared, since it is not initialized by default.
+\ We just track the current pointer into that space.
 
 : hex.s base @ >R   hex .s   R> base ! ;
 
-: +max ( t-addr -- ) max-out @ max max-out ! ;
-
-: ta ( t-addr -- c-addr ) output + ;
+: tname-addr ( t-addr -- c-addr ) name-there >space ;
+: tcode-addr ( t-addr -- c-addr ) code-there >space ;
+: tdata-addr ( t-addr -- c-addr ) data-there >space ;
 
 \ 32-bit cells are written little-endian.
-: t@ ( t-addr -- w )
-  dup +max ta >R
-  R@     c@
+: <t@> ( c-addr -- w )
+  dup >R c@
   R@ 1+  c@  8 lshift or
   R@ 2 + c@ 16 lshift or
   R> 3 + c@ 24 lshift or ;
 
-: t! ( w t-addr -- )
-  dup +max ta >R
+: tname@ ( t-addr -- w ) tname-addr <t@> ;
+: tcode@ ( t-addr -- w ) tcode-addr <t@> ;
+: tdata@ ( t-addr -- w ) tdata-addr <t@> ;
+
+: <t!> ( w c-addr -- )
+  >R
   dup           $ff and R@     c!
   dup  8 rshift $ff and R@ 1+  c!
   dup 16 rshift $ff and R@ 2 + c!
       24 rshift $ff and R> 3 + c! ;
 
-: tc@ ( t-addr -- b ) dup +max ta c@ ;
-: tc! ( b t-addr -- ) dup +max ta c! ;
+: tname! ( w t-addr -- ) tname-addr <t!> ;
+: tcode! ( w t-addr -- ) tcode-addr <t!> ;
+: tdata! ( w t-addr -- ) tdata-addr <t!> ;
 
-\ Holds the low address of the assembly, manually set. This is the first byte
-\ in a dump. Call org! to set this and THERE properly.
-VARIABLE org-point
-
-: org! ( addr -- ) dup there ! org-point ! ;
+: tname-c@ ( t-addr -- b ) tname-addr c@ ;
+: tcode-c@ ( t-addr -- b ) tcode-addr c@ ;
+: tdata-c@ ( t-addr -- b ) tdata-addr c@ ;
+: tname-c! ( b t-addr -- ) tname-addr c! ;
+: tcode-c! ( b t-addr -- ) tcode-addr c! ;
+: tdata-c! ( b t-addr -- ) tdata-addr c! ;
 
 4 CONSTANT instr-width
 
-: asm,      ( w -- ) there @ t!    instr-width there +! ;
-: asm-byte, ( b -- ) there @ tc!   1           there +! ;
+: tdata-allot ( u -- )
+  data-there +!
+  data-there dup @ 1- swap ( highest data-there ) +max ;
 
-: label ( "name" --    X: -- t-addr ) there @ CONSTANT ;
+: TVARIABLE ( "name" --     X: -- t-addr )
+  data-there @   instr-width tdata-allot   CONSTANT ;
 
-\ Writable data ==============================================================
-\ If the code is going into ROM then we need a separate .bss uninitialized
-\ data space.
-\ NOTE: Expects the word ROM? to have been defined already by main.
-rom? [IF]
-  VARIABLE bss-there
-[ELSE]
-  : bss-there ( -- host-addr ) there ;
-[THEN]
+: asm,      ( w -- ) code-there @ tcode!     instr-width code-there +! ;
+: asm-byte, ( b -- ) code-there @ tcode-c!   1           code-there +! ;
 
-: bss-allot ( u -- ) bss-there +! ;
-
-: bss-var ( "name" --   X: -- t-addr )
-  bss-there @ CONSTANT   instr-width bss-allot ;
+: label ( "name" --    X: -- t-addr ) code-there @ CONSTANT ;
 
 
 \ Condition Fields ===========================================================
@@ -147,7 +156,7 @@ VARIABLE S?   0 S? !
 : (b) ( abs-addr link-mask -- )
   >R
   dup 3 and 0<> ABORT" B and BL addresses must be word-aligned"
-  there @ 8 +   - ( delta-bytes ) 2/ 2/ ( delta-words )
+  code-there @ 8 +   - ( delta-bytes ) 2/ 2/ ( delta-words )
   dup   -1 $7fffff invert and   $800000   within 0= ABORT" Branch too far"
   $ffffff and R> or $0a000000 or   +cond asm, ;
 
@@ -321,7 +330,7 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
   \ We want ultimately to have:  delta # pc 0 [-]/[+] rd 0 ldr,
   \ PC counts from 8 bytes ahead.
   2>R             ( abs )
-  there @ 8 + -   ( delta )
+  code-there @ 8 + -   ( delta )
   dup 0< IF negate # pc [-] ELSE # pc [+] THEN ( +delta # pc 0 [+]/[-] )
   2R> ldr, ;
 
@@ -385,24 +394,14 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
 \ Control structures =========================================================
 \ Branch ops already take an absolute target; easy enough to use LABEL.
 \ fwd beq, compiles a dummy relative offset and leaves there on the stack.
-: fwd ( -- loc abs-target ) there @ dup 100 + ;
+: fwd ( -- loc abs-target ) code-there @ dup 100 + ;
 
 \ Resolve expects a loc on the stack, and resolves it to point to here.
 \ We need to retain the condition code of the existing branch opcode.
 : resolve ( loc -- )
-  there @ >R
-  dup t@ $f0000000 and >R  ( loc   R: real-there cond )
-  there !
+  code-there @ >R
+  dup tcode@ $f0000000 and >R  ( loc   R: real-there cond )
+  code-there !
   R> condition !   ( R: real-there )
   R@ b,
-  R> there ! ;
-
-
-
-: dump ( c-addr u -- )
-  cr cr ." Assembling to " 2dup type cr
-  W/O BIN create-file ABORT" Failed to open output file" >R
-  org-point @ output +   max-out @ 1+ instr-width *
-  R@ write-file ABORT" Failed to write"
-  R@ flush-file ABORT" Failed to flush"
-  R> close-file ABORT" Failed to close" ;
+  R> code-there ! ;

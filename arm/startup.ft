@@ -1,0 +1,28 @@
+\ TODO Interrupt handling? The current system doesn't actually use them.
+label interrupt-handler
+  here b,   \ Just spin, we're not really handling these.
+
+
+\ Main =======================================================================
+\ Machine code entry point, jumped to be the first instructions.
+label main
+  \ Starts with interrupts disabled.
+  rp0 # rsp mov,
+  'sp0  sp  ldr-pc,
+
+  \ We need to pretend to do SP! which pops the new TOS off the stack.
+  {{ tos }} pop,
+  \ Then we overwrite TOS with a marker $deadbeef that helps indicate where the
+  \ top of the stack is.
+  'deadbeef tos ldr-pc, \ Marker for debugging the stack.
+
+  entry-point r0 ldr-pc, \ entry-point is a variable holding an xt; xt -> r0
+  r0 bx,                 \ Jump right into that word's code field.
+
+cr cr S" kernel ends at " type   code-there @ hex. cr cr
+
+\ Overwrite the jump target of the entry point at $10000 to be main.
+code-there @
+$10000 code-there !
+main b,
+code-there !

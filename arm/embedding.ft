@@ -8,8 +8,8 @@ host definitions
 
 : embed ( c-addr u1 -- )
   r/o open-file abort" Failed to open test disk" ( fid ) >R
-  there @ ta   100000   R@ read-file   ABORT" Failed to read test disk" ( u2 )
-  there +! talign
+  code-there @ tcode-addr   100000   R@ read-file   ABORT" Failed to read test disk" ( u2 )
+  code-there +! talign
   R> close-file ABORT" Failed to close test disk" ;
 
 S" test.disk" embed
@@ -35,12 +35,12 @@ VARIABLE embedding-ptr
 src-embed refiller !
 
 : run-tests ( -- )
-  init-hardware
-  10 base !   -2 'source-id !    \ embedding!
+  boot
+  ." This is an intro message!" cr
+  -2 'source-id !    \ embedding!
   embedded-tests embedding-ptr ! \ start of the embedded region
   (quit) ;
 
 host definitions
-T' run-tests   entry-point t!
+T' run-tests   entry-point tcode!
 :noname S" forth-arm-tests.bin" ; output-file-xt !
-

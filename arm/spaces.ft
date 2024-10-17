@@ -1,0 +1,71 @@
+\ Sets up the three dictionary spaces for use by the assembler.
+
+\ The Forth dictionary is divided into three parts:
+\ - Code space, where native code and read-only data goes.
+\ - Name space, where the names and dictionary data structure goes.
+\ - Data space, where writable data goes.
+
+\ These spaces might overlap, as in traditional Forths. But they might not!
+\ Note that the data space is not part of the binary and needs to be
+\ initialized by the setup code.
+
+\ Each space is captured by a THERE-PTR array, which looks like this:
+\ [ there | max-there | host-ptr | org | file-offset ]
+\ there       reckoned in the target address space; tcode-addr etc. to adjust
+\ max-there   the largest THERE value ever used
+\ host-ptr    host pointer to where its actually being assembled; indexed from 0
+\ org         target address space point where the *start* of this range is found
+\ file-offset offset into the output file where this belongs
+
+\ To actually look up a byte from the space:
+\ - org is subtracted from it, creating a 0-based offset into the space
+\ - then that offset is used for the host-ptr to get the real value
+
+\ Allocates 8MB and gives it a name.
+: new-space 8 1024 * 1024 * allocate drop   CONSTANT ;
+
+\ This takes three pointers for each space:
+\ - The offset into the output ROM where it should be written.
+\ - The target address where this data will be available at runtime,
+\   for pointer calculations.
+\ - The host array where the values are assembled.
+: there-ptr ( file-offset target-org host-space   "name" --   X: -- there-array )
+  \      there | max-there | host-ptr | org | file-offset
+  CREATE over ,  over ,      ,          ,     , ;
+
+: space>max        cell+ ;
+: space>host-array 2 cells + ;
+: space>org        3 cells + ;
+: space>offset     4 cells + ;
+
+: +max ( target-addr there-array -- )
+  space>max dup >R   @ max   R> ! ;
+
+: >space ( target-addr there-array -- host-addr )
+  2dup +max
+  dup  space>host-array @
+  swap space>org        @ ( ta host0 org )
+  - + ;
+
+
+: extend-file ( offset file -- )
+  ." Extend-file offset: " over hex. ." file: " dup hex. cr
+  >R s>d
+  2dup R@ .s cr resize-file     ABORT" failed to resize file"
+       R> reposition-file ABORT" failed to reposition file" ;
+
+: .space ( there-array -- )
+  ." Space:" cr
+  ." Current: " dup @ hex. cr
+  ." Max:     " dup space>max @ hex. cr
+  ." Host:    " dup space>host-array @ hex. cr
+  ." Target:  " dup space>org @ hex. cr
+  ." File:    "     space>offset @ hex. cr ;
+
+: dump-space ( there-array file -- )
+  ." dump-space: " over hex. dup hex. .s cr
+  over .space
+  >R
+  dup space>offset @   R@ extend-file
+  dup space>host-array @   swap dup space>max @ 16 +   swap space>org @ -
+    R> write-file ABORT" Failed to write file" ;

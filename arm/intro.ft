@@ -2,8 +2,10 @@ host cr cr S" init-data at " type here hex. cr cr
 target definitions
 
 : init-data ( -- )
-  [ host latest0 tliteral   var_latest tliteral target ] !
-  [ host dp0     tliteral   var_dp     tliteral target ] ! ;
+  [ host latest0    tliteral target ] @
+  [ host var_latest tliteral target ] !
+  [ host dp0        tliteral target ] @
+  [ host var_dp     tliteral target ] ! ;
 
 : init-hardware ( -- ) init-data init-serial ;
 

@@ -119,11 +119,11 @@ target definitions
 
 \ Now we're ready to define the various defining words in the core!
 target : VARIABLE ( "name" --     X: -- addr ) CREATE 0 , ;
-  host acts: create host 0 t,   DOES> ;
+  host acts: create host 0 tcode,   DOES> ;
   \ Empty DOES> action, but that leaves the target-body on the stack.
 
 target : CONSTANT ( x "name" --    X: -- x ) CREATE , DOES> @ ;
-  host acts: create t, DOES> t@ ;
+  host acts: create tcode, DOES> tcode@ ;
 
 \ host cr cr hex
 \ .s cr
@@ -134,7 +134,7 @@ target : CONSTANT ( x "name" --    X: -- x ) CREATE , DOES> @ ;
 \ ."   compile-xt:    " dup mirror>compile @      hex. cr
 \ ."   h-does:        " dup mirror>h-does  @      hex. cr
 \ ."   t-does:        " dup mirror>t-does  @      hex. cr
-\ 
+\
 \ dup mirror>interp  @ xt-see cr
 \ dup mirror>compile @ xt-see cr
 \ drop
@@ -173,7 +173,7 @@ target : DO ( m i -- )
   host acts:
     [T'] (DO) tcompile,   1 tliteral   0branch,
     [T'] (loop-top) t>body >R  ( top-slot   R: 'loop-top )
-    R@ t@ swap ( old-top top-slot   R: 'loop-top ) R> t!  ( old-top )
+    R@ tcode@ swap ( old-top top-slot   R: 'loop-top ) R> tcode!  ( old-top )
     ; IMPERATIVE
 
 \ TODO: Figure out conditional compilation of target words.
@@ -200,13 +200,13 @@ host definitions
   [T'] (loop-end) tcompile,   0BRANCH, ( old-top bottom-slot )
   \ The target for the bottom jump is the top of the loop body; AFTER the slot
   \ stored in (loop-top).
-  [T'] (loop-top) t>body dup >R   t@ dest>post swap ( old-top body bottom-slot)
+  [T'] (loop-top) t>body dup >R   tcode@ dest>post swap ( old-top body bottom-slot)
   !dest ( old-top   R: 'top )
   \ Now HERE is after the bottom of the loop, and should be put with !dest
   \ at (loop-top).
-  here R@ t@ !dest
+  here R@ tcode@ !dest
   \ Finally, put the old-top back into (loop-top).
-  R> t!
+  R> tcode!
   [T'] unloop tcompile, ;
 
 target definitions
@@ -233,7 +233,7 @@ target : LEAVE ( --    R: loop-sys --   C: -- )
     0   postpone literal
     (loop-top) @ dest>branch   branch, !dest ; IMMEDIATE
   host acts:
-    [T'] (loop-top) t>body t@ dest>branch
+    [T'] (loop-top) t>body tcode@ dest>branch
     0 tliteral BRANCH, !dest ; IMPERATIVE
 
 \ Miscellany =================================================================
@@ -332,4 +332,3 @@ target : */    ( n1 n2 n3 -- n4 ) */MOD nip ;
 
 target : :noname ( C: -- xt ) here ,docol postpone ] ;
   host acts: here ,docol   postpone target meta] ;
-

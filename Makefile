@@ -10,6 +10,7 @@ DCPU_DISK ?= /dev/null
 
 
 ARM_QEMU ?= qemu-system-arm -M versatilepb -m 128M -nographic
+ARM_QEMU_FLAGS ?=
 ARM_PREFIX ?= arm-none-eabi-
 ARM_DUMP ?= -e 'output-file-xt @ execute dump bye'
 
@@ -64,7 +65,7 @@ test-mocha86k: forth-mocha86k.bin test.disk test-long.dcs FORCE
 # Bare metal ARMv7 32-bit
 forth-arm.bin: host/*.ft arm/*.ft shared/*.ft
 	$(FORTH) arm/main.ft arm/tail.ft $(ARM_DUMP)
-	arm-none-eabi-objdump -b binary -m armv4t -D forth-arm.bin > forth.disasm
+	#arm-none-eabi-objdump -b binary -m armv4t -D forth-arm.bin > forth.disasm
 
 arm: forth-arm.bin
 run-arm: forth-arm.bin
@@ -74,7 +75,7 @@ forth-arm-tests.bin: host/*.ft arm/*.ft shared/*.ft test.disk
 	$(FORTH) arm/main.ft arm/embedding.ft arm/tail.ft $(ARM_DUMP)
 
 test-arm: forth-arm-tests.bin test.disk FORCE
-	$(ARM_QEMU) -kernel forth-arm-tests.bin
+	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel forth-arm-tests.bin
 
 # Commodore 64
 forth-c64.prg: host/*.ft 6502/*.ft shared/*.ft
@@ -98,4 +99,3 @@ clean: FORCE
 	rm -f *.bin forth-c64.prg test.disk serial.in serial.out
 
 FORCE:
-

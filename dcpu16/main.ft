@@ -5,15 +5,30 @@ REQUIRE ../host/vocabularies.ft
 
 host definitions
 
-REQUIRE ../host/configuration.ft \ Default interactive is fine.
+\ Metacompiler configuration =================================================
+host REQUIRE ../host/configuration.ft \ Default interactive is fine.
+
+interactive-forth!
+16    config char-bits    !
+1     config cell-width   !
+1     config instr-width  !
+
+config little-endian?   OFF
+
+\ Target spaces ==============================================================
 REQUIRE ../host/spaces.ft
 
+$0 code-there ORG!
+
 REQUIRE assembler.ft      \ DCPU-16 assembler
+
 
 host REQUIRE ../host/helpers.ft
 host REQUIRE model.ft                             \ Add the DCPU-16 model words
 host REQUIRE ../host/dictionary.ft
 host REQUIRE ../host/mirrors.ft
+
+?stack-clear
 
 \ Now we have what we need to metacompile the CODE definitions at the heart of
 \ the new kernel.
@@ -21,9 +36,10 @@ host REQUIRE kernel.ft
 
 \ Overwrite the jump target of the entry code to be main.
 \ The instruction is at $0000 and its target argument at $0001.
-main 1 t!
+main 1 tcode!
 
 \ The main part of the metacompiler
+?stack-clear
 host REQUIRE ../host/metacompiler.ft
 
 \ Now an interleaved dance of shared and target-specific metacompiled code.

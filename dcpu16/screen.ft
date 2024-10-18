@@ -18,7 +18,7 @@ VARIABLE (colours)
 VARIABLE (light)
 : LIGHT   8 (light) ! ;
 : COLOUR ( c "name" --   X: -- c ) create c, DOES> c@ (light) @ +   0 (light) ! ;
-  host acts: create tc, DOES> tc@ ;
+  host acts: create tdata-c, DOES> tdata-c@ ;
 target
 
 $0 COLOUR black

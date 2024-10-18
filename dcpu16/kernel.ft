@@ -210,7 +210,7 @@ label var_last_parse  0 asm, 0 asm,
 label var_source      0 asm, 0 asm,
 label var_in_ptr      0 asm,
 label var_source_id   0 asm,
-label input-buf       128 there +!
+label input-buf       128 tcode-allot
 
 code DP
   var_dp # push set,
@@ -640,5 +640,4 @@ label main
 
 \ Overwrite the jump target of the entry code to be main.
 \ The instruction is at $0000 and its target argument at $0001.
-main 1 t!
-
+main 1 tcode!

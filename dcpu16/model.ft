@@ -22,15 +22,9 @@ HOST DEFINITIONS
 
 \ The assembler defines a THERE pointer for the Target dictionary.
 \ We capture that address as the HOST DP as well.
-there CONSTANT DP
+code-there CONSTANT DP
 : here dp @ ;
 0 dp !   \ DCPU execution starts at $0000 by default.
-
-: t,        ( w -- )  asm, ;
-: tc,       ( b -- )  asm, ;   \ Byte-width assemble. That's just t, here.
-: tc@ t@ ;
-: tc! t! ;
-
 
 \ First line of code, the entry point. It'll be a jump to COLD eventually.
 $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
@@ -56,8 +50,8 @@ $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
 : taligned  ( x -- x2 ) ;
 : talign    ( -- ) ;
 
-: tcompile,  ( xt -- )      t, ;
-: tdecompile ( slot -- xt ) t@ ;
+: tcompile,  ( xt -- )      tcode, ;
+: tdecompile ( slot -- xt ) tcode@ ;
 
 VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
 : LATEST ( -- nt ) 'latest @ ;
@@ -114,7 +108,7 @@ VARIABLE 'EXIT   \ These get populated later.
 
 : EXIT, ( -- ) 'EXIT @ tcompile, ;
 
-: DOES, ( -- xt-does ) '(DOES>) @ t,   'EXIT @ t,   here   DOCOL # jsr, ;
+: DOES, ( -- xt-does ) '(DOES>) @ tcode,   'EXIT @ tcode,   here   DOCOL # jsr, ;
 
 
 \ Not really words, just assembler routines.
@@ -141,23 +135,23 @@ label DOSTRING
 \ So that the pushed PC is exactly the data region.
 \ The code for DODOES can't use the inline literal, so it needs this space for
 \ a long JSR lit.
-: ,dovar ( -- ) $7c20 t, dovar t, ;
+: ,dovar ( -- ) $7c20 tcode, dovar tcode, ;
 
 \ Compiles a string literal into the thread.
 \ In ITC/DTC that's DOSTRING, then the length, then the chars.
 : ,dostring ( c-addr u -- )
   dostring tcompile,
-  dup tc,
-  ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tc,   1+ R> REPEAT drop ;
+  dup tcode-c,
+  ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tcode-c,   1+ R> REPEAT drop ;
 
 \ Overwrites the code field (address) of the word at word-xt to point to the
 \ ;CODE or DOES> at does-xt.
 \ On DTC DCPU-16, this compiles JSR does-xt as two words: $7c20 does-xt
-: !dodoes ( does-xt word-xt -- ) $7c20 over t!   tcell+ t! ;
+: !dodoes ( does-xt word-xt -- ) $7c20 over tcode!   tcell+ tcode! ;
 
 \ Compile a literal. This is in the model because eg. STC doesn't use the two-
 \ cell [LIT|x] pattern.
-: tliteral ( x --    X: -- x ) lit tcompile,   t, ;
+: tliteral ( x --    X: -- x ) lit tcompile,   tcode, ;
 
 : t>body ( target-xt -- target-body ) 2 tcells + ;
 
@@ -169,7 +163,7 @@ label entry-point 0 asm,
 
 \ Space for : and ; ==========================================================
 \ : :   (CREATE) ,docol smudge ] exit    5 cells and the codeword
-: allot-: ( -- ) 6 tcells there +! ;
+: allot-: ( -- ) 6 tcells tcode-allot ;
 \ : ;   EXIT-compile, smudge [ exit
 \ EXIT-compile, pushes: lit + xt + compile, = 3, plus smuge [ exit for 6, plus the codeword = 7
-: allot-; ( -- ) 7 tcells there +! ;
+: allot-; ( -- ) 7 tcells tcode-allot ;

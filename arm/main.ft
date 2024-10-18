@@ -60,17 +60,6 @@ host definitions
 VARIABLE output-file-xt
 :noname S" forth-arm.bin" ; output-file-xt !
 
-: dump ( c-addr u -- )
-  cr cr ." Assembling to " 2dup type cr
-  W/O BIN create-file ABORT" Failed to open output file" ( file )
-
-  \ Write the single space that we use.
-  code-there over dump-space
-
-  \ And close the file.
-  dup flush-file ABORT" Failed to flush"
-      close-file ABORT" Failed to close" ;
-
 \ NB: You should always include tail.ft as the last stage of your build.
 \ It actually emits the assembled image.
 

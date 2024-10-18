@@ -29,8 +29,8 @@
 \ Sets THERE, ORG and file-offset all to 0; these should be customized by
 \ target-specified code as needed. Use ORG! to set these.
 : there-ptr ( host-space   "name" --   X: -- there-array )
-  \      there | max-there | host-ptr | org | file-offset
-  CREATE 0 ,     0 ,         ,          0 ,   0 , ;
+  \      there | host-ptr | max-host | org | file-offset
+  CREATE 0 ,     dup ,      ,          0 ,   0 , ;
 
 
 \ Define all three spaces, per the configuration flags.
@@ -53,8 +53,8 @@ config mix-code-and-data? @ [IF]
   new-space THERE-PTR data-there
 [THEN]
 
-: space>max        cell+ ;
-: space>host-array 2 cells + ;
+: space>host-array cell+ ;
+: space>max        2 cells + ;
 : space>org        3 cells + ;
 : space>offset     4 cells + ;
 
@@ -64,43 +64,55 @@ config mix-code-and-data? @ [IF]
 
 
 \ Read and Write helpers =====================================================
-: +max ( target-addr there-array -- )
-  space>max dup >R   @ max   R> ! ;
-
-: >space ( target-addr there-array -- host-addr )
-  2dup +max
-  dup  space>host-array @
-  swap space>org        @ ( ta host0 org )
-  - + ;
-
 : bits/tcell  ( -- u ) config cell-width @   config char-bits @ * ;
 : chars/tcell ( -- u ) bits/tcell   3 rshift ;
 : chars/tchar ( -- u ) config char-bits @   3 rshift ;
 : tchar-mask  ( -- u-mask ) 1   config char-bits @ lshift   1- ;
+
+: +max ( host-addr there-array -- )
+  space>max dup >R   @ max   R> ! ;
+
+: taddr->offset ( target-addr there-array -- target-offset )
+  space>org @ + ;
+: toffset->hoffset ( target-offset -- host-offset ) chars/tchar * ;
+: hoffset->haddr   ( host-offset there-array -- host-addr )
+  space>host-array @ + ;
+
+: >space ( target-addr there-array -- host-addr )
+  dup >R            ( target-addr there-array    R: there-array )
+  taddr->offset
+  toffset->hoffset
+  R@ hoffset->haddr ( host-addr   R: there-array )
+  dup R> +max ;
+
 
 \ Reading internals ==========================================================
 \ We want this to work for any size of char and cell on the target even if
 \ it's larger or smaller than the host.
 \ Note that we do require a target's char-bits to be divisible by 8!
 
-: <t@-le> ( c-addr -- w )
-  0
-  bits/tcell 0 DO ( c-addr x )
-    over c@   i lshift   or ( c-addr x' )
+: <t@-le> ( c-addr width -- w )
+  0 swap
+  0 DO ( c-addr x )
+    over c@   i 8 * lshift   or ( c-addr x' )
     >R char+ R>
-  config char-bits @ +LOOP
-  nip ;
+  LOOP nip ;
 
-: <t@-be> ( c-addr -- w )
-  0
-  0   bits/tcell 8 - DO ( c-addr x )
+: <t@-be> ( c-addr width -- w )
+  0 swap
+  0   DO ( c-addr x )
     8 lshift   over c@ or   ( c-addr x' )
     >R char+ R>
-  config char-bits @ negate +LOOP
-  nip ;
+  LOOP nip ;
 
-: <t@>  ( c-addr -- w ) config little-endian? @ IF <t@-le> ELSE <t@-be> THEN ;
-: <tc@> ( c-addr -- ch ) <t@> tchar-mask and ;
+\ TODO: It would be faster to have a DEFER'd word rather than checking
+\ endianness on every read/write. Maybe a trampoline, where the DEFER starts
+\ with a word that checks and resets itself.
+
+: <t@-endian> ( c-addr width -- w )
+  config little-endian? @ IF <t@-le> ELSE <t@-be> THEN ;
+: <t@>  ( c-addr -- w ) chars/tcell <t@-endian> ;
+: <tc@> ( c-addr -- b ) chars/tchar <t@-endian> ;
 
 
 \ Writing internals ==========================================================
@@ -110,10 +122,16 @@ config mix-code-and-data? @ [IF]
     1+ >R   8 rshift   R>
   LOOP 2drop ;
 
-: <t!-be> ( w c-addr depth -- c-addr' )
-  1- 0 swap DO ( w c-addr )
-    over i 8 * rshift   over i chars +   c!
-  -1 +LOOP 2drop ;
+: <be-bytes> ( w depth -- lsb ... msb )
+  >R   dup $ff and   swap 8 rshift   R> ( lsb shifted depth )
+  1- ?dup IF recurse ELSE drop THEN ;
+
+: <t!-be> ( w c-addr depth -- )
+  swap >R dup >R     ( w depth       R: c-addr depth )
+  <be-bytes>         ( lsb ... msb   R: c-addr depth )
+  R> R> swap 0 DO ( bytes... c-addr )
+    tuck c!   char+
+  LOOP drop ;
 
 : <t!-endian> ( w c-addr depth -- )
   config little-endian? @ IF <t!-le> ELSE <t!-be> THEN ;
@@ -177,21 +195,38 @@ config mix-code-and-data? @ [IF]
 : extend-file ( offset file -- )
   ." Extend-file offset: " over hex. ." file: " dup hex. cr
   >R s>d
-  2dup R@ .s cr resize-file     ABORT" failed to resize file"
-       R> reposition-file ABORT" failed to reposition file" ;
+  2dup R@ .s cr resize-file ABORT" failed to resize file"
+       R> reposition-file   ABORT" failed to reposition file" ;
 
 : .space ( there-array -- )
   ." Space:" cr
   ." Current: " dup @ hex. cr
-  ." Max:     " dup space>max @ hex. cr
   ." Host:    " dup space>host-array @ hex. cr
+  ." Max:     " dup space>max @ hex. cr
   ." Target:  " dup space>org @ hex. cr
   ." File:    "     space>offset @ hex. cr ;
+
+: space>span ( there-array -- c-addr u )
+  dup  space>host-array @
+  swap space>max @
+  over - ;
 
 : dump-space ( there-array file -- )
   \ ." dump-space: " over hex. dup hex. .s cr
   \ over .space
   >R
   dup space>offset @   R@ extend-file
-  dup space>host-array @   swap dup space>max @ 16 +   swap space>org @ -
-    R> write-file ABORT" Failed to write file" ;
+  space>span R> write-file ABORT" Failed to write file" ;
+
+: dump ( c-addr u -- )
+  cr cr ." Assembling to " 2dup type cr
+  W/O BIN create-file ABORT" Failed to open output file" ( file )
+
+  \ Write the single space that we use.
+  code-there over dump-space
+  config mix-code-and-data? @ 0= IF data-there over dump-space THEN
+  config mix-code-and-name? @ 0= IF name-there over dump-space THEN
+
+  \ And close the file.
+  dup flush-file ABORT" Failed to flush"
+      close-file ABORT" Failed to close" ;

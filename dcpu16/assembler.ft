@@ -5,22 +5,7 @@
 
 \ Output is big-endian, as is common for DCPU emulators.
 
-CREATE output 65536 2* allot
-VARIABLE there
-0 there !
-VARIABLE max-out
-0 max-out !
-
-: +max ( t-addr -- ) max-out @ max max-out ! ;
-
-: ta ( t-addr -- c-addr ) 2* output + ;
-: t@ ( t-addr -- w ) ta   dup c@ 8 lshift   swap 1+ c@ or ;
-: t! ( w t-addr -- )
-  dup +max ta >R
-  dup 8 rshift 255 and R@    c!
-               255 and R> 1+ c! ;
-
-: asm, ( w -- ) there @ t!   1 there +! ;
+: asm, ( w -- ) tcode, ;
 
 \ Handling the extra words after the opcode.
 CREATE extras 2 cells allot
@@ -115,7 +100,7 @@ $10 unary hwn,   $11 unary hwq,   $12 unary hwi,
 $13 unary log,   $14 unary brk,   $15 unary hlt,
 
 
-: label ( "name" --    X: -- t-addr ) there @ CONSTANT ;
+: label ( "name" --    X: -- t-addr ) code-there @ CONSTANT ;
 
 \ Control structures
 \ ==================
@@ -130,14 +115,5 @@ $13 unary log,   $14 unary brk,   $15 unary hlt,
 \ compile a long-form literal, noting the address as a newly defined word.
 \ A later resolve will write it back.
 \ NB: Only works for RHS arguments.
-: fwd     ( -- resolve-token value operand ) there @ 1+   1000 # ;
-: resolve ( resolve-token ) there @ swap t! ;
-
-
-: dump ( c-addr u -- )
-  cr cr ." Assembling to " 2dup type cr
-  W/O BIN create-file ABORT" Failed to open output file" >R
-  output   max-out @ 1+ 2*   R@ write-file ABORT" Failed to write"
-  R@ flush-file ABORT" Failed to flush"
-  R> close-file ABORT" Failed to close" ;
-
+: fwd     ( -- resolve-token value operand ) code-there @ 1+   1000 # ;
+: resolve ( resolve-token ) code-there @ swap tcode! ;

@@ -9,7 +9,7 @@ target definitions
 \ A code field here is jsr lit, $7c20 + the literal.
 target : ,CF ( codeword-addr -- ) $7c20 , , ;
 
-target : ,DOCOL ( -- ) [ host jsr_docol t@ tliteral target ] , ;
+target : ,DOCOL ( -- ) [ host jsr_docol tcode@ tliteral target ] , ;
 
 target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , ; IMMEDIATE
   host acts: tliteral ; IMPERATIVE
@@ -54,7 +54,6 @@ host definitions
 
 \ Runs during compilation TARGET : DOES> - compile code into its thread!
 : TDOES,
-  [T'] (DOES>) tliteral  [T'] compile, tcompile,
-  [T'] EXIT    tliteral  [T'] compile, tcompile,
-  jsr_docol t@ tliteral  [T'] ,        tcompile, ;
-
+  [T'] (DOES>)     tliteral  [T'] compile, tcompile,
+  [T'] EXIT        tliteral  [T'] compile, tcompile,
+  jsr_docol tcode@ tliteral  [T'] ,        tcompile, ;

@@ -27,7 +27,7 @@ clean-output
 : tc@ ( t-addr -- b ) ta c@ ;
 : tc! ( b t-addr -- ) dup endpoints! ta c! ;
 
-1 CONSTANT instr-width
+1   config instr-width !
 
 : asm,   ( b -- ) there @ tc!   1 there +! ;
 : asm,16 ( w -- ) dup $ff and asm,   8 rshift $ff and asm, ;
@@ -323,9 +323,9 @@ $70 brancher bvs,
 \ ( 19 ) $00 c,                      \ Game setting   0+0 = 16K ROM
 \ ( 1a ) $00 c,                      \ Cart hardware revision/subtype
 \ ( 1b ) $00 c, $00 c, $00 c, $00 c, $00 c, \ Padding
-\ 
+\
 \ CREATE cart-zeroes 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 ,
-\ 
+\
 \ CREATE chip-header
 \ ( 00 ) $43 c, $48 c, $49 c, $50 c, \ Segment signature "CHIP"
 \ ( 04 ) $00 c, $00 c, $40 c, $10 c, \ Segment length: ROM size + $10 = $4010
@@ -333,8 +333,8 @@ $70 brancher bvs,
 \ ( 0a ) $00 c, $00 c,               \ Bank number ($0000 normal cart)
 \ ( 0c ) $80 c, $00 c,               \ Load address $8000
 \ ( 0e ) $40 c, $00 c,               \ ROM length $4000
-\ 
-\ 
+\
+\
 \ \ Given the label for the cart
 \ : c64-cart-header ( c-addr u fileid -- )
 \   >R
@@ -370,4 +370,3 @@ $70 brancher bvs,
 \   $8000 min-there !   max-assembly max-there !
 \   R> dup c64-emit
 \   c64-close ;
-

@@ -10,7 +10,7 @@ error? off
 : -> depth start-depth @ <> IF S" Stack not clean during assembly " error THEN ;
 
 : }T depth start-depth @ <= IF S" Empty expectation " error THEN
-  there @ BEGIN instr-width - dup 0>= WHILE ( ... exp tgt-addr )
+  there @ BEGIN config instr-width @   - dup 0>= WHILE ( ... exp tgt-addr )
     tuck t@ <> IF S" Mismatch " error THEN ( ... tgt-addr )
   REPEAT drop
   depth start-depth @ swap - IF S" Expectation longer than actual " error THEN ;

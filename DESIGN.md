@@ -43,13 +43,109 @@ As an illustration, consider the three `HERE` words that exist at once:
 - `target HERE` is the *mirror word* for `HERE` on the Target system.
 
 
+### Three memory spaces
+
+Per the Forth standard 3.3, we can split the Forth dictionary into three spaces.
+These may or may not overlap physically, and only some must be present on the
+client.
+
+- **Code space** is always included. It contains both native instructions and
+  compiled Forth code (which might be native or threads).
+    - Code space can be read-only. An interactive system needs a writable code
+      space, but that can be separate from the read-only output of the
+      metacompiler.
+- **Data space** is always read/write. It can be initialized by user code, eg.
+  using `,` and `some-var !`. (This is legal even for ROM deployments!)
+- **Name space** holds the Forth word list, allowing to search the dictionary.
+    - A non-interactive target does not need to include name space at all.
+
+In a traditional bootstrapping Forth, including earlier versions of this
+metacompiler, the three spaces were always unified and read/write. Now they are
+carefully separated, enabling more variation in the target.
+
+### Target configurations
+
+There are several dimensions in which the target can vary, and they have
+different implications for what the metacompiler must output.
+
+See **Standard configurations** below for high-level combos.
+
+#### Interactivity
+
+There are three levels of interactivity:
+
+- **Interactive:** Interactive systems need to include *name space* and code to
+  accept input, parse names and numbers, look up definitions, and compile Forth
+  code. Non-interactive systems can skip most of this logic, and omit name
+  space from the target.
+    - Name space cannot be directly addressed by a program; therefore the
+      metacompiled part can be read-only, with new definitions going elsewhere.
+    - Put differently, *interactive* means that the target build is a Forth
+      system, rather than a self-contained application.
+    - Only *interactive* systems have `EVALUATE`!
+- **Keyboarded:** No Forth compiler, but still has input processing words like
+  `accept`, `parse-name`, `>number` etc.
+- **Application:** No keyboard input functionality built in. Saves a bunch of
+  space for pure applications such as games.
+
+These are captured by two configuration flags:
+- `has-dictionary?`: true for interactive builds
+- `keyboard-input?`: true for interactive builds, or application builds that
+  want to use Forth's input handling, eg. `ACCEPT`
+
+(Setting `config has-dictionary? ON` and `config keyboard-input? OFF` doesn't
+make sense, but it should work.)
+
+
+#### Included memory spaces
+
+Of the three memory spaces, only *code space* is absolutely required in the
+target build. *Name space* is required for *interactive* builds (see above)
+but can be omitted for self-contained applications.
+
+*Data space* always exists on the target, but it might be a separate,
+initially-empty RAM space, while the program lives in ROM. For targets where
+the data space is separate, any values initialized as part of the input program
+must be initialized on startup. (In the simple case where code and data space
+overlap and are read/write, this is trivial.)
+
+The metacompiler keeps track of initialized data space during compilation, and
+if the target has a separate data space requiring initialization, it includes a
+table of the initial data and its destination within data space, and runs code
+on a `COLD` start to copy that data to the right places in the target's data
+space.
+
+The memory space configuration is thus in a few parts:
+
+- `data-space-blank? ON` performs explicit initialization of data space,
+  allowing it to be separate and code space to be in ROM.
+- `mix-code-and-data?` controls whether code and data space overlap or are
+  separate.
+- `mix-code-and-name?` controls whether code and name space overlap.
+    - This has implications for exactly how the dictionary is constructed.
+    - This is forced `OFF` for non-interactive builds, since name space does
+      not exist on the target.
+
+#### Standard configurations
+
+The several settings above are somewhat complex, so you probably want to target
+one of these high-level, "canned" configurations:
+
+- `interactive-forth!` an **interactive** Forth system, with all spaces unified.
+    - Theoretically this could have a variant with separate spaces, but this
+      is not supported yet.
+- `rom-application!` an **application** build, with separate data space that gets
+  initialized on startup. Used for eg. a Gameboy Advance game, where the code
+  goes in ROM, data in RAM and there's no keyboard at all.
+
+Call one of these to set the configuration accordingly. You can make edits to
+the configuration after one of them is called.
+
+
 ### Assembler
 
 One fairly self-contained component is an assembler for the Target CPU.
 This is loaded at the start and then used to assemble `CODE` words.
-
-This should come with prefixed words for reading and writing the target image:
-`T@`, `T!`, `T,`, `TC@`, etc.
 
 
 ### Mirror Words
@@ -170,7 +266,7 @@ The Forth compiler then continues, compiling `@ EXIT` as well.
 The final definition for `CONSTANT` is:
 
 ```
-link | 8 | CONSTANT | jsr docol | CREATE | , | (DOES>) | EXIT |
+link | 8 | "CONSTANT" | jsr docol | CREATE | , | (DOES>) | EXIT |
     dodoes-code | @ | EXIT
 ```
 
@@ -360,4 +456,3 @@ the Target itself.
       target-specific code in place.
 
 Plus definitions for the ANS Forth words `ALIGNED ALIGN PAD`.
-

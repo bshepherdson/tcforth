@@ -59,9 +59,6 @@ $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
 : tcompile,  ( xt -- )      t, ;
 : tdecompile ( slot -- xt ) t@ ;
 
-16 CONSTANT tcellbits  \ 16 bits per cell
-16 CONSTANT tbits      \ 16 bits per address unit
-
 VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
 : LATEST ( -- nt ) 'latest @ ;
 0 'latest !

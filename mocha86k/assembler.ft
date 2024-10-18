@@ -24,7 +24,7 @@ VARIABLE max-out
 
 : asm,  ( w -- ) there @ tc!   1 there +! ;
 
-1 CONSTANT instr-width
+1   config instr-width !
 
 \ Handling the extra words after the opcode.
 \ These are 4 cells in case of long-word arguments.
@@ -270,4 +270,3 @@ $6 (2short) xorw,   $e (2short) xorl,
   output   max-out @ 1+ 2*   R@ write-file ABORT" Failed to write"
   R@ flush-file ABORT" Failed to flush"
   R> close-file ABORT" Failed to close" ;
-

@@ -238,8 +238,8 @@ TVARIABLE var_handler
 
 \ TODO: The input system is not necessary on non-interactive systems like GBA!
 \ I'm leaving it in for now for simpler compilation.
-data-there @ CONSTANT var_last_parse   instr-width 2* tdata-allot
-data-there @ CONSTANT var_source       instr-width 2* tdata-allot
+data-there @ CONSTANT var_last_parse   config instr-width @   2* tdata-allot
+data-there @ CONSTANT var_source       config instr-width @   2* tdata-allot
 TVARIABLE var_in_ptr
 TVARIABLE var_source_id
 

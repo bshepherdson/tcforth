@@ -1,0 +1,56 @@
+\ Defines several configuration parameters which control different parts of
+\ the metacompiler, eg. whether code space overlaps data space, whether code
+\ space is read-only, whether to include name space and input parsing code, etc.
+
+host definitions
+
+begin-structure configuration
+  field: has-dictionary?
+  field: keyboard-input?
+  field: data-space-blank?
+  field: mix-code-and-data?
+  field: mix-code-and-name?
+  field: char-bits
+  field: cell-width
+  field: instr-width
+  field: little-endian?
+end-structure
+
+configuration allocate drop CONSTANT config
+
+\ Derived value that's used in a few places.
+: colocated-names? ( -- ? )
+  config has-dictionary? @
+  config mix-code-and-data? @ and
+  config mix-code-and-name? @ and ;
+
+\ A built-in configuration, with all three spaces unified, fully interactive.
+: interactive-forth! ( -- )
+  config has-dictionary?    ON
+  config keyboard-input?    ON
+  config data-space-blank?  OFF
+  config mix-code-and-data? ON
+  config mix-code-and-name? ON ;
+
+\ A built-in configuration, with no interactivity or keyboard, all spaces
+\ separate, and a blank data space.
+: rom-application! ( -- )
+  config has-dictionary?    OFF
+  config keyboard-input?    OFF
+  config data-space-blank?  ON
+  config mix-code-and-data? OFF
+  config mix-code-and-name? OFF ;
+
+\ Default configuration:
+\ - interactive Forth
+interactive-forth!
+
+
+\ Helpers ====================================================================
+\ Typically 8 or 16, the number of bits per target address unit.
+: tcharbits ( -- u )     config char-bits @ ;
+: tcells    ( u1 -- u2 ) config cell-width @ * ;
+: tcellbits ( -- u )     tcharbits tcells ;
+: tchars    ( u1 -- u2 ) ;
+: tchar+    ( u1 -- u2 ) 1+ ;
+: tcell+    ( u1 -- u2 ) 1 tcells + ;

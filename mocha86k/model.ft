@@ -62,9 +62,6 @@ $deadbeef # pc setl, \ Forcing an unsigned-long jump. Target will get adjusted.
 : taligned  ( x -- x2 ) ;
 : talign    ( -- ) ;
 
-32 CONSTANT tcellbits  \ 32 bits per cell
-16 CONSTANT tbits      \ 16 bits per address unit
-
 VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
 : LATEST ( -- nt ) 'latest @ ;
 0 'latest !

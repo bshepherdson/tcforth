@@ -23,20 +23,15 @@ HOST DEFINITIONS
 data-there CONSTANT DP
 : here dp @ ;
 
-\ These allocate and fill *code space*.
-: tcode,        ( w -- )  asm, ;
-: tcode-c,      ( b -- )  asm-byte, ;
-
-: tname,        ( w -- ) name-there @   instr-width name-there +!   tname! ;
-: tname-c,      ( b -- ) name-there @   1           name-there +!   tname-c! ;
-
 \ First line of code, the entry point. This is at $0 in code-there space, but
 \ will be loaded at $10000 by the ARM runtime.
+?stack-clear
 code-there @ b,
 
 
 \ Some assembler macros
-: next,    ( -- ) instr-width # ip []+ pc ldr, ;
+?stack-clear
+: next,    ( -- ) config instr-width @   # ip []+ pc ldr, ;
 : pushrsp, ( r 0 -- ) 2>R {{ 2R> }} rsp !stmdb, ;
 : poprsp,  ( r 0 -- ) 2>R {{ 2R> }} rsp !ldmia, ;
 
@@ -50,8 +45,6 @@ code-there @ b,
 : tcompile,  ( xt -- )      tcode, ;
 : tdecompile ( slot -- xt ) tcode@ ;
 
-32 CONSTANT tcellbits  \ 32 bits per cell
- 8 CONSTANT tbits      \ 8 bits per address unit
 
 VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
 : LATEST ( -- nt ) 'latest @ ;

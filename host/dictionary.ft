@@ -28,7 +28,7 @@ host definitions
 \ First the header and length. The top bit is used for IMMEDIATE, the next for
 \ smudge, the rest for length. That gives a length of 63 characters if the width
 \ is 8 bits.
-1 tbits  1- lshift CONSTANT f_immed
+1   config char-bits @ 1- lshift CONSTANT f_immed
 f_immed  1 rshift  CONSTANT f_hidden
 f_immed  1-        CONSTANT mask_len_hidden
 f_hidden 1-        CONSTANT mask_len
@@ -37,11 +37,15 @@ f_hidden 1-        CONSTANT mask_len
 \ Compiles a fresh Target header with an empty code field.
 \ This is a bit tricky with split spaces: the linked list and name of the word
 \ is in name space; the xt is in code space.
-
-rom? [IF]
-  : <mk-code-field> ( -- target-xt ) code-there @   dup tname, ;
-[ELSE]
+colocated-names? [IF]
+  \ Names, code and data are commingled, so no indirection is needed.
+  \ The xt of a definition is right after it.
   : <mk-code-field> ( -- target-xt ) here ;
+[ELSE]
+  \ When name and code are separated, the name space has a pointer to the code
+  \ space for this word. (Note that even VARIABLEs and CREATEd defs exist in
+  \ code space; with separated code and data they have a pointer to their data.
+  : <mk-code-field> ( -- target-xt ) code-there @   dup tname, ;
 [THEN]
 
 : (mk-header) ( c-addr u -- target-xt )
@@ -55,20 +59,16 @@ rom? [IF]
 : t>cfa ( target-nt -- target-xt )
   tcell+ dup tcode-c@ mask_len and + tchar+ taligned ;
 
-rom? [IF]
-  \ Wrap the above and read out the CFA from the dictionary.
-  : t>cfa ( target-nt -- target-xt ) t>cfa tname@ ;
-[THEN]
-
 : TNAME>STRING ( t-nt -- c-addr u ) tcell+ dup 1+ swap tcode-c@ mask_len and ;
 
-rom? [IF]
-  \ If this is a ROM build, the name space is host-only.
-  \ The words end with an xt.
-  : TNAME>INT ( t-nt -- t-xt ) tname>string + taligned tname@ ;
-[ELSE]
-  \ Single dictionary builds the word just follows.
-  : TNAME>INT ( t-nt -- t-xt ) tname>string + taligned ;
+\ Single dictionary builds the word just follows.
+: TNAME>INT ( t-nt -- t-xt ) tname>string + taligned ;
+
+\ If names and code are NOT colocated, wrap the above words to indirect through
+\ the name space pointers into code space.
+colocated-names? 0= [IF]
+  : t>cfa ( target-nt -- target-xt ) t>cfa tname@ ;
+  : TNAME>INT   tname>int tname@ ;
 [THEN]
 
 : T>NAME ( target-xt -- target-nt|0 )

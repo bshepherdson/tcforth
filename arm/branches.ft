@@ -21,7 +21,7 @@ host definitions
 : DEST>POST   tcell+ ;
 
 
-interactive? [IF]
+config has-dictionary? @ [IF]
 target definitions
 target : 0BRANCH,
     [ host T' (0BRANCH) tliteral target ] compile,   here 0 , ;

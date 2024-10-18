@@ -5,27 +5,29 @@ REQUIRE ../host/vocabularies.ft
 
 host definitions
 
-\ TODO: Probably this should be called separate-names?
-false CONSTANT rom?
-true  CONSTANT interactive?
+\ Metacompiler configuration =================================================
+host REQUIRE ../host/configuration.ft
 
-\ The QEMU ARM system starts executing user code at $10000.
-\ We need to assemble at that location, then.
-REQUIRE spaces.ft
+8    config char-bits    !
+4    config cell-width   !
+4    config instr-width  !
 
-\ This system uses a single contiguous dictionary. It goes in the file at $0
-\ but gets loaded at $10000 in the target address space.
-new-space dict-space
-0 $10000 dict-space THERE-PTR name-there
+config little-endian?   ON
 
-name-there CONSTANT code-there
-name-there CONSTANT data-there
 
+\ Target spaces ==============================================================
+REQUIRE ../host/spaces.ft
+
+\ The QEMU ARM system loads the user code at $10000.
+$10000 code-there ORG!
+\ Since the spaces are mixed, that relocated all of them together.
+
+\ Metacompilation ============================================================
 REQUIRE assembler.ft
-
 host REQUIRE ../host/helpers.ft
 ?stack-clear
 host REQUIRE model.ft
+?stack-clear
 host REQUIRE ../host/dictionary.ft
 host REQUIRE ../host/mirrors.ft
 
@@ -62,8 +64,10 @@ VARIABLE output-file-xt
   cr cr ." Assembling to " 2dup type cr
   W/O BIN create-file ABORT" Failed to open output file" ( file )
 
-  \ Write the single zone.
-  name-there over dump-space
+  \ Write the single space that we use.
+  code-there over dump-space
+
+  \ And close the file.
   dup flush-file ABORT" Failed to flush"
       close-file ABORT" Failed to close" ;
 

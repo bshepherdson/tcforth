@@ -4,70 +4,10 @@
 \ Canonical ARM:     add r0, r1, r2      ldr r4, [r6, #-12]
 \ This assembler:    r2 r1 r0 add,       -12 # r6 [+] r4 ldr,
 
-\ Target dictionary redesign =================================================
-\ There are, strictly speaking, three spaces to the dictionary: a name space,
-\ a code space, and a data space.
-\ Programs can only explicitly fetch/store from data space!
-\
-\ The relationship between name space and data space is unspecified.
-\ The relationship between code space and data space is unspecified.
-\ Therefore we can do things like: not include name space in the compiled form,
-\ put data space in RAM and code space in ROM.
-
-\ So HERE, CREATE, ALLOT and so on are all dealing with *data space*, which
-\ doesn't necessarily overlap with name space or code space.
-
-\ In the general assembler, we allocate the spaces separately; they may not
-\ get used.
-\ data-space is not declared, since it is not initialized by default.
-\ We just track the current pointer into that space.
-
 : hex.s base @ >R   hex .s   R> base ! ;
 
-: tname-addr ( t-addr -- c-addr ) name-there >space ;
-: tcode-addr ( t-addr -- c-addr ) code-there >space ;
-: tdata-addr ( t-addr -- c-addr ) data-there >space ;
-
-\ 32-bit cells are written little-endian.
-: <t@> ( c-addr -- w )
-  dup >R c@
-  R@ 1+  c@  8 lshift or
-  R@ 2 + c@ 16 lshift or
-  R> 3 + c@ 24 lshift or ;
-
-: tname@ ( t-addr -- w ) tname-addr <t@> ;
-: tcode@ ( t-addr -- w ) tcode-addr <t@> ;
-: tdata@ ( t-addr -- w ) tdata-addr <t@> ;
-
-: <t!> ( w c-addr -- )
-  >R
-  dup           $ff and R@     c!
-  dup  8 rshift $ff and R@ 1+  c!
-  dup 16 rshift $ff and R@ 2 + c!
-      24 rshift $ff and R> 3 + c! ;
-
-: tname! ( w t-addr -- ) tname-addr <t!> ;
-: tcode! ( w t-addr -- ) tcode-addr <t!> ;
-: tdata! ( w t-addr -- ) tdata-addr <t!> ;
-
-: tname-c@ ( t-addr -- b ) tname-addr c@ ;
-: tcode-c@ ( t-addr -- b ) tcode-addr c@ ;
-: tdata-c@ ( t-addr -- b ) tdata-addr c@ ;
-: tname-c! ( b t-addr -- ) tname-addr c! ;
-: tcode-c! ( b t-addr -- ) tcode-addr c! ;
-: tdata-c! ( b t-addr -- ) tdata-addr c! ;
-
-4 CONSTANT instr-width
-
-: tdata-allot ( u -- )
-  data-there +!
-  data-there dup @ 1- swap ( highest data-there ) +max ;
-
-: TVARIABLE ( "name" --     X: -- t-addr )
-  data-there @   instr-width tdata-allot   CONSTANT ;
-
-: asm,      ( w -- ) code-there @ tcode!     instr-width code-there +! ;
-: asm-byte, ( b -- ) code-there @ tcode-c!   1           code-there +! ;
+: asm,      ( w -- ) tcode, ;
+: asm-byte, ( b -- ) tcode-c, ;
 
 : label ( "name" --    X: -- t-addr ) code-there @ CONSTANT ;
 

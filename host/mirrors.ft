@@ -54,6 +54,10 @@ VARIABLE >mirror \ Holds the body address of the mirror currently executing.
 : mirror-compile ( -- )
   >mirror @ mirror>txt @ ( dup ." compiling " hex. cr ) TCOMPILE, ;
 
+\ START HERE: Separate spaces are broken - need to figure out the extra
+\ indirection based on separate-spaces? since there's a case missing.
+\ When a new mirror gets created, it needs to be written in.
+
 \ The parameter field of a mirror word contains:
 \ Target xt, metainterpreting xt, metacompiling xt, Host DOES> xt, Target DOES> xt
 : mirror ( target-xt "name" -- )
@@ -89,4 +93,3 @@ VARIABLE >mirror \ Holds the body address of the mirror currently executing.
 ;
 
 host definitions
-

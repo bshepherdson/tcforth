@@ -20,7 +20,7 @@ VARIABLE max-out
   dup 8 rshift 255 and R@    c!
                255 and R> 1+ c! ;
 
-1 CONSTANT instr-width
+1   config instr-width !
 
 : asm, ( w -- ) there @ t!   1 there +! ;
 
@@ -361,5 +361,3 @@ $f (branch) ble,
   output   max-out @ 1+ 2*   R@ write-file ABORT" Failed to write"
   R@ flush-file ABORT" Failed to flush"
   R> close-file ABORT" Failed to close" ;
-
-

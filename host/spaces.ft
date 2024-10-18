@@ -1,0 +1,197 @@
+\ Sets up the three dictionary spaces for the assembler and metacompiler.
+
+\ The Forth dictionary is divided into three parts:
+\ - Code space, where native code and read-only data goes.
+\ - Name space, where the names and dictionary data structure goes.
+\ - Data space, where writable data goes.
+
+\ These spaces might overlap, as in traditional Forths. But they might not!
+\ Note that the data space is not part of the binary and needs to be
+\ initialized by the setup code.
+\ See host/configuration.ft for the flags that control this setup.
+
+\ Each space is captured by a THERE-PTR array, which looks like this:
+\ [ there | max-there | host-ptr | org | file-offset ]
+\ there       reckoned in the target address space; tcode-addr etc. to adjust
+\ max-there   the largest THERE value ever used
+\ host-ptr    host pointer to where its actually being assembled; indexed from 0
+\ org         target address space point where the *start* of this range is found
+\ file-offset offset into the output file where this belongs
+
+\ To actually look up a byte from the space:
+\ - org is subtracted from it, creating a 0-based offset into the space
+\ - then that offset is used for the host-ptr to get the real value
+
+\ Allocates 8MB on the host heap.
+: new-space ( -- host-addr ) 8 1024 * 1024 * allocate drop ;
+
+\ Creates a new THERE-PTR array, with the specified host-ptr.
+\ Sets THERE, ORG and file-offset all to 0; these should be customized by
+\ target-specified code as needed. Use ORG! to set these.
+: there-ptr ( host-space   "name" --   X: -- there-array )
+  \      there | max-there | host-ptr | org | file-offset
+  CREATE 0 ,     0 ,         ,          0 ,   0 , ;
+
+
+\ Define all three spaces, per the configuration flags.
+\ code-space always exists for real, so start there.
+new-space THERE-PTR code-there
+
+\ Name space always exists at least in the metacompiler.
+\ So even if it won't reach the output file, create it.
+config mix-code-and-name? @ [IF]
+  code-there CONSTANT name-there
+[ELSE]
+  new-space THERE-PTR name-there
+[THEN]
+
+\ Finally, data space also always exists in the metacompiler.
+\ It might or might not be shared with the code space.
+config mix-code-and-data? @ [IF]
+  code-there CONSTANT data-there
+[ELSE]
+  new-space THERE-PTR data-there
+[THEN]
+
+: space>max        cell+ ;
+: space>host-array 2 cells + ;
+: space>org        3 cells + ;
+: space>offset     4 cells + ;
+
+\ Moves both THERE and ORG (the target pointers) to the given target-addr.
+: org! ( target-addr there-array -- )
+  2dup !   space>org ! ;
+
+
+\ Read and Write helpers =====================================================
+: +max ( target-addr there-array -- )
+  space>max dup >R   @ max   R> ! ;
+
+: >space ( target-addr there-array -- host-addr )
+  2dup +max
+  dup  space>host-array @
+  swap space>org        @ ( ta host0 org )
+  - + ;
+
+: bits/tcell  ( -- u ) config cell-width @   config char-bits @ * ;
+: chars/tcell ( -- u ) bits/tcell   3 rshift ;
+: chars/tchar ( -- u ) config char-bits @   3 rshift ;
+: tchar-mask  ( -- u-mask ) 1   config char-bits @ lshift   1- ;
+
+\ Reading internals ==========================================================
+\ We want this to work for any size of char and cell on the target even if
+\ it's larger or smaller than the host.
+\ Note that we do require a target's char-bits to be divisible by 8!
+
+: <t@-le> ( c-addr -- w )
+  0
+  bits/tcell 0 DO ( c-addr x )
+    over c@   i lshift   or ( c-addr x' )
+    >R char+ R>
+  config char-bits @ +LOOP
+  nip ;
+
+: <t@-be> ( c-addr -- w )
+  0
+  0   bits/tcell 8 - DO ( c-addr x )
+    8 lshift   over c@ or   ( c-addr x' )
+    >R char+ R>
+  config char-bits @ negate +LOOP
+  nip ;
+
+: <t@>  ( c-addr -- w ) config little-endian? @ IF <t@-le> ELSE <t@-be> THEN ;
+: <tc@> ( c-addr -- ch ) <t@> tchar-mask and ;
+
+
+\ Writing internals ==========================================================
+: <t!-le> ( w c-addr depth -- )
+  0 DO ( w c-addr )
+    over $ff and   over c! ( w c-addr )
+    1+ >R   8 rshift   R>
+  LOOP 2drop ;
+
+: <t!-be> ( w c-addr depth -- c-addr' )
+  1- 0 swap DO ( w c-addr )
+    over i 8 * rshift   over i chars +   c!
+  -1 +LOOP 2drop ;
+
+: <t!-endian> ( w c-addr depth -- )
+  config little-endian? @ IF <t!-le> ELSE <t!-be> THEN ;
+
+\ TODO: These don't handle inside-out endianness - does that include Mocha86k?
+\ I think it actually does. To be fixed, then.
+: <t!>  ( w c-addr -- ) chars/tcell <t!-endian> ;
+: <tc!> ( b c-addr -- ) chars/tchar <t!-endian> ;
+
+
+\ Reading ====================================================================
+: tname@   ( t-addr -- w ) name-there >space <t@> ;
+: tcode@   ( t-addr -- w ) code-there >space <t@> ;
+: tdata@   ( t-addr -- w ) data-there >space <t@> ;
+
+: tname-c@ ( t-addr -- b ) name-there >space <tc@> ;
+: tcode-c@ ( t-addr -- b ) code-there >space <tc@> ;
+: tdata-c@ ( t-addr -- b ) data-there >space <tc@> ;
+
+\ Writing ====================================================================
+: tname!   ( w t-addr -- ) name-there >space <t!> ;
+: tcode!   ( w t-addr -- ) code-there >space <t!> ;
+: tdata!   ( w t-addr -- ) data-there >space <t!> ;
+
+: tname-c! ( b t-addr -- ) name-there >space <tc!> ;
+: tcode-c! ( b t-addr -- ) code-there >space <tc!> ;
+: tdata-c! ( b t-addr -- ) data-there >space <tc!> ;
+
+\ Allot and compile ==========================================================
+: <t-allot> ( u thread-ptr -- ) tuck +!   dup @ 1- swap >space drop ;
+
+: tname-allot ( u -- ) name-there <t-allot> ;
+: tcode-allot ( u -- ) code-there <t-allot> ;
+: tdata-allot ( u -- ) data-there <t-allot> ;
+
+: space>there ( thread-ptr -- host-addr ) dup @ swap >space ;
+
+: <t,> ( w thread-ptr -- )
+  tuck   space>there   <t!>
+  config cell-width @   swap <t-allot> ;
+
+: tname,   ( w -- ) name-there <t,> ;
+: tcode,   ( w -- ) code-there <t,> ;
+: tdata,   ( w -- ) data-there <t,> ;
+
+: <tc,> ( w thread-ptr -- )
+  tuck   space>there <tc!>
+  1 swap <t-allot> ;
+
+: tname-c, ( w -- ) name-there <tc,> ;
+: tcode-c, ( w -- ) code-there <tc,> ;
+: tdata-c, ( w -- ) data-there <tc,> ;
+
+
+\ Extras =====================================================================
+: TVARIABLE ( "name" --    X: -- t-addr )
+  data-there @   config cell-width @ tdata-allot   CONSTANT ;
+
+
+\ File output ================================================================
+: extend-file ( offset file -- )
+  ." Extend-file offset: " over hex. ." file: " dup hex. cr
+  >R s>d
+  2dup R@ .s cr resize-file     ABORT" failed to resize file"
+       R> reposition-file ABORT" failed to reposition file" ;
+
+: .space ( there-array -- )
+  ." Space:" cr
+  ." Current: " dup @ hex. cr
+  ." Max:     " dup space>max @ hex. cr
+  ." Host:    " dup space>host-array @ hex. cr
+  ." Target:  " dup space>org @ hex. cr
+  ." File:    "     space>offset @ hex. cr ;
+
+: dump-space ( there-array file -- )
+  \ ." dump-space: " over hex. dup hex. .s cr
+  \ over .space
+  >R
+  dup space>offset @   R@ extend-file
+  dup space>host-array @   swap dup space>max @ 16 +   swap space>org @ -
+    R> write-file ABORT" Failed to write file" ;

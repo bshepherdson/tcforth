@@ -65,8 +65,6 @@ label DOVAR
   lr tos mov,
   next,
 
-cr cr ." dovar: " dovar hex. cr cr
-
 \ DOES> design for DTC =======================================================
 \ This is different from the original TC-Forth DODOES scheme.
 \ Sequence 1: while eg. : CONSTANT create , DOES> @ ; is being defined.

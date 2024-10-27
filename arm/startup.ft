@@ -19,8 +19,6 @@ label main
   entry-point r0 ldr-pc, \ entry-point is a variable holding an xt; xt -> r0
   r0 bx,                 \ Jump right into that word's code field.
 
-cr cr S" kernel ends at " type   code-there @ hex. cr cr
-
 \ Overwrite the jump target of the entry point at $10000 to be main.
 code-there @
 $10000 code-there !

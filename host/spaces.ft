@@ -73,17 +73,22 @@ config mix-code-and-data? @ [IF]
   space>max dup >R   @ max   R> ! ;
 
 : taddr->offset ( target-addr there-array -- target-offset )
-  space>org @ + ;
+  space>org @ - ;
 : toffset->hoffset ( target-offset -- host-offset ) chars/tchar * ;
 : hoffset->haddr   ( host-offset there-array -- host-addr )
   space>host-array @ + ;
 
 : >space ( target-addr there-array -- host-addr )
+  \ cr cr ." =====================================" cr
+  \ dup .space
+  \ ." Target address: " over hex. cr
   dup >R            ( target-addr there-array    R: there-array )
   taddr->offset
   toffset->hoffset
   R@ hoffset->haddr ( host-addr   R: there-array )
-  dup R> +max ;
+  dup R> +max
+  \ ."   Host address: " dup hex. cr
+;
 
 
 \ Reading internals ==========================================================
@@ -193,10 +198,11 @@ config mix-code-and-data? @ [IF]
 
 \ File output ================================================================
 : extend-file ( offset file -- )
-  ." Extend-file offset: " over hex. ." file: " dup hex. cr
+  \ ." Extend-file offset: " over hex. ." file: " dup hex. cr
   >R s>d
-  2dup R@ .s cr resize-file ABORT" failed to resize file"
+  2dup R@ resize-file       ABORT" failed to resize file"
        R> reposition-file   ABORT" failed to reposition file" ;
+
 
 : .space ( there-array -- )
   ." Space:" cr
@@ -216,7 +222,9 @@ config mix-code-and-data? @ [IF]
   \ over .space
   >R
   dup space>offset @   R@ extend-file
-  space>span R> write-file ABORT" Failed to write file" ;
+  space>span
+  \ ." Host span: " over hex. dup hex. cr
+  R> write-file ABORT" Failed to write file" ;
 
 : dump ( c-addr u -- )
   cr cr ." Assembling to " 2dup type cr

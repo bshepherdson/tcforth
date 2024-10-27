@@ -7,7 +7,7 @@
 \ mirror words are regular.
 \ A code definition is the (TCREATE) header plus a code word that points just
 \ after itself.
-: code      ( "name" -- ) (TCREATE) here tcell+ t, ;
+: code      ( "name" -- ) (TCREATE) here tcell+ tcode, ;
 : end-code  ( -- )        next, ;
 \ End marker, but no NEXT.
 : end-code-bare ( -- ) ;
@@ -43,7 +43,7 @@ code NEGATE  tos tos neg, end-code
   {{ r0 }} pop,
   1 # r2 neg,           \ -1 in r2
   tos r0 cmp,
-  there @ 2 + R> execute \ Skip over 1 if true
+  code-there @ 2 + R> execute \ Skip over 1 if true
     0 # r2 mov,         \ 0 in r2
   r2 tos mov,           \ r2 -> TOS
 ;
@@ -183,11 +183,11 @@ end-code
 
 \ C@ and C! are identical to @ and ! - just borrow their codewords.
 code C@
-  @-code   here 1 tcells -   t!
+  @-code   here 1 tcells -   tcode!
 end-code-bare
 
 code C!
-  !-code   here 1 tcells -   t!
+  !-code   here 1 tcells -   tcode!
 end-code-bare
 
 \ These store hi, lo in memory, but push as ( lo hi ) double-words.
@@ -245,7 +245,7 @@ label var_last_parse  0 asm, 0 asm,
 label var_source      0 asm, 0 asm,
 label var_in_ptr      0 asm,
 label var_source_id   0 asm,
-label input-buf       128 there +!
+label input-buf       128 tcode-allot
 
 code DP
   var_dp lit,
@@ -293,7 +293,7 @@ code S>D
   {{ tos }} push,
   0 # r0  mov,
   0 # tos cmp,
-  there @ 2 + bpl, \ Skip 1 if TOS is positive or 0.
+  code-there @ 2 + bpl, \ Skip 1 if TOS is positive or 0.
     1 # r0 neg,    \ -1 to r0 if it's negative.
   r0 tos mov,
 end-code
@@ -644,7 +644,7 @@ end-code
 label interrupt-handler
   brk, \ Just a brk, we're not really handling these.
 
-interrupt-handler 9 t! \ Overwrite the branch target in the interrupt vector.
+interrupt-handler 9 tcode! \ Overwrite the branch target in the interrupt vector.
 
 
 \ Main =======================================================================
@@ -662,5 +662,4 @@ label main
   EXECUTE-tail b,      \ jump to EXECUTE's innards.
 
 \ Overwrite the branch target of the reset vector at $0000.
-main 1 t!
-
+main 1 tcode!

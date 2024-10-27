@@ -3,8 +3,8 @@
 
 host definitions
 \ This needs to be the last lines in the target compilation.
-host latest var_latest t!
-host here   var_dp     t!
+host latest var_latest tcode!
+host here   var_dp     tcode!
 
 \ The assembled image must be emitted with
 \   S" filename" dump

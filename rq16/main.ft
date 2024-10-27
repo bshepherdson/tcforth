@@ -3,18 +3,39 @@
 
 REQUIRE ../host/vocabularies.ft
 
-host definitions REQUIRE assembler.ft
+host definitions
+
+\ Metacompiler configuration
+host REQUIRE ../host/configuration.ft
+
+interactive-forth!
+16   config char-bits   !
+1    config cell-width  !
+1    config instr-width !
+
+config little-endian? OFF
+
+\ Target spaces ==============================================================
+REQUIRE ../host/spaces.ft
+
+$0 code-there ORG!
+
+\ Risque-16 code =============================================================
+REQUIRE assembler.ft
 
 host REQUIRE ../host/helpers.ft
 host REQUIRE model.ft                      \ Machine-specific model words
 host REQUIRE ../host/dictionary.ft
 host REQUIRE ../host/mirrors.ft
 
+?stack-clear
+
 \ Now we have what we need to metacompile the CODE definitions at the heart of
 \ the new kernel.
 host definitions REQUIRE kernel.ft
 
 \ The main part of the metacompiler
+?stack-clear
 host REQUIRE ../host/metacompiler.ft
 
 \ Now an interleaved dance of shared and target-specific metacompiled code.
@@ -34,7 +55,6 @@ host REQUIRE ../shared/error-messages.ft
 host REQUIRE ../dcpu16/intro.ft        \ DCPU-16/Risque-16 HW init; intro msg
 host REQUIRE ../shared/init.ft         \ Shared init code.
 
-host REQUIRE ../host/debugging.ft
 \ NB: You should always include tail.ft as the last stage of your build.
 \ It actually emits the assembled image.
 

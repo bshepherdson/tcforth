@@ -8,14 +8,9 @@ host definitions
 0     CONSTANT rp0
 $ff7f CONSTANT sp0 \ This is the value to literally write to SP for an empty stack.
 
-there CONSTANT DP
+code-there CONSTANT DP
 : here dp @ ;
 0 dp !
-
-: t,     ( w -- ) asm, ;
-: tc,    ( b -- ) asm, ;
-: tc@ t@ ;
-: tc! t! ;
 
 \ Registers ==================================================================
 \ SP is data stack pointer
@@ -50,8 +45,8 @@ there CONSTANT DP
 : taligned  ( x -- x2 ) ;
 : talign    ( -- ) ;
 
-: tcompile,  ( xt -- )      t, ;
-: tdecompile ( slot -- xt ) t@ ;
+: tcompile,  ( xt -- )      tcode, ;
+: tdecompile ( slot -- xt ) tcode@ ;
 
 
 VARIABLE 'latest
@@ -61,10 +56,10 @@ VARIABLE 'latest
 
 \ Starting the assembly ======================================================
 \ At the top of memory on the Risque-16 are the reset and interrupt vectors.
-0 there !
+0 code-there !
 $8000 b, \ Dummy long branch; will get rewritten with main.
 
-8 there !
+8 code-there !
 $8000 b, \ Dummy long branch; will get rewritten with the interrupt handler.
 
 \ Code words =================================================================
@@ -88,7 +83,7 @@ label (LIT)
   {{ tos }} push,
   1 # ip []+ tos ldr,
   next,
-(LIT) LIT t!
+(LIT) LIT tcode!
 
 label DOSTRING  0 asm,
 label (DOSTRING)
@@ -98,7 +93,7 @@ label (DOSTRING)
   {{ ip }} push,      \ IP points at the start of the string now, push it.
   tos ip ip add,      \ Bump IP past the string.
   next,
-(DOSTRING) DOSTRING t!
+(DOSTRING) DOSTRING tcode!
 
 \ DOES> ======================================================================
 \ This is different from the original TC-Forth DODOES scheme.
@@ -130,7 +125,7 @@ VARIABLE 'EXIT   \ These get populated later.
 : EXIT, ( -- ) 'EXIT @ tcompile, ;
 
 : DOES, ( -- 'dodoes-code )
-  '(DOES>) @ t,   'EXIT @ t,
+  '(DOES>) @ tcode,   'EXIT @ tcode,
   here
   \ On entering here, r0 is the parameter field address, and the thread follows
   \ after this code.
@@ -145,25 +140,25 @@ VARIABLE 'EXIT   \ These get populated later.
 \ Dictionary headers =========================================================
 \ Compiles the code field for a colon definition.
 \ In ITC this is the address of DOCOL.
-: ,docol ( -- ) docol t, ;
+: ,docol ( -- ) docol tcode, ;
 
 \ Compiles the code field for a CREATEd word.
-: ,dovar ( -- ) dovar t, ;
+: ,dovar ( -- ) dovar tcode, ;
 
 \ Compiles a string literal into the thread.
 \ In ITC/DTC that's DOSTRING, then the length, then the chars.
 : ,dostring ( c-addr u -- )
   dostring tcompile,
-  dup tc,
-  ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tc,   1+ R> REPEAT drop ;
+  dup tcode-c,
+  ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tcode-c,   1+ R> REPEAT drop ;
 
 \ Overwrites the code word of the word at word-xt to point to does-addr.
 \ That's just a store for ITC.
-: !dodoes ( dodoes-code word-xt -- ) t! ;
+: !dodoes ( dodoes-code word-xt -- ) tcode! ;
 
 \ Compile a literal. This is in the model because eg. STC handles this very
 \ differently.
-: tliteral ( x --   X: -- x ) lit tcompile,   t, ;
+: tliteral ( x --   X: -- x ) lit tcompile,   tcode, ;
 
 : t>body ( target-xt -- target-body ) tcell+ ;
 
@@ -172,7 +167,7 @@ label entry-point 0 asm,
 
 \ Space for : and ; ==========================================================
 \ : :   (CREATE) ,docol smudge ] exit    5 cells and the codeword
-: allot-: ( -- ) 6 tcells there +! ;
+: allot-: ( -- ) 6 tcells tcode-allot ;
 \ : ;   EXIT-compile, smudge [ exit
 \ EXIT-compile, pushes: lit + xt + compile, = 3, plus smuge [ exit for 6, plus the codeword = 7
-: allot-; ( -- ) 7 tcells there +! ;
+: allot-; ( -- ) 7 tcells tcode-allot ;

@@ -53,7 +53,8 @@ host definitions
 
 \ Moves THERE back by u and pushes the most recently compiled words onto the
 \ stack (low address first).
-: asm-lit ( u -- w ... ) dup negate there +!   0 DO there @ i + t@ LOOP ;
+: asm-lit ( u -- w ... )
+  dup negate code-there +!   0 DO code-there @ i + tcode@ LOOP ;
 
 \ Compiles code that will itself compile an exit.
 \ Runs while assembling ; for example.
@@ -75,14 +76,14 @@ host definitions
 host definitions
 : codeword+ ( xt -- tt ) tcell+ ;
 : ?tsee-lit    ( tt -- tt 0 | tt' -1 )
-  dup t@ lit = IF
-    tcell+ dup t@ dup . hex.   tcell+ true
+  dup tcode@ lit = IF
+    tcell+ dup tcode@ dup . hex.   tcell+ true
   ELSE false THEN ;
 
 : ?tsee-branch ( tt -- tt 0 | tt' val -1 )
-  dup t@ dup [T'] (0branch) =   swap [T'] (branch) = or IF
-    dup t@ T>NAME TID. bl emit
-    tcell+ dup t@ hex. tcell+ true ELSE false THEN ;
+  dup tcode@ dup [T'] (0branch) =   swap [T'] (branch) = or IF
+    dup tcode@ T>NAME TID. bl emit
+    tcell+ dup tcode@ hex. tcell+ true ELSE false THEN ;
 
-: tsee-end? ( tt -- ? )   t@ [T'] EXIT = ;
-: tsee-word ( tt -- tt' ) dup t@ t>name tid. tcell+ ;
+: tsee-end? ( tt -- ? )   tcode@ [T'] EXIT = ;
+: tsee-word ( tt -- tt' ) dup tcode@ t>name tid. tcell+ ;

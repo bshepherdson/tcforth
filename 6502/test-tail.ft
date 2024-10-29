@@ -38,10 +38,10 @@ VARIABLE empty-stack-xt
   ." Tests passed!" cr
   quit ;
 
-host   T' run-tests   entry-point t!
+host   T' run-tests   entry-point tcode!
 
 require tail.ft
 
 here hex. cr
-S" forth-c64-test.prg" emit-prg
+S" forth-c64-test.prg" dump
 bye

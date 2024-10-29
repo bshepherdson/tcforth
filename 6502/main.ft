@@ -3,6 +3,35 @@
 
 REQUIRE ../host/vocabularies.ft
 
+host definitions
+
+\ Metacompiler configuration =================================================
+host REQUIRE ../host/configuration.ft
+
+8   config char-bits   !
+2   config cell-width  !
+1   config instr-width !
+
+config little-endian? ON
+
+\ Target spaces ==============================================================
+REQUIRE ../host/spaces.ft
+
+$0801  CONSTANT origin
+origin code-there ORG!
+$0810  CONSTANT machine-code-entry
+
+$2 code-there space>offset ! \ There's a 2-byte PRG header first.
+
+\ Add a new tiny space for the "origin" pointer in the .prg file.
+here   2 allot   align   THERE-PTR prg-header
+\ It's a 2-byte little-endian offset value, which is the same format as a
+\ target cell.
+$0 prg-header org!
+$0 prg-header space>offset !
+origin $0 prg-header <t!>
+
+
 host definitions REQUIRE assembler.ft
 host definitions REQUIRE registers.ft
 host definitions REQUIRE asm-helpers.ft
@@ -21,7 +50,6 @@ host REQUIRE hardware.ft
 host REQUIRE ../host/metacompiler.ft
 
 \ Now an interleaved dance of shared and target-specific metacompiled code.
-\ host REQUIRE pre-lib.ft              \ Some early Forth pieces (< * etc.)
 host REQUIRE ../shared/basics.ft
 host REQUIRE branches.ft
 host REQUIRE ../shared/control-structures.ft

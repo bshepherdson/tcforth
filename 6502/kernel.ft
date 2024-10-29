@@ -374,7 +374,7 @@ end-code
 \   wl (zp),y lda,
 \   3  zp,x   sta,
 \ end-code
-\ 
+\
 \ code 2! ( [addr+2] [addr] addr -- )
 \   wl tos>zp,
 \   inx, inx,
@@ -417,7 +417,7 @@ label var_last_parse  0 asm,16 0 asm,16
 label var_source      0 asm,16 0 asm,16
 label var_in_ptr      0 asm,16
 label var_source_id   0 asm,16
-label input-buf       128 there +!
+label input-buf       128 tcode-allot
 
 \ The dictionary pointer is in the zero page for speed.
 code DP herel lit, end-code
@@ -945,8 +945,7 @@ label main
 
 \ Write a JMP to main at the start of the machine code.
 \ (There's a dummy jump there to be overwritten.
-there @
-machine-code-entry there !
+code-there @
+machine-code-entry code-there !
 main $ jmp,
-there !
-
+code-there !

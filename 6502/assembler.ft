@@ -6,33 +6,13 @@
 \ - Little endian
 \ - The machine stack is empty-descending; and always $01xx with a 1-byte
 \   stack pointer S.
-$0801 CONSTANT origin
-$0810 CONSTANT machine-code-entry
+\ VARIABLE min-there   1000000 min-there !
+\ VARIABLE max-there   0       max-there !
 
-CREATE output 65536 allot
-VARIABLE there
-0 there !
-VARIABLE min-there   1000000 min-there !
-VARIABLE max-there   0       max-there !
-
-: clean-output ( -- ) 64 1024 * 0 DO 0   i output +   c! LOOP ;
-clean-output
-
-: endpoints! ( t-addr -- )
-  dup $10000 >= ABORT" address too large"
-  dup max-there @ max max-there !
-      min-there @ min min-there ! ;
-
-: ta ( t-addr -- c-addr ) output + ;
-: tc@ ( t-addr -- b ) ta c@ ;
-: tc! ( b t-addr -- ) dup endpoints! ta c! ;
-
-1   config instr-width !
-
-: asm,   ( b -- ) there @ tc!   1 there +! ;
+: asm,   ( b -- ) tcode-c, ;
 : asm,16 ( w -- ) dup $ff and asm,   8 rshift $ff and asm, ;
 
-: label ( "name" --    X: -- t-addr ) there @ CONSTANT ;
+: label ( "name" --    X: -- t-addr ) code-there @ CONSTANT ;
 
 \ Addressing modes:
 \ Name                 | OG Syntax | This Syntax | Marker | Effect
@@ -268,7 +248,7 @@ $20 jumper jsr,
 : brancher ( op "name" -- ) CREATE , DOES>
   ( addr16 addr ) @ asm, ( addr16 )
   \ The delta is relative to the PC *after* the branch delta, which is there 1+
-  there @ 1+ - ( delta8 )
+  code-there @ 1+ - ( delta8 )
   dup -128 128 within 0= ABORT" Branch too far"
   255 and asm, ;
 
@@ -291,11 +271,11 @@ $70 brancher bvs,
 : vc? ['] bvs, ;   : vs? ['] bvc, ;
 
 : if,   ( xt-branch -- a-slot )
-  there @   dup 1+ >R   swap execute   R> ;
+  code-there @   dup 1+ >R   swap execute   R> ;
 
 \ Resolves a forward branch. It's relative to a-slot+2.
 : then, ( a-slot -- )
-  there @   over 1+ -   ( a-slot delta )   swap tc! ;
+  code-there @   over 1+ -   ( a-slot delta )   swap tcode-c! ;
 
 \ On ELSE - assembly else, doesn't work - JMP only works on absolutes,
 \ whereas the branches use single relative bytes.
@@ -306,14 +286,14 @@ $70 brancher bvs,
 \ I'll fill these in as their requirements are made clear in trying to write the
 \ Forth for this system.
 
-: c64-open ( c-addr u -- fileid )
-  W/O bin create-file ABORT" Failed to open output file" ;
-: c64-close ( fileid -- ) close-file ABORT" Failed to close output file" ;
-
-: c64-emit ( fileid -- )
-  >R   min-there @ output +   max-there @ 1+ min-there @ -   R> write-file
-  ABORT" Failed to write to output file" ;
-
+\ : c64-open ( c-addr u -- fileid )
+\   W/O bin create-file ABORT" Failed to open output file" ;
+\ : c64-close ( fileid -- ) close-file ABORT" Failed to close output file" ;
+\
+\ : c64-emit ( fileid -- )
+\   >R   min-there @ output +   max-there @ 1+ min-there @ -   R> write-file
+\   ABORT" Failed to write to output file" ;
+\
 \ CREATE cart-header
 \ \ The first row is "C64 CARTRIDGE   "
 \ ( 10 ) $00 c, $00 c, $00 c, $40 c, \ Header length: $40
@@ -345,23 +325,24 @@ $70 brancher bvs,
 \   chip-header $10              R> write-file drop ;
 
 
-\ There are three forms of output useful.
-\ - Raw and unadorned.
-\ - PRG disk file format
-\ - CRT ROM format
-: emit-raw ( c-addr u -- ) c64-open dup c64-emit c64-close ;
-
-\ .prg format is just a 2-byte little-endian origin at $0000-1, for where the
-\ file should be loaded by the C64. Then the code follows, with its length
-\ controlled by the file length.
-: emit-prg ( c-addr u -- )
-  c64-open >R
-  \ Write a 2-byte little-endian origin as a header, then the bytes starting
-  \ from there. This is the format expected by emulators etc.
-  ." Start: " min-there @ hex. cr
-  min-there origin < ABORT" Writing before the origin is busted!"
-  min-there 2 R@ write-file ABORT" Failed to write header to output file"
-  R@ c64-emit R> c64-close ;
+\ XXX: Rewrite this output code to be powered by the Spaces system.
+\ \ There are three forms of output useful.
+\ \ - Raw and unadorned.
+\ \ - PRG disk file format
+\ \ - CRT ROM format
+\ : emit-raw ( c-addr u -- ) c64-open dup c64-emit c64-close ;
+\
+\ \ .prg format is just a 2-byte little-endian origin at $0000-1, for where the
+\ \ file should be loaded by the C64. Then the code follows, with its length
+\ \ controlled by the file length.
+\ : emit-prg ( c-addr u -- )
+\   c64-open >R
+\   \ Write a 2-byte little-endian origin as a header, then the bytes starting
+\   \ from there. This is the format expected by emulators etc.
+\   ." Start: " min-there @ hex. cr
+\   min-there origin < ABORT" Writing before the origin is busted!"
+\   min-there 2 R@ write-file ABORT" Failed to write header to output file"
+\   R@ c64-emit R> c64-close ;
 
 \ : emit-cart ( a-label u-label a-filename u-filename -- )
 \   c64-open   dup >R c64-cart-header

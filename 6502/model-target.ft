@@ -38,7 +38,7 @@ target : ,DOSTRING ( c-addr u -- )
 
 \ For STC, this is an IMMEDIATE word that compiles an RTS.
 target : EXIT [ host $60 tliteral target ] c, ; IMMEDIATE
-  host acts: $60 tc, ; IMPERATIVE
+  host acts: $60 tcode-c, ; IMPERATIVE
 
 \ No alignment on 6502.
 target : ALIGNED ; host acts: ;
@@ -74,7 +74,8 @@ host definitions
 
 \ Moves THERE back by u and pushes the most recently compiled words onto the
 \ stack (low address first).
-: asm-lit ( u -- w ... ) dup negate there +!   0 DO there @ i + t@ LOOP ;
+: asm-lit ( u -- w ... )
+  dup negate tcode-allot   0 DO code-there @ i + tcode@ LOOP ;
 
 \ Compiles code that will itself compile an exit.
 \ Runs while assembling ; for example.

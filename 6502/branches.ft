@@ -20,7 +20,7 @@
 \ First the host side words.
 \ JMP $abs is $4c
 host definitions
-: BRANCH,    $4c tc, here 0 t, ;
+: BRANCH,    $4c tcode-c, here 0 tcode, ;
 
 : 0BRANCH,
   inx, inx,
@@ -32,7 +32,7 @@ host definitions
   then, R> ;
 \ That's 9B 15c, which is a little chunky but not too bad.
 
-: !DEST       t! ;
+: !DEST       tcode! ;
 : DEST>BRANCH 1- ;
 : DEST>POST   2 + ;
 
@@ -62,4 +62,3 @@ target : BRANCH,
 target : !DEST ( dest slot -- ) !  ;      host acts: !dest ;
 target : DEST>BRANCH            1- ;      host acts: dest>branch ;
 target : DEST>POST              cell+ ;   host acts: dest>post ;
-

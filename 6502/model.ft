@@ -42,15 +42,9 @@ $0090 CONSTANT sp0
 $ff   CONSTANT rp0
 \ System stack (used for RSP) is empty-descending, so $FF is an empty stack.
 
-there CONSTANT DP
+code-there CONSTANT DP
 : here dp @ ;
 $2000 dp !
-
-: t,     ( w -- )   asm,16 ;
-: tc,    ( b -- )   asm, ;
-: t@     ( a -- w ) dup 1+ tc@ 8 lshift swap   tc@ or ;
-: t!     ( w a -- ) 2dup tc!   >R 8 rshift R>   1+ tc! ;
-
 
 \ Assembler macros
 \ These are "personal", ie. they're used by the model and kernel for this machine, not in the
@@ -65,7 +59,7 @@ $2000 dp !
 \ This is tricky! Compiling a literal value is definitely not the same as compiling a call!
 \ The xt is the code address for the word, so we compile a JSR $xxxx to it.
 : tcompile,  ( xt -- ) $ jsr, ;
-: tdecompile ( slot -- xt ) 1+ t@ ;
+: tdecompile ( slot -- xt ) 1+ tcode@ ;
 
 \ No alignment on 6502.
 : taligned  ( x -- x2 ) ;
@@ -77,25 +71,25 @@ VARIABLE 'latest
 
 
 \ Start of assembly ==========================================================
-origin there !
+origin code-there !
 
 \ To make the machine code Forth system callable from the startup BASIC CLI,
 \ we need a fragment of BASIC code that calls into the machine code:
 \ 10 SYS 2064
 \ That compiles to:
-$080c t,   \ 0801: 0c 08           Pointer to the next line of BASIC code.
-$000a t,   \ 0803: 0a 00           Line number (10)
-$9e   tc,  \ 0805: 9e              Bytecode for SYS command
-$20   tc,  \ 0806: 20 32 30 36 34  " 2064"
-$32   tc,
-$30   tc,
-$36   tc,
-$34   tc,
-$00   tc,  \ 080b: 00              NUL terminator
-$0000 t,   \ 080c: 00 00           Pointer to the next line, $0000 = end
+$080c tcode,    \ 0801: 0c 08           Pointer to the next line of BASIC code.
+$000a tcode,    \ 0803: 0a 00           Line number (10)
+$9e   tcode-c,  \ 0805: 9e              Bytecode for SYS command
+$20   tcode-c,  \ 0806: 20 32 30 36 34  " 2064"
+$32   tcode-c,
+$30   tcode-c,
+$36   tcode-c,
+$34   tcode-c,
+$00   tcode-c,  \ 080b: 00              NUL terminator
+$0000 tcode,    \ 080c: 00 00           Pointer to the next line, $0000 = end
 
 \ Then the machine code begins at $0810 = 2064.
-$0810 there !
+machine-code-entry code-there !
 
 \ Assemble a dummy JMP $0000 here; it'll get overwritten with a JMP main at
 \ the bottom of kernel.ft
@@ -210,13 +204,13 @@ VARIABLE '(DOES>)
 \ That's JSR (DOSTRING), then the length byte then the chars.
 : ,dostring ( c-addr u -- )
   (dostring) tcompile,
-  dup tc,
-  ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tc,   1+ R> REPEAT drop ;
+  dup tcode-c,
+  ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tcode-c,   1+ R> REPEAT drop ;
 
 \ Overwrites the codeword of the word at word-xt to point to does-addr.
 \ It's currently JSR dovar; we can adjust the address and write the new
 \ target address.
-: !dodoes ( dodoes-code word-xt -- ) 1+ t! ;
+: !dodoes ( dodoes-code word-xt -- ) 1+ tcode! ;
 
 \ Compile a literal. This is in the model because STC handles it differently
 \ from DTC etc. There's no need for a LIT jump in general. It can just compile
@@ -239,11 +233,11 @@ label entry-point 0 asm,16
 
 \ Space for : and ; ==========================================================
 \ : :   (CREATE) ,docol smudge ] exit    4 calls and RTS = 13 bytes
-: allot-: ( -- ) 13 there +! ;
+: allot-: ( -- ) 13 tcode-allot ;
 \ : ;   EXIT-compile, smudge [ exit      2 literals, 3 calls, RTS
 \ Literals are DEX DEX LDA lo STA lo LDA hi STA hi = 10 bytes!
 \ So 20 for literals, 6 for calls, and RTS = 27 bytes.
-: allot-; ( -- ) 27 there +! ;
+: allot-; ( -- ) 27 tcode-allot ;
 
 
 \ Tail calls =================================================================

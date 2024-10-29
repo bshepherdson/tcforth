@@ -79,7 +79,7 @@ test-arm: forth-arm-tests.bin test.disk FORCE
 
 # Commodore 64
 forth-c64.prg: host/*.ft 6502/*.ft shared/*.ft
-	$(FORTH) 6502/main.ft 6502/tail.ft -e 'S" forth-c64.prg" emit-prg bye'
+	$(FORTH) 6502/main.ft 6502/tail.ft -e 'S" forth-c64.prg" dump bye'
 
 forth-c64-test.prg: host/*.ft 6502/*.ft shared/*.ft
 	$(FORTH) 6502/main.ft 6502/test-tail.ft \

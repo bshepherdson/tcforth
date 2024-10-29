@@ -1,0 +1,134 @@
+\ Tests
+REQUIRE harness.ft
+REQUIRE ../host/spaces.ft
+
+
+CREATE testbuf 64 allot align
+
+testbuf THERE-PTR tspace
+tspace IS current-space
+
+\ Test configuration helper
+: space-test ( address-unit-bits cell-width little-endian? -- )
+  config little-endian? !
+  config cell-width     !
+  config char-bits      ! ;
+
+: tmax ( -- max-host-address ) tspace space>max @ ;
+
+\ 4 8-bit chars per cell, little-endian
+\ NOTE: These tests rely on a little-endian host, ie. any modern machine.
+8 4 true  space-test
+$6000 tspace org!
+
+0 tspace space>max !
+T{ $deadbeef $6000 tspace <t!> -> }T
+T{ testbuf @ $ffffffff and -> $deadbeef }T
+T{ tmax -> testbuf 3 + }T
+
+
+0 tspace space>max !
+T{ $cafebabe testbuf ! -> }T
+T{ $6000 tspace <t@>   -> $cafebabe }T
+T{ tmax -> testbuf 3 + }T
+
+\ 2 8-bit chars per cell, big-endian
+8 2 false space-test
+
+0 tspace space>max !
+T{ $1337 $6000 tspace <t!> -> }T
+T{ testbuf @ $ffff and -> $3713 }T
+T{ tmax -> testbuf 1+ }T
+
+0 tspace space>max !
+T{ $badd testbuf !   -> }T
+T{ $6000 tspace <t@> -> $ddba }T
+T{ tmax -> testbuf 1+ }T
+
+
+$6000 tspace org!
+0 tspace space>max !
+T{ $dead tspace <t,>   $beef tspace <t,> -> }T
+T{ testbuf @ $ffffffff and               -> $efbeadde }T
+T{ tmax -> testbuf 3 + }T
+T{ tspace @ -> $6004 }T
+T{ 2 tspace <t-allot> -> }T
+T{ tspace @ -> $6006 }T
+
+
+\ DCPU family: 16-bit address unit and cell
+16 1 false space-test
+' <be16@> IS <tc@*>
+' <be16!> IS <tc!*>
+
+\ tchars
+0 tspace space>max !
+T{ $dead $6000 tspace <tc!> -> }T \ 0: de, 1: ad
+T{ $beef $6001 tspace <tc!> -> }T \ 2: be, 3: ef
+T{ testbuf @ $ffffffff and  -> $efbeadde }T
+T{ tmax -> testbuf 3 + }T
+
+0 tspace space>max !
+T{ $deadbeef testbuf ! -> }T      \ [ $ef $be $ad $de ]
+T{ $6000 tspace <tc@>  -> $efbe }T
+T{ $6001 tspace <tc@>  -> $adde }T
+T{ tmax -> testbuf 3 + }T
+
+\ tcells
+0 tspace space>max !
+T{ $dead $6000 tspace <t!> -> }T \ 0: de, 1: ad
+T{ $beef $6001 tspace <t!> -> }T \ 2: be, 3: ef
+T{ testbuf @ $ffffffff and  -> $efbeadde }T
+T{ tmax -> testbuf 3 + }T
+
+0 tspace space>max !
+T{ $deadbeef testbuf ! -> }T      \ [ $ef $be $ad $de ]
+T{ $6000 tspace <t@>  -> $efbe }T
+T{ $6001 tspace <t@>  -> $adde }T
+T{ tmax -> testbuf 3 + }T
+
+
+$6000 tspace org!
+0 tspace space>max !
+T{ $dead tspace <t,>   $beef tspace <t,> -> }T
+T{ testbuf @ $ffffffff and               -> $efbeadde }T
+T{ tmax -> testbuf 3 + }T
+T{ tspace @ -> $6002 }T
+T{ 1 tspace <t-allot> -> }T
+T{ tspace @ -> $6003 }T
+
+
+\ Mocha86k: 16-bit units, 2 to a cell, LE cells.
+16 2 true space-test
+' <be16@> IS <tc@*>
+' <be16!> IS <tc!*>
+
+0 tspace space>max !
+T{ $deadbeef $6000 tspace <t!> -> }T \ 0: be, 1: ef, 2: de, 3: ad
+T{ testbuf @ $ffffffff and     -> $addeefbe }T
+T{ tmax -> testbuf 3 + }T
+
+0 tspace space>max !
+T{ $cafebabe testbuf ! -> }T \ [ be ba fe ca ]
+T{ $6000 tspace <t@>   -> $fecabeba }T
+T{ tmax -> testbuf 3 + }T
+
+
+$6000 tspace org!
+0 tspace space>max !
+T{ $deadbeef tspace <t,>   $cafebabe tspace <t,> -> }T \ [ be ef de ad   ba be ca fe ]
+T{ testbuf     @ $ffffffff and -> $addeefbe }T
+T{ testbuf 4 + @ $ffffffff and -> $fecabeba }T
+T{ tmax -> testbuf 7 + }T
+T{ tspace @ -> $6004 }T
+T{ 1 tspace <t-allot> -> }T
+T{ tspace @ -> $6005 }T
+
+$6000 tspace org!
+0 tspace space>max !
+T{ $dead tspace <tc,>   $beef tspace <tc,> -> }T \ [ de ad   be ef ]
+T{ testbuf     @ $ffffffff and -> $efbeadde }T
+T{ tmax -> testbuf 3 + }T
+T{ tspace @ -> $6002 }T
+T{ 1 tspace <t-allot> -> }T
+T{ tspace @ -> $6003 }T

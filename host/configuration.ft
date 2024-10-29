@@ -2,6 +2,7 @@
 \ the metacompiler, eg. whether code space overlaps data space, whether code
 \ space is read-only, whether to include name space and input parsing code, etc.
 
+REQUIRE vocabularies.ft
 host definitions
 
 begin-structure configuration
@@ -11,7 +12,7 @@ begin-structure configuration
   field: mix-code-and-data?
   field: mix-code-and-name?
   field: char-bits
-  field: cell-width
+  field: cell-width      \ In target address units
   field: instr-width
   field: little-endian?
 end-structure
@@ -54,3 +55,8 @@ interactive-forth!
 : tchars    ( u1 -- u2 ) ;
 : tchar+    ( u1 -- u2 ) 1+ ;
 : tcell+    ( u1 -- u2 ) 1 tcells + ;
+
+: bits/tcell   ( -- u ) config cell-width @   config char-bits @ * ;
+: bytes/tcell  ( -- u ) bits/tcell   3 rshift ;
+: bytes/tchar  ( -- u ) config char-bits @   3 rshift ;
+: tchar-mask   ( -- u-mask ) 1   config char-bits @ lshift   1- ;

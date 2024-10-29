@@ -22,15 +22,35 @@
 \ - org is subtracted from it, creating a 0-based offset into the space
 \ - then that offset is used for the host-ptr to get the real value
 
+REQUIRE configuration.ft
+
 \ Allocates 8MB on the host heap.
 : new-space ( -- host-addr ) 8 1024 * 1024 * allocate drop ;
+
+VARIABLE all-spaces   0 all-spaces !
+
+begin-structure [space]
+  field: space>ptr
+  field: space>host-array
+  field: space>max
+  field: space>org
+  field: space>offset
+  field: space>next
+end-structure
+
 
 \ Creates a new THERE-PTR array, with the specified host-ptr.
 \ Sets THERE, ORG and file-offset all to 0; these should be customized by
 \ target-specified code as needed. Use ORG! to set these.
 : there-ptr ( host-space   "name" --   X: -- there-array )
-  \      there | host-ptr | max-host | org | file-offset
-  CREATE 0 ,     dup ,      ,          0 ,   0 , ;
+  CREATE here >R   [space] allot
+  dup R@ space>host-array  !
+      R@ space>max         !
+  0   R@ space>ptr         !
+  0   R@ space>org         !
+  0   R@ space>offset      !
+  all-spaces @ R@ space>next !
+  R> all-spaces ! ;
 
 
 \ Define all three spaces, per the configuration flags.
@@ -53,152 +73,154 @@ config mix-code-and-data? @ [IF]
   new-space THERE-PTR data-there
 [THEN]
 
-: space>host-array cell+ ;
-: space>max        2 cells + ;
-: space>org        3 cells + ;
-: space>offset     4 cells + ;
-
 \ Moves both THERE and ORG (the target pointers) to the given target-addr.
 : org! ( target-addr there-array -- )
   2dup !   space>org ! ;
 
 
 \ Read and Write helpers =====================================================
-: bits/tcell  ( -- u ) config cell-width @   config char-bits @ * ;
-: chars/tcell ( -- u ) bits/tcell   3 rshift ;
-: chars/tchar ( -- u ) config char-bits @   3 rshift ;
-: tchar-mask  ( -- u-mask ) 1   config char-bits @ lshift   1- ;
+0 VALUE current-space
 
-: +max ( host-addr there-array -- )
-  space>max dup >R   @ max   R> ! ;
+: max! ( x addr -- ) tuck @ max swap ! ;
+: +max ( host-addr -- ) current-space space>max max! ;
 
 : taddr->offset ( target-addr there-array -- target-offset )
   space>org @ - ;
-: toffset->hoffset ( target-offset -- host-offset ) chars/tchar * ;
+: toffset->hoffset ( target-offset -- host-offset ) bytes/tchar * ;
 : hoffset->haddr   ( host-offset there-array -- host-addr )
   space>host-array @ + ;
 
 : >space ( target-addr there-array -- host-addr )
-  \ cr cr ." =====================================" cr
-  \ dup .space
-  \ ." Target address: " over hex. cr
-  dup >R            ( target-addr there-array    R: there-array )
+  tuck                ( there-array target-addr there-array )
   taddr->offset
   toffset->hoffset
-  R@ hoffset->haddr ( host-addr   R: there-array )
-  dup R> +max
-  \ ."   Host address: " dup hex. cr
-;
+  swap hoffset->haddr ;
 
 
-\ Reading internals ==========================================================
-\ We want this to work for any size of char and cell on the target even if
-\ it's larger or smaller than the host.
-\ Note that we do require a target's char-bits to be divisible by 8!
+\ New read/write logic =======================================================
+\ Using the data stack and recursing to make the pieces relative is smart, I think.
+\ Also calling from tchars to literal bytes at the same time.
+\ The net result is a series of tchars on the stack.
 
-: <t@-le> ( c-addr width -- w )
-  0 swap
-  0 DO ( c-addr x )
-    over c@   i 8 * lshift   or ( c-addr x' )
-    >R char+ R>
-  LOOP nip ;
+\ 1+ bytes <-> tchar on the stack
+\ tchars in order on the stack, first on top <-> tcell on the stack.
+: mask ( width -- mask ) 1 swap lshift 1- ;
 
-: <t@-be> ( c-addr width -- w )
-  0 swap
-  0   DO ( c-addr x )
-    8 lshift   over c@ or   ( c-addr x' )
-    >R char+ R>
-  LOOP nip ;
+: <c@> ( c-addr -- b ) dup +max   c@ ;
+: <c!> ( b c-addr -- ) dup +max   c! ;
 
-\ TODO: It would be faster to have a DEFER'd word rather than checking
-\ endianness on every read/write. Maybe a trampoline, where the DEFER starts
-\ with a word that checks and resets itself.
+\ Must be supplied as part of the configuration.
+\ These must use <c@> and <c!> - they do some "spaces" bookkeeping.
+DEFER <tc@*> ( c-addr -- tchar )
+DEFER <tc!*> ( tchar c-addr -- )
 
-: <t@-endian> ( c-addr width -- w )
-  config little-endian? @ IF <t@-le> ELSE <t@-be> THEN ;
-: <t@>  ( c-addr -- w ) chars/tcell <t@-endian> ;
-: <tc@> ( c-addr -- b ) chars/tchar <t@-endian> ;
+\ Default implementation is bytes.
+' <c@> IS <tc@*>
+' <c!> IS <tc!*>
+
+\ DCPU-16 family uses these: big-endian 16-bit words as the address unit.
+: <be16@> ( c-addr -- w ) dup <c@> 8 lshift   swap char+ <c@> or ;
+: <be16!> ( w c-addr -- ) over 8 rshift over <c!>   char+ <c!> ;
 
 
-\ Writing internals ==========================================================
-: <t!-le> ( w c-addr depth -- )
-  0 DO ( w c-addr )
-    over $ff and   over c! ( w c-addr )
-    1+ >R   8 rshift   R>
-  LOOP 2drop ;
+\ These are all based on tchars, so they should work for any tcell size.
+: <tchars@> ( c-addr #tchars -- first .. last )
+  0 DO dup <tc@*>    swap bytes/tchar + LOOP drop ;
 
-: <be-bytes> ( w depth -- lsb ... msb )
-  >R   dup $ff and   swap 8 rshift   R> ( lsb shifted depth )
-  1- ?dup IF recurse ELSE drop THEN ;
+: <tchars!> ( last .. first c-addr #tchars -- )
+  0 DO tuck <tc!*>   bytes/tchar + LOOP drop ;
 
-: <t!-be> ( w c-addr depth -- )
-  swap >R dup >R     ( w depth       R: c-addr depth )
-  <be-bytes>         ( lsb ... msb   R: c-addr depth )
-  R> R> swap 0 DO ( bytes... c-addr )
-    tuck c!   char+
-  LOOP drop ;
+\ These translate between the stacked tchars of the above and unified tcells,
+\ depending on the order of the tchars within each tcell.
+: <be@> ( c-addr -- value )
+  1 tcells <tchars@> ( msc .. lsc )
+  0   1 tcells 0 DO swap   tcharbits i * lshift   or LOOP ;
 
-: <t!-endian> ( w c-addr depth -- )
-  config little-endian? @ IF <t!-le> ELSE <t!-be> THEN ;
-
-\ TODO: These don't handle inside-out endianness - does that include Mocha86k?
-\ I think it actually does. To be fixed, then.
-: <t!>  ( w c-addr -- ) chars/tcell <t!-endian> ;
-: <tc!> ( b c-addr -- ) chars/tchar <t!-endian> ;
+: <be!>  ( value c-addr -- )
+  >R 1 tcells 0 DO
+    dup tchar-mask and
+    swap tcharbits rshift
+  LOOP drop ( lsc..msc )
+  R> 1 tcells <tchars!> ;
 
 
-\ Reading ====================================================================
-: tname@   ( t-addr -- w ) name-there >space <t@> ;
-: tcode@   ( t-addr -- w ) code-there >space <t@> ;
-: tdata@   ( t-addr -- w ) data-there >space <t@> ;
+: <le@> ( c-addr -- value )
+  1 tcells <tchars@>   ( lsc .. msc )
+  0   1 tcells 0 DO tcharbits lshift   or LOOP ;
 
-: tname-c@ ( t-addr -- b ) name-there >space <tc@> ;
-: tcode-c@ ( t-addr -- b ) code-there >space <tc@> ;
-: tdata-c@ ( t-addr -- b ) data-there >space <tc@> ;
+: <le!> ( value c-addr -- )
+  >R   0 1 tcells 1- DO
+    dup tcharbits i * rshift tchar-mask and
+    swap
+  -1 +LOOP drop ( msc .. lsc )
+  R> 1 tcells <tchars!> ;
 
-\ Writing ====================================================================
-: tname!   ( w t-addr -- ) name-there >space <t!> ;
-: tcode!   ( w t-addr -- ) code-there >space <t!> ;
-: tdata!   ( w t-addr -- ) data-there >space <t!> ;
 
-: tname-c! ( b t-addr -- ) name-there >space <tc!> ;
-: tcode-c! ( b t-addr -- ) code-there >space <tc!> ;
-: tdata-c! ( b t-addr -- ) data-there >space <tc!> ;
+: <t@*> ( c-addr -- tcell ) config little-endian? @ IF <le@> ELSE <be@> THEN ;
+: <t!*> ( tcell c-addr -- ) config little-endian? @ IF <le!> ELSE <be!> THEN ;
 
-\ Allot and compile ==========================================================
-: <t-allot> ( u thread-ptr -- ) tuck +!   dup @ 1- swap >space drop ;
+\ API - Explicit space =======================================================
+: <tc@> ( target-addr space -- tchar ) dup TO current-space   >space <tc@*> ;
+: <tc!> ( tchar target-addr space -- ) dup TO current-space   >space <tc!*> ;
 
-: tname-allot ( u -- ) name-there <t-allot> ;
-: tcode-allot ( u -- ) code-there <t-allot> ;
-: tdata-allot ( u -- ) data-there <t-allot> ;
+: <t@>  ( target-addr space -- tcell ) dup TO current-space   >space <t@*>  ;
+: <t!>  ( tcell target-addr space -- ) dup TO current-space   >space <t!*>  ;
 
-: space>there ( thread-ptr -- host-addr ) dup @ swap >space ;
+\ Returns the host-addr for the current THERE position.
+: space>there ( space -- host-addr ) dup @ swap >space ;
 
-: <t,> ( w thread-ptr -- )
-  tuck   space>there   <t!>
-  config cell-width @   swap <t-allot> ;
+\ API - Canonical spaces =====================================================
+: tcode-c@ ( target-addr -- tchar ) code-there <tc@> ;
+: tname-c@ ( target-addr -- tchar ) name-there <tc@> ;
+: tdata-c@ ( target-addr -- tchar ) data-there <tc@> ;
 
-: tname,   ( w -- ) name-there <t,> ;
-: tcode,   ( w -- ) code-there <t,> ;
-: tdata,   ( w -- ) data-there <t,> ;
+: tcode@   ( target-addr -- tcell ) code-there <t@> ;
+: tname@   ( target-addr -- tcell ) name-there <t@> ;
+: tdata@   ( target-addr -- tcell ) data-there <t@> ;
 
-: <tc,> ( w thread-ptr -- )
-  tuck   space>there <tc!>
+: tcode-c! ( tchar target-addr -- ) code-there <tc!> ;
+: tname-c! ( tchar target-addr -- ) name-there <tc!> ;
+: tdata-c! ( tchar target-addr -- ) data-there <tc!> ;
+
+: tcode!   ( tcell target-addr -- ) code-there <t!> ;
+: tname!   ( tcell target-addr -- ) name-there <t!> ;
+: tdata!   ( tcell target-addr -- ) data-there <t!> ;
+
+\ API - Allot ======================================================================
+: <t-allot> ( #tchars space -- )
+  dup IS current-space
+  tuck +!   \ Updated THERE   ( space )
+  dup @ swap >space  ( host-addr )
+  1- +max ;
+
+: tname-allot ( #tchars -- ) name-there <t-allot> ;
+: tcode-allot ( #tchars -- ) code-there <t-allot> ;
+: tdata-allot ( #tchars -- ) data-there <t-allot> ;
+
+: <t,> ( tcell space -- )
+  tuck   dup @ swap <t!>
+  1 tcells   swap <t-allot> ;
+
+: tname,   ( tcell -- ) name-there <t,> ;
+: tcode,   ( tcell -- ) code-there <t,> ;
+: tdata,   ( tcell -- ) data-there <t,> ;
+
+: <tc,> ( tchar space -- )
+  tuck   dup @ swap <tc!>
   1 swap <t-allot> ;
 
-: tname-c, ( w -- ) name-there <tc,> ;
-: tcode-c, ( w -- ) code-there <tc,> ;
-: tdata-c, ( w -- ) data-there <tc,> ;
+: tname-c, ( tchar -- ) name-there <tc,> ;
+: tcode-c, ( tchar -- ) code-there <tc,> ;
+: tdata-c, ( tchar -- ) data-there <tc,> ;
 
 
 \ Extras =====================================================================
 : TVARIABLE ( "name" --    X: -- t-addr )
-  data-there @   config cell-width @ tdata-allot   CONSTANT ;
+  data-there @   0 tdata,   CONSTANT ;
 
 
 \ File output ================================================================
 : extend-file ( offset file -- )
-  \ ." Extend-file offset: " over hex. ." file: " dup hex. cr
   >R s>d
   2dup R@ resize-file       ABORT" failed to resize file"
        R> reposition-file   ABORT" failed to reposition file" ;
@@ -215,25 +237,29 @@ config mix-code-and-data? @ [IF]
 : space>span ( there-array -- c-addr u )
   dup  space>host-array @
   swap space>max @
-  over - ;
+  over - 1+ ;
 
 : dump-space ( there-array file -- )
-  \ ." dump-space: " over hex. dup hex. .s cr
-  \ over .space
+  ." dump-space: " over hex. dup hex. .s cr
+  over .space
   >R
   dup space>offset @   R@ extend-file
   space>span
-  \ ." Host span: " over hex. dup hex. cr
+  ." Host span: " over hex. dup hex. cr
   R> write-file ABORT" Failed to write file" ;
 
 : dump ( c-addr u -- )
   cr cr ." Assembling to " 2dup type cr
   W/O BIN create-file ABORT" Failed to open output file" ( file )
 
-  \ Write the single space that we use.
-  code-there over dump-space
-  config mix-code-and-data? @ 0= IF data-there over dump-space THEN
-  config mix-code-and-name? @ 0= IF name-there over dump-space THEN
+  \ Write all the spaces which have been defined.
+  all-spaces @ BEGIN ?dup WHILE ( file there-array )
+    2dup swap dump-space
+    space>next @
+  REPEAT
+  \ code-there over dump-space
+  \ config mix-code-and-data? @ 0= IF data-there over dump-space THEN
+  \ config mix-code-and-name? @ 0= IF name-there over dump-space THEN
 
   \ And close the file.
   dup flush-file ABORT" Failed to flush"

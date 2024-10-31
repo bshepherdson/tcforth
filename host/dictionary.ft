@@ -25,6 +25,12 @@ host definitions
 \ On a machine with 16-bit address units and cells, like DCPU-16, every field
 \ is a 16-bit word and no alignment is needed.
 
+\ Separate name space ========================================================
+\ If the name and code spaces are separate, the "code field" section of the
+\ dictionary header is actually a pointer into the code area, where the codeword
+\ can be found.
+
+
 \ First the header and length. The top bit is used for IMMEDIATE, the next for
 \ smudge, the rest for length. That gives a length of 63 characters if the width
 \ is 8 bits.
@@ -40,7 +46,7 @@ f_hidden 1-        CONSTANT mask_len
 colocated-names? [IF]
   \ Names, code and data are commingled, so no indirection is needed.
   \ The xt of a definition is right after it.
-  : <mk-code-field> ( -- target-xt ) here ;
+  : <mk-code-field> ( -- target-xt ) code-there @ ;
 [ELSE]
   \ When name and code are separated, the name space has a pointer to the code
   \ space for this word. (Note that even VARIABLEs and CREATEd defs exist in
@@ -49,17 +55,18 @@ colocated-names? [IF]
 [THEN]
 
 : (mk-header) ( c-addr u -- target-xt )
-  \ ." (mk-header) " 2dup type   4 spaces .s cr
+  ." (mk-header) " 2dup type   4 spaces .s cr
+  ."     nt: " name-there @ hex. cr
   name-there @   latest tname,   'latest !
   dup tname-c, \ Length byte
   0 DO ( c-addr ) dup i + c@ >upper tname-c, LOOP drop ( )
-  name-there @   taligned   name-there !
+  tname-align
   <mk-code-field> ;
 
 : t>cfa ( target-nt -- target-xt )
-  tcell+ dup tcode-c@ mask_len and + tchar+ taligned ;
+  tcell+ dup tname-c@ mask_len and + tchar+ taligned ;
 
-: TNAME>STRING ( t-nt -- c-addr u ) tcell+ dup 1+ swap tcode-c@ mask_len and ;
+: TNAME>STRING ( t-nt -- c-addr u ) tcell+ dup 1+ swap tname-c@ mask_len and ;
 
 \ Single dictionary builds the word just follows.
 : TNAME>INT ( t-nt -- t-xt ) tname>string + taligned ;

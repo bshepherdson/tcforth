@@ -28,8 +28,52 @@ target : QUIT ( -- )
   src-keyboard 'source-id !
   (QUIT) ( TODO: BYE ) ;
 
+\ NOTE: Nothing (initialized) should go into the data space after this point in
+\ the code! If that's a nuisance, this could be indirected further.
+\ XXX: Copying a single block here is actually a pain... I wonder about
+\ building this logic into tdata, et al? Perhaps that's worse.
+\ The only tricky part here is the lengths for a MOVE potentially being
+\ different because of differences in the width of an address unit.
+host config data-space-blank? @ [IF]
+  \ Span of the data space on the host.
+  cr cr S" Compiling data initializers since data space starts blank!" type cr
+  data-there space>span   hex.s cr
+  2dup native dump host
+  dup bytes/tchar /       ( host-addr u-bytes u-tchars )
+  code-there @
+  over tcode-allot        ( host-addr u-bytes u-tchars target-addr )
+  cr cr S" Compiling data initializers since data space starts blank!" type cr
+  hex.s cr
+  tuck
+  \ Compiles literals for ( src dst u ) in target terms.
+  target : init-data ( -- )
+    [ host tliteral data-there space>org @ tliteral tliteral target ]
+    move ;
+
+  host ( host-addr u-bytes target-addr )
+  code-there >space ( host-src u-bytes host-dst )
+  swap   hex.s cr
+  move
+
+cr cr S" Code space: " type cr
+  code-there .space
+
+cr cr S" Data space: " type cr
+  data-there .space
+
+cr cr S" Name space: " type cr
+  name-there .space
+
+cr cr
+
+host [ELSE]
+  \ With an initialized data space, there's nothing to do here.
+  target : init-data ( -- ) ;
+host [THEN]
+target
+
 \ Basic startup
-: boot  ( -- ) init-hardware   10 base ! ;
+: boot  ( -- ) init-data   init-hardware   10 base ! ;
 : intro ( -- ) '.intro @ execute ;
 \ "Cold" start, loading interactive mode.
 : cold  ( -- ) boot intro QUIT ;

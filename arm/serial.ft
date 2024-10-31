@@ -31,4 +31,3 @@ $01 CONSTANT CTS  \ Receive  FIFO empty
 \ CR gets read out, and then set bits 9 and 8 (RXE, TXE) and 1 (enable)
 : init-serial ( -- )
   $70 UART0LCR_H c!   UART0CR @   $301 or UART0CR ! ;
-

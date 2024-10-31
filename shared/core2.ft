@@ -8,15 +8,17 @@ target definitions
 \ link | len | name... |
 target : (CREATE) ( "name" -- ) here latest ,   'latest !
     parse-name dup c,
-    here swap ( src dst u ) dup >R move> R> ( len ) allot align ;
+    here swap ( src dst u )
+    dup >R move> R> ( len )
+    allot align ;
 
 host definitions
 \ Host-side CREATE, used by eg. : CONSTANT ... HOST ACTS: CREATE ... ;
-: CREATE ( "name" --    X: -- addr ) (tcreate) ,dovar ;
+: CREATE ( "name" --    X: -- addr )   (tcreate) ,dovar ,pfa ;
 target definitions
 
 target : CREATE ( "name" --     X: -- addr )
-    (CREATE) [ host dovar tliteral target ] ,cf ;
+    (CREATE) [ host dovar tliteral target ] ,cf ,pfa ;
   host acts: create ;
 
 
@@ -118,12 +120,14 @@ target definitions
 
 
 \ Now we're ready to define the various defining words in the core!
+\ XXX: START HERE - This is crashing, it needs the indirection from code space
+\ to data space, I think.
 target : VARIABLE ( "name" --     X: -- addr ) CREATE 0 , ;
-  host acts: create host 0 tcode,   DOES> ;
+  host acts: create host 0 tdata,   DOES> ;
   \ Empty DOES> action, but that leaves the target-body on the stack.
 
 target : CONSTANT ( x "name" --    X: -- x ) CREATE , DOES> @ ;
-  host acts: create tcode, DOES> tcode@ ;
+  host acts: create tdata, DOES> tdata@ ;
 
 \ host cr cr hex
 \ .s cr
@@ -173,7 +177,7 @@ target : DO ( m i -- )
   host acts:
     [T'] (DO) tcompile,   1 tliteral   0branch,
     [T'] (loop-top) t>body >R  ( top-slot   R: 'loop-top )
-    R@ tcode@ swap ( old-top top-slot   R: 'loop-top ) R> tcode!  ( old-top )
+    R@ tdata@ swap ( old-top top-slot   R: 'loop-top ) R> tdata!  ( old-top )
     ; IMPERATIVE
 
 \ TODO: Figure out conditional compilation of target words.
@@ -200,13 +204,13 @@ host definitions
   [T'] (loop-end) tcompile,   0BRANCH, ( old-top bottom-slot )
   \ The target for the bottom jump is the top of the loop body; AFTER the slot
   \ stored in (loop-top).
-  [T'] (loop-top) t>body dup >R   tcode@ dest>post swap ( old-top body bottom-slot)
+  [T'] (loop-top) t>body dup >R   tdata@ dest>post swap ( old-top body bottom-slot)
   !dest ( old-top   R: 'top )
   \ Now HERE is after the bottom of the loop, and should be put with !dest
   \ at (loop-top).
-  here R@ tcode@ !dest
+  code-there @   R@ tdata@ !dest
   \ Finally, put the old-top back into (loop-top).
-  R> tcode!
+  R> tdata!
   [T'] unloop tcompile, ;
 
 target definitions
@@ -271,9 +275,9 @@ target : SMUDGE ( -- )
   swap c! ;
 
 
-host dp @ \ Save the old dp
+host code-there @ \ Save the old dp
 T' :
-( old-dp t-xt ) dp ! \ Pretend we're compiling there.
+( old-dp t-xt ) code-there ! \ Pretend we're compiling there.
 ,docol
 T' (CREATE) tcompile,
 T' ,docol   tcompile,
@@ -284,7 +288,7 @@ exit,
 
 
 T' ;
-( old-dp t-xt ) dp !    \ Pretend we're compiling at semicolon
+( old-dp t-xt ) code-there !    \ Pretend we're compiling at semicolon
 ,docol
 EXIT-compile,
 T' smudge   tcompile,
@@ -292,7 +296,7 @@ T' [        tcompile,
 exit,
 \ That's 7 cells with a 1-cell DOCOL.
 
-( old-dp ) dp !
+( old-dp ) code-there !
 
 
 \ Signed long division =======================================================
@@ -331,4 +335,4 @@ target : */MOD ( n1 n2 n3 -- n4 ) >R M* R> sm/rem ;
 target : */    ( n1 n2 n3 -- n4 ) */MOD nip ;
 
 target : :noname ( C: -- xt ) here ,docol postpone ] ;
-  host acts: here ,docol   postpone target meta] ;
+  host acts: code-there @ ,docol   postpone target meta] ;

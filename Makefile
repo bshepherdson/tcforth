@@ -11,6 +11,7 @@ DCPU_DISK ?= /dev/null
 
 ARM_QEMU ?= qemu-system-arm -M versatilepb -m 128M -nographic
 ARM_QEMU_FLAGS ?=
+#ARM_QEMU_FLAGS ?= -D log.txt -d exec -d cpu
 ARM_PREFIX ?= arm-none-eabi-
 ARM_DUMP ?= -e 'output-file-xt @ execute dump bye'
 
@@ -69,7 +70,7 @@ forth-arm.bin: host/*.ft arm/*.ft shared/*.ft
 
 arm: forth-arm.bin
 run-arm: forth-arm.bin
-	$(ARM_QEMU) -kernel forth-arm.bin
+	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel forth-arm.bin
 
 forth-arm-tests.bin: host/*.ft arm/*.ft shared/*.ft test.disk
 	$(FORTH) arm/main.ft arm/embedding.ft arm/tail.ft $(ARM_DUMP)

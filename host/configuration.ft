@@ -42,6 +42,11 @@ configuration allocate drop CONSTANT config
   config mix-code-and-data? OFF
   config mix-code-and-name? OFF ;
 
+\ Add-on to other configurations.
+: separate-spaces! ( -- )
+  config mix-code-and-name? OFF
+  config mix-code-and-data? OFF ;
+
 \ Default configuration:
 \ - interactive Forth
 interactive-forth!
@@ -55,6 +60,8 @@ interactive-forth!
 : tchars    ( u1 -- u2 ) ;
 : tchar+    ( u1 -- u2 ) 1+ ;
 : tcell+    ( u1 -- u2 ) 1 tcells + ;
+
+: taligned  ( tc-addr -- t-addr ) 1 tcells 1- +   1 tcells 1- invert and ;
 
 : bits/tcell   ( -- u ) config cell-width @   config char-bits @ * ;
 : bytes/tcell  ( -- u ) bits/tcell   3 rshift ;

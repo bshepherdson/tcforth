@@ -1,6 +1,6 @@
 \ TODO Interrupt handling? The current system doesn't actually use them.
 label interrupt-handler
-  here b,   \ Just spin, we're not really handling these.
+  code-there @ b,   \ Just spin, we're not really handling these.
 
 
 \ Main =======================================================================

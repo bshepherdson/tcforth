@@ -24,10 +24,18 @@ target : ,CF ( codeword-addr -- ) here   0 ,   !cf ;
 \ This is   docol ,cf
 target : ,DOCOL ( -- ) [ host docol tliteral target ] ,CF ;
 
+host colocated-names? [IF]
+  target : ,PFA ( -- ) ;
+host [ELSE]
+  target : ,PFA ( -- ) here , ;
+host [THEN]
+
 target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , ; IMMEDIATE
   host acts: tliteral ; IMPERATIVE
 
 \ 4-byte alignment on ARM 32-bit.
+\ TODO: With the new configuration system these could be made a matter for
+\ config + generic code, rather than machine-specific.
 target : ALIGNED   3 + 3 invert and ;
   host acts: 3 + 3 invert and ;
 target : ALIGN     here aligned dp ! ;
@@ -65,7 +73,7 @@ host T' EXIT    'EXIT !
 host definitions
 
 \ Moves THERE back by 1 cell and pushes the most recently compiled word.
-: asm-lit ( -- w ) -4 code-there +!   here tcode@ ;
+: asm-lit ( -- w ) -4 tcode-allot   code-there @ tcode@ ;
 
 : EXIT-compile, ( -- )
   'EXIT @ tliteral   [T'] compile, tcompile, ;
@@ -75,8 +83,9 @@ host definitions
   [T'] EXIT    tliteral  [T'] compile, tcompile,
 
   \ The dodoes-code here gets the PFA in lr, so it needs to:
-  \ (1) push TOS; (2) lr tos mov, (3) docol bl,
-
+  \ (1) push TOS; (2a) lr tos mov, (3) docol bl,
+  \ If we have separate code and data spaces, then (2b) lr [] tos ldr,
+  \ This is abstracted by pfa->tos, from model.ft
   [ {{ tos }} push, asm-lit tliteral ] [T'] , tcompile,
-  [ lr tos mov,     asm-lit tliteral ] [T'] , tcompile,
+  [ pfa->tos,       asm-lit tliteral ] [T'] , tcompile,
   [ docol bl,       asm-lit tliteral ] [T'] , tcompile, ;

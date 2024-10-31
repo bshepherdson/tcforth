@@ -38,13 +38,6 @@ code-there CONSTANT DP
   {{ tos }} push,
   ( value ) tos load, ;
 
-: tchars    ( n -- n2 ) ;
-: tchar+    ( n -- n2 ) 1+ ;
-: tcells    ( n -- n2 ) ;
-: tcell+    ( n -- n2 ) 1+ ;
-: taligned  ( x -- x2 ) ;
-: talign    ( -- ) ;
-
 : tcompile,  ( xt -- )      tcode, ;
 : tdecompile ( slot -- xt ) tcode@ ;
 

@@ -47,8 +47,6 @@ $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
 : tchar+    ( n -- n2 ) 1+ ;
 : tcells    ( n -- n2 ) ;
 : tcell+    ( n -- n2 ) 1+ ;
-: taligned  ( x -- x2 ) ;
-: talign    ( -- ) ;
 
 : tcompile,  ( xt -- )      tcode, ;
 : tdecompile ( slot -- xt ) tcode@ ;
@@ -136,6 +134,12 @@ label DOSTRING
 \ The code for DODOES can't use the inline literal, so it needs this space for
 \ a long JSR lit.
 : ,dovar ( -- ) $7c20 tcode, dovar tcode, ;
+
+colocated-names? [IF]
+  : ,pfa ( -- ) ;
+[ELSE]
+  : ,pfa ( -- ) data-there @ tcode, ;
+[THEN]
 
 \ Compiles a string literal into the thread.
 \ In ITC/DTC that's DOSTRING, then the length, then the chars.

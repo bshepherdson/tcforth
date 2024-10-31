@@ -18,10 +18,13 @@
 \ TARGET HERE is the mirror word that compiles the Target xt for HERE (!)
 HOST DEFINITIONS
 
-\ The assembler defines a DATA-THERE pointer for the Target dictionary.
-\ We capture that address as the HOST DP as well.
-data-there CONSTANT DP
-: here dp @ ;
+\ NOTE: Actually there isn't a single HOST HERE because of separated spaces.
+\ Instead there are three, for data, name and code spaces.
+\ XXX: These placeholders can be removed once separated spaces are working.
+\ But we can just keep these for later if it's useful.
+: DP    76 throw ;
+: HERE  77 throw ;
+
 
 \ First line of code, the entry point. This is at $0 in code-there space, but
 \ will be loaded at $10000 by the ARM runtime.
@@ -34,13 +37,6 @@ code-there @ b,
 : next,    ( -- ) config instr-width @   # ip []+ pc ldr, ;
 : pushrsp, ( r 0 -- ) 2>R {{ 2R> }} rsp !stmdb, ;
 : poprsp,  ( r 0 -- ) 2>R {{ 2R> }} rsp !ldmia, ;
-
-: tchars    ( n -- n2 ) ;
-: tchar+    ( n -- n2 ) 1+ ;
-: tcells    ( n -- n2 ) 2 lshift ;
-: tcell+    ( n -- n2 ) 4 + ;
-: taligned  ( x -- x2 ) 3 + 3 invert and ;
-: talign    ( -- )      here taligned dp ! ;
 
 : tcompile,  ( xt -- )      tcode, ;
 : tdecompile ( slot -- xt ) tcode@ ;
@@ -59,10 +55,19 @@ label DOCOL
   next,
 
 \ DOVAR is the code word for a CREATEd definition without a DOES> - it pushes
-\ the address of the parameter field. The parameter field address is in lr.
+\ the address of the parameter field.
+\ The address of the cell after DOVAR is in lr.
+\ With colocated names and data, that cell is the start of the parameter field.
+\ With separated names, there's a pointer to the parameter field there.
+colocated-names? [IF]
+  : pfa->tos, ( -- ) lr tos mov, ;
+[ELSE]
+  : pfa->tos, ( -- ) lr [] tos ldr, ;
+[THEN]
+
 label DOVAR
   {{ tos }} push,
-  lr tos mov,
+  pfa->tos,
   next,
 
 \ DOES> design for DTC =======================================================
@@ -81,6 +86,10 @@ label DOVAR
 \ bl &dodoes-code as above, ie. after the EXIT:
 \ link | len | FOO | bl &dodoes-code | 7
 
+\ With separate code and data spaces, this is rather:
+\ link | len | FOO | bl &dodoes-code | data space ptr
+\ and at that address in data space is the 7.
+
 \ In DTC, the dodoes-code is entered with the parameter field (pointer to 7)
 \ in lr. So the code pushes that, then does bl docol.
 \ So the dodoes-code is three words.
@@ -94,9 +103,9 @@ VARIABLE 'EXIT   \ These get populated later.
 : DOES, ( -- xt-does )
   '(DOES>) @ tcode,
   'EXIT    @ tcode,
-  here
+  code-there @
   {{ tos }} push,
-  lr tos mov,
+  pfa->tos,
   docol bl, ;
 
 
@@ -120,13 +129,21 @@ label DOSTRING
   next,
 
 
-
 \ Compiles the code field (address) for a colon declaration.
 \ For DTC that means assembling a bl docol.
 : ,docol ( -- ) docol bl, ;
 
 \ Compiles the bl DOVAR.
 : ,dovar ( -- ) dovar bl, ;
+
+\ Compiles a pointer to the data area, if necessary.
+\ Does nothing when data and code space are unified, since the parameter field
+\ immediately follows the code.
+colocated-names? [IF]
+  : ,pfa ( -- ) ;
+[ELSE]
+  : ,pfa ( -- ) data-there @ tcode, ;
+[THEN]
 
 \ Compiles a string literal into the thread.
 \ In ITC/DTC that's DOSTRING, then the length, then the chars.
@@ -136,7 +153,7 @@ label DOSTRING
   dostring tcompile,
   dup tcode-c,
   ( c-addr u ) BEGIN ?dup WHILE 1- >R   dup c@ tcode-c,   1+ R> REPEAT drop
-  talign ;
+  tcode-align ;
 
 \ Overwrites the code field (address) of the word at word-xt to point to the
 \ ;CODE or DOES> at does-xt.
@@ -150,6 +167,14 @@ label DOSTRING
 
 : t>body ( target-xt -- target-body ) tcell+ ;
 
+config mix-code-and-data? @ 0= [IF]
+  \ With separated code and data spaces, there's an address in the code field
+  \ that points to the parameter field, so we have to read it back.
+  \ TODO: We can probably avoid several of these [IF] blocks by abstracting to
+  \ a few words like >cfa and >pfa, which do the right thing in the different
+  \ configurations.
+  : t>body ( target-xt -- target-body ) t>body tcode@ ;
+[THEN]
 
 \ Entry point at 64KB, stacks at 32MB with 2KB ($800) for the return stack.
 $02000000 CONSTANT rp0

@@ -60,16 +60,20 @@ new-space THERE-PTR code-there
 \ Name space always exists at least in the metacompiler.
 \ So even if it won't reach the output file, create it.
 config mix-code-and-name? @ [IF]
+  S" Name space is: one with code space" type cr
   code-there CONSTANT name-there
 [ELSE]
+  S" Name space is: separate" type cr
   new-space THERE-PTR name-there
 [THEN]
 
 \ Finally, data space also always exists in the metacompiler.
 \ It might or might not be shared with the code space.
 config mix-code-and-data? @ [IF]
+  S" Data space is: one with code space" type cr
   code-there CONSTANT data-there
 [ELSE]
+  S" Data space is: separate" type cr
   new-space THERE-PTR data-there
 [THEN]
 
@@ -82,7 +86,9 @@ config mix-code-and-data? @ [IF]
 0 VALUE current-space
 
 : max! ( x addr -- ) tuck @ max swap ! ;
-: +max ( host-addr -- ) current-space space>max max! ;
+: +max ( host-addr -- )
+  \ dup   current-space space>host-array @   - $2800 > IF 99 throw THEN
+  current-space space>max max! ;
 
 : taddr->offset ( target-addr there-array -- target-offset )
   space>org @ - ;
@@ -91,6 +97,7 @@ config mix-code-and-data? @ [IF]
   space>host-array @ + ;
 
 : >space ( target-addr there-array -- host-addr )
+  \ 2dup space>org @ - $2800 > IF 98 throw THEN
   tuck                ( there-array target-addr there-array )
   taddr->offset
   toffset->hoffset
@@ -214,6 +221,16 @@ DEFER <tc!*> ( tchar c-addr -- )
 : tdata-c, ( tchar -- ) data-there <tc,> ;
 
 
+\ API - Alignment ============================================================
+\ Use t-allot to force the "max" logic to work.
+: <t-align> ( there-ptr -- )
+  dup @ dup taligned swap -   swap <t-allot> ;
+
+: tname-align ( -- ) name-there <t-align> ;
+: tcode-align ( -- ) code-there <t-align> ;
+: tdata-align ( -- ) data-there <t-align> ;
+
+
 \ Extras =====================================================================
 : TVARIABLE ( "name" --    X: -- t-addr )
   data-there @   0 tdata,   CONSTANT ;
@@ -221,9 +238,10 @@ DEFER <tc!*> ( tchar c-addr -- )
 
 \ File output ================================================================
 : extend-file ( offset file -- )
+  ." Adjusting file to write at " over hex. cr
   >R s>d
   2dup R@ resize-file       ABORT" failed to resize file"
-       R> reposition-file   ABORT" failed to reposition file" ;
+       R> hex .s cr reposition-file   ABORT" failed to reposition file" ;
 
 
 : .space ( there-array -- )
@@ -240,16 +258,39 @@ DEFER <tc!*> ( tchar c-addr -- )
   over - 1+ ;
 
 : dump-space ( there-array file -- )
+  \ Bail if this space is the
+  over data-there =   config data-space-blank? @ and IF
+    ." Skipping the data space, it's uninitialized." cr
+    2drop EXIT THEN
+
   ." dump-space: " over hex. dup hex. .s cr
   over .space
   >R
   dup space>offset @   R@ extend-file
   space>span
   ." Host span: " over hex. dup hex. cr
-  R> write-file ABORT" Failed to write file" ;
+  \ cr cr 2dup native dump host
+  ." File position: " R@ file-position ABORT" filepos failed" hex. hex. cr
+  R> .s cr write-file ABORT" Failed to write file" ;
+
+: .spaces ( -- )
+  ." spaces order: "
+  all-spaces @ BEGIN ?dup WHILE dup space>org @ hex.   space>next @ REPEAT cr ;
+
+: sort-spaces ( -- )
+  .spaces
+
+  all-spaces @ space>next @ space>next dup @   0 rot ! ( code-space )
+  all-spaces @   over space>next !
+  all-spaces !
+
+  .spaces ;
+
 
 : dump ( c-addr u -- )
   cr cr ." Assembling to " 2dup type cr
+  sort-spaces
+
   W/O BIN create-file ABORT" Failed to open output file" ( file )
 
   \ Write all the spaces which have been defined.
@@ -257,9 +298,6 @@ DEFER <tc!*> ( tchar c-addr -- )
     2dup swap dump-space
     space>next @
   REPEAT
-  \ code-there over dump-space
-  \ config mix-code-and-data? @ 0= IF data-there over dump-space THEN
-  \ config mix-code-and-name? @ 0= IF name-there over dump-space THEN
 
   \ And close the file.
   dup flush-file ABORT" Failed to flush"

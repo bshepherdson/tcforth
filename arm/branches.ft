@@ -14,8 +14,8 @@
 
 \ First the host side words.
 host definitions
-: 0BRANCH,    [T'] (0BRANCH) tcompile,   here 0 tcode, ;
-: BRANCH,     [T'] (BRANCH)  tcompile,   here 0 tcode, ;
+: 0BRANCH,    [T'] (0BRANCH) tcompile,   code-there @   0 tcode, ;
+: BRANCH,     [T'] (BRANCH)  tcompile,   code-there @   0 tcode, ;
 : !DEST       tcode! ;
 : DEST>BRANCH 1 tcells - ;
 : DEST>POST   tcell+ ;

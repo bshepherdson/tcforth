@@ -9,7 +9,7 @@ host definitions
 : embed ( c-addr u1 -- )
   r/o open-file abort" Failed to open test disk" ( fid ) >R
   code-there space>there   100000   R@ read-file   ABORT" Failed to read test disk" ( u2 )
-  code-there <t-allot> talign
+  code-there <t-allot> tcode-align
   R> close-file ABORT" Failed to close test disk" ;
 
 S" test.disk" embed

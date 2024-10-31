@@ -11,6 +11,12 @@ target : ,CF ( codeword-addr -- ) $7c20 , , ;
 
 target : ,DOCOL ( -- ) [ host jsr_docol tcode@ tliteral target ] , ;
 
+host colocated-names? [IF]
+  target : ,PFA ( -- ) ;
+host [ELSE]
+  target : ,PFA ( -- ) here , ;
+host [THEN]
+
 target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , ; IMMEDIATE
   host acts: tliteral ; IMPERATIVE
 

@@ -411,14 +411,14 @@ end-code
 \ Words
 code EXIT
   \ Get the target XT for EXIT and stash it in a forward reference.
-  here 'EXIT !
+  code-there @ 'EXIT !
   \ Actual code for an EXIT
   ip poprsp,
 end-code
 
 
 \ MOVEs ======================================================================
-\ XXX remove me
+\ XXX: remove me
 label uart0dr $101f1000 asm,
 label 'deadbeef $deadbeef asm,
 

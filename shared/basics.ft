@@ -3,13 +3,13 @@
 \ ANS Forth standard names and arguments where practical.
 target definitions
 
-host ." Latest: " here hex. cr
+host ." Latest: " name-there @ hex. cr
 target : LATEST 'latest @ ;
   host acts: latest ;
 \ LATEST gives the name token. Skip over the link pointer and check the length.
 target : IMMEDIATE
     latest cell+   dup c@   f_immed or   swap c! ;
-  host acts: latest tcell+ dup tcode-c@   f_immed or   swap tcode-c! ;
+  host acts: latest tcell+ dup tname-c@   f_immed or   swap tname-c! ;
 
 target : [ 0 state ! ; IMMEDIATE
   host acts: 0 state ! postpone host ; IMPERATIVE
@@ -34,9 +34,9 @@ target
 : COUNT dup c@ >R char+ R> ;
 
 target : ALLOT ( n -- ) dp +! ;
-  host acts: dp +! ;
+  host acts: tdata-allot ;
 
 target : HERE dp @ ;
-  host acts: dp @ ;
+  host acts: data-there @ ;
 
 target : WITHIN ( x lo hi -- ? ) over - >R   - R> U< ;

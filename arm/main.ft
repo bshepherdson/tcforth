@@ -8,6 +8,12 @@ host definitions
 \ Metacompiler configuration =================================================
 host REQUIRE ../host/configuration.ft
 
+interactive-forth!
+
+\ XXX: Experimenting with separate spaces.
+separate-spaces!
+config data-space-blank? ON
+
 8    config char-bits    !
 4    config cell-width   !
 4    config instr-width  !
@@ -19,8 +25,15 @@ config little-endian?   ON
 REQUIRE ../host/spaces.ft
 
 \ The QEMU ARM system loads the user code at $10000.
-$10000 code-there ORG!
+$10000   code-there ORG!
 \ Since the spaces are mixed, that relocated all of them together.
+
+
+\ XXX: Experimenting with separate spaces.
+$30000   name-there ORG!
+$30000 $10000 -   name-there space>offset !
+
+$2000000 data-there ORG!
 
 \ Metacompilation ============================================================
 REQUIRE assembler.ft

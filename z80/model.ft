@@ -124,13 +124,7 @@ $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
 : pushrsp, ( rhs -- ) 1 # rsp sub,   ( rhs ) [rsp] set, ;
 : poprsp,  ( lhs -- ) [rsp] 2swap ( rhs lhs ) set,   1 # rsp add, ;
 
-: tchars    ( n -- n2 ) ;
-: tchar+    ( n -- n2 ) 1+ ;
-: tcells    ( n -- n2 ) ;
-: tcell+    ( n -- n2 ) 1+ ;
-: tcompile, t, ;
-: taligned  ( x -- x2 ) ;
-: talign    ( -- ) ;
+: tcompile, tcode, ;
 
 VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
 : LATEST ( -- nt ) 'latest @ ;

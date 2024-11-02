@@ -35,6 +35,22 @@ $30000 $10000 -   name-there space>offset !
 
 $2000000 data-there ORG!
 
+\ XXX: START HERE - Basi interpreter is working but the target-side compiler
+\ is broken. That's not strictly necessary for the Gameboy project, so I could
+\ punt. But it seems worth investigating and fixing if practical.
+\ Need to properly set up DP and make sure it's (1) compiling everything
+\ (names, code and data) in data space. In that sense it's the same as typical
+\ compilers, feeding into one writable space.
+\ The trick is that there's some new indirection that it's not handling:
+\ Names point at codewords, rather than being followed by them.
+\ The codeword of a CREATEd word is not followed immediately by the data field,
+\ but by a pointer to the data field (and *that* could immediately follow its
+\ own pointer...)
+\ - Test case: Make sure a DOES> word definied on the target fully works.
+\   - There might already be a case in the test suite for that? Worth writing
+\     if there isn't.
+
+
 \ Metacompilation ============================================================
 REQUIRE assembler.ft
 host REQUIRE ../host/helpers.ft

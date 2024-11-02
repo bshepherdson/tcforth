@@ -120,8 +120,6 @@ target definitions
 
 
 \ Now we're ready to define the various defining words in the core!
-\ XXX: START HERE - This is crashing, it needs the indirection from code space
-\ to data space, I think.
 target : VARIABLE ( "name" --     X: -- addr ) CREATE 0 , ;
   host acts: create host 0 tdata,   DOES> ;
   \ Empty DOES> action, but that leaves the target-body on the stack.

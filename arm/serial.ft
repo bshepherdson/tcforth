@@ -26,6 +26,8 @@ $01 CONSTANT CTS  \ Receive  FIFO empty
 : KEY  ( -- ch ) BEGIN rx-ready? 0= UNTIL   UART0DR @   $ff and ;
 : CR   ( -- )    10 emit ;
 
+
+
 \ Configuration: no parity, no sticky. 8 bits, FIFOs on, 1 stop bit.
 \ LCR_H gets %01110000 = $70
 \ CR gets read out, and then set bits 9 and 8 (RXE, TXE) and 1 (enable)

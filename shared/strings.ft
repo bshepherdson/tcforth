@@ -36,4 +36,3 @@ target : ." ( "ccc"" --   X: -- ) postpone S"  ['] <type> compile, ; IMMEDIATE
 \ Compile-time print
 target : .( ( "ccc<paren>" -- ) [char] ) parse type ; IMMEDIATE
   host acts: [char] ) parse type ; IMPERATIVE
-

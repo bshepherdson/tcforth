@@ -158,7 +158,8 @@ target : INTERP1   ( c-addr u -- )
   THEN ;
 
 \ Fundamental single-line interpreter loop.
-target : INTERPRET ( -- ) BEGIN parse-name dup WHILE interp1 REPEAT 2drop ;
+target : INTERPRET ( -- )
+  BEGIN parse-name dup WHILE interp1 REPEAT 2drop ;
 
 target : ABORTED ( -- )
   R> [ host rp0 tliteral target ] rp! >R \ Drops everything but ABORTED's own return
@@ -168,4 +169,3 @@ target : ABORTED ( -- )
 
 host presume ACCEPT presume EMIT presume REVERSE
 target
-

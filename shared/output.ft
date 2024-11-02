@@ -49,9 +49,7 @@ VARIABLE (picout)
 
 \ Intro message ==============================================================
 VARIABLE '.intro
-:noname ." TC-Forth version 7" cr   hex latest .  dp . here . ; '.intro !
-\ XXX: START HERE - latest is 0 and dp is the start of the data area, rather
-\ than its end. Figure out where those two values are coming from and fix them!
+:noname ." TC-Forth version 7" cr ; '.intro !
 
 \ Stack output ===============================================================
 VARIABLE (.)

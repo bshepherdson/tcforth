@@ -64,4 +64,3 @@ VARIABLE dev-serial
     i devinfo 2swap 2drop rot drop ( d-target d-id )
     2over rot = >R = R> and IF 2drop i UNLOOP EXIT THEN
   LOOP 2drop -1 ;
-

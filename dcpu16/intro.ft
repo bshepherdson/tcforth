@@ -7,4 +7,3 @@ target definitions
 '.intro !
 
 : init-hardware ( -- ) init-devices init-lem init-serial ;
-

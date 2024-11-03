@@ -14,8 +14,10 @@ target : ,DOCOL ( -- ) [ host jsr_docol tcode@ tliteral target ] , ;
 host colocated-names? [IF]
   target : ,PFA ( -- ) ;
 host [ELSE]
-  target : ,PFA ( -- ) here , ;
+  target : ,PFA ( -- ) here cell+ , ;
 host [THEN]
+
+target : ,xt-slot ( -- ) ,pfa ;
 
 target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , ; IMMEDIATE
   host acts: tliteral ; IMPERATIVE
@@ -31,12 +33,21 @@ target : ,DOSTRING ( c-addr u -- )
 target : ALIGNED ;
 target : ALIGN ; host acts: ;
 
-\ This is actually portable but since it fits right here between ALIGNED and
-\ (DOES>), there's no good place to put it with splitting this file into 3.
-target : >CFA ( nt -- xt )
-  cell+ dup c@ [ host mask_len tliteral target ] and + char+ aligned ;
+target : >CFA ( nt -- cfa )
+  cell+ dup c@ [ host mask_len tliteral target ] and + char+ aligned
+  [ host config mix-code-and-name? @ 0= [IF] target ] @ [ host [THEN] target ] ;
 
+host config mix-code-and-name? @ [IF]
+target : /NAME-FIELD ( -- u ) 0 ;
+host [ELSE]
+target : /NAME-FIELD ( -- u ) 1 cells ;
+host [THEN]
+
+host config mix-code-and-data? @ [IF]
 target : >BODY ( xt -- addr ) 2 cells + ;
+host [ELSE]
+target : >BODY ( xt -- addr ) 2 cells + @ ;
+host [THEN]
 
 target : PAD ( -- addr ) $fb00 ;
 
@@ -58,8 +69,13 @@ host definitions
 : EXIT-compile, ( -- )
   'EXIT @ tliteral   [T'] compile, tcompile, ;
 
-\ Runs during compilation TARGET : DOES> - compile code into its thread!
+: asm-lit ( -- x )
+  -1 tcells tcode-allot
+  code-there @   tcode@ ;
+
+\ Runs during compilation of TARGET : DOES> - compile code into its thread!
 : TDOES,
-  [T'] (DOES>)     tliteral  [T'] compile, tcompile,
-  [T'] EXIT        tliteral  [T'] compile, tcompile,
-  jsr_docol tcode@ tliteral  [T'] ,        tcompile, ;
+  [T'] (DOES>)        tliteral   [T'] compile, tcompile,
+  [T'] EXIT           tliteral   [T'] compile, tcompile,
+  pfa_tos_code tcode@ tliteral   [T'] ,        tcompile,
+  jsr_docol    tcode@ tliteral   [T'] ,        tcompile, ;

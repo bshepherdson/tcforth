@@ -79,7 +79,8 @@ target : ,DOSTRING ( c-addr u -- )
   R> chars allot   \ And make room for it.
   align ;
 
-target : PAD ( -- addr ) [ host rp0 tliteral target ] ;
+target : PAD ( -- addr )
+  [ host data-there @ tliteral   128 tdata-allot   target ] ;
 
 \ DOES> ======================================================================
 \ Implementing sequence 2

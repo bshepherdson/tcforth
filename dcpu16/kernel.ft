@@ -378,7 +378,7 @@ end-code
 
 code EXIT
   \ Get the target XT for EXIT and stash it in the forward reference.
-  here 'EXIT !
+  code-there @ 'EXIT !
 
   ip poprsp,
 end-code
@@ -449,7 +449,8 @@ end-code
 
 
 \ A jsr docol for reference.
-label jsr_docol   docol # jsr,
+label jsr_docol      docol # jsr,
+label pfa_tos_code   pfa->tos,
 
 code (DO) ( limit index --   R: -- limit index )
   pop ra set,

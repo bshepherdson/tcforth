@@ -20,11 +20,8 @@
 \ TARGET HERE is the mirror word that compiles the Target xt for HERE (!)
 HOST DEFINITIONS
 
-\ The assembler defines a THERE pointer for the Target dictionary.
-\ We capture that address as the HOST DP as well.
-code-there CONSTANT DP
-: here dp @ ;
-0 dp !   \ DCPU execution starts at $0000 by default.
+: HERE ( -- ) 99 throw ;
+: DP   ( -- ) 98 throw ;
 
 \ First line of code, the entry point. It'll be a jump to COLD eventually.
 $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
@@ -42,11 +39,6 @@ $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
 : next,    ( -- ) [ip] pc sti, ;
 : pushrsp, ( rhs -- ) 1 # rsp sub,   ( rhs ) [rsp] set, ;
 : poprsp,  ( lhs -- ) [rsp] 2swap ( rhs lhs ) set,   1 # rsp add, ;
-
-: tchars    ( n -- n2 ) ;
-: tchar+    ( n -- n2 ) 1+ ;
-: tcells    ( n -- n2 ) ;
-: tcell+    ( n -- n2 ) 1+ ;
 
 : tcompile,  ( xt -- )      tcode, ;
 : tdecompile ( slot -- xt ) tcode@ ;
@@ -67,13 +59,19 @@ label DOCOL
 
 \ DOVAR is the code word for a CREATEd definition without a DOES> - it pushes
 \ the address of the parameter field. In order to support DOES>, however, a two-
-\ word code field is needed. CREATE assembles JSR DOVAR, which fits in one word
-\ since DOVAR is at the very top of memory (circa $0007) and fits inline.
-\ So CREATE "wastes" one word.
-\ See the DOES> design below.
+\ word code field is needed. CREATE assembles JSR DOVAR as two words. Since
+\ DOVAR is at the very top of memory (circa $0007) it would fit inline, but this
+\ way the return address JSR pushes is the data field.
+\ See the DOES> design below for more details.
+colocated-names? [IF]
+  \ It's important that this not be empty, but rather a no-op.
+  : pfa->tos, ( -- ) ra ra set, ;
+[ELSE]
+  : pfa->tos, ( -- ) [ip] push sti, ;
+[THEN]
 
 label DOVAR
-  \ 1 # peek add,
+  pfa->tos,
   next,
 
 \ DOES> design for DTC =======================================================
@@ -106,7 +104,13 @@ VARIABLE 'EXIT   \ These get populated later.
 
 : EXIT, ( -- ) 'EXIT @ tcompile, ;
 
-: DOES, ( -- xt-does ) '(DOES>) @ tcode,   'EXIT @ tcode,   here   DOCOL # jsr, ;
+: DOES, ( -- xt-does )
+  '(DOES>) @ tcode,
+  'EXIT    @ tcode,
+  code-there @
+  pfa->tos,
+  DOCOL # jsr,
+;
 
 
 \ Not really words, just assembler routines.
@@ -157,7 +161,7 @@ colocated-names? [IF]
 \ cell [LIT|x] pattern.
 : tliteral ( x --    X: -- x ) lit tcompile,   tcode, ;
 
-: t>body ( target-xt -- target-body ) 2 tcells + ;
+: t>pfa ( target-xt -- target-body ) 2 tcells + ;
 
 
 0     CONSTANT rp0

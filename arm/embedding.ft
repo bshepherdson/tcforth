@@ -17,7 +17,7 @@ host code-there @
 
 S" test.disk" embed
 
-host code-there @ S" things: " type hex.s cr
+host code-there @
 
 target definitions
 

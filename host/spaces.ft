@@ -38,6 +38,14 @@ begin-structure [space]
   field: space>next
 end-structure
 
+: insert-space ( new-space -- )
+  all-spaces @ 0= IF all-spaces ! EXIT THEN
+  all-spaces BEGIN dup @ WHILE ( new-space 'space )
+    over space>org @   over @ space>org @   ( new-space 'space   new-org org )
+    U< IF 2dup @ space>next !   !   EXIT THEN
+    @ space>next
+  REPEAT ( new-space 'space ) ! ;
+
 
 \ Creates a new THERE-PTR array, with the specified host-ptr.
 \ Sets THERE, ORG and file-offset all to 0; these should be customized by
@@ -49,8 +57,7 @@ end-structure
   0   R@ space>ptr         !
   0   R@ space>org         !
   0   R@ space>offset      !
-  all-spaces @ R@ space>next !
-  R> all-spaces ! ;
+  R> insert-space ;
 
 
 \ Define all three spaces, per the configuration flags.
@@ -238,11 +245,9 @@ DEFER <tc!*> ( tchar c-addr -- )
 
 \ File output ================================================================
 : extend-file ( offset file -- )
-  ." Adjusting file to write at " over hex. cr
   >R s>d
   2dup R@ resize-file       ABORT" failed to resize file"
-       R> hex .s cr reposition-file   ABORT" failed to reposition file" ;
-
+       R> reposition-file   ABORT" failed to reposition file" ;
 
 : .space ( there-array -- )
   ." Space:" cr
@@ -263,33 +268,18 @@ DEFER <tc!*> ( tchar c-addr -- )
     ." Skipping the data space, it's uninitialized." cr
     2drop EXIT THEN
 
-  ." dump-space: " over hex. dup hex. .s cr
-  over .space
   >R
   dup space>offset @   R@ extend-file
   space>span
-  ." Host span: " over hex. dup hex. cr
-  \ cr cr 2dup native dump host
-  ." File position: " R@ file-position ABORT" filepos failed" hex. hex. cr
-  R> .s cr write-file ABORT" Failed to write file" ;
+  R> write-file ABORT" Failed to write file" ;
 
-: .spaces ( -- )
-  ." spaces order: "
-  all-spaces @ BEGIN ?dup WHILE dup space>org @ hex.   space>next @ REPEAT cr ;
-
-: sort-spaces ( -- )
-  .spaces
-
-  all-spaces @ space>next @ space>next dup @   0 rot ! ( code-space )
-  all-spaces @   over space>next !
-  all-spaces !
-
-  .spaces ;
-
+\ : .spaces ( -- )
+\   ." spaces order: "
+\   all-spaces @ BEGIN ?dup WHILE dup space>org @ hex.   space>next @ REPEAT cr ;
 
 : dump ( c-addr u -- )
   cr cr ." Assembling to " 2dup type cr
-  sort-spaces
+  \ .spaces
 
   W/O BIN create-file ABORT" Failed to open output file" ( file )
 

@@ -1,4 +1,3 @@
-host cr cr S" init-data at " type data-there @ hex. cr cr
 target definitions
 
 \ TODO: This should be generic - any system with separated data will have to do

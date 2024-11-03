@@ -53,8 +53,8 @@ f_hidden 1-             CONSTANT mask_len
 \ With separated name and code spaces, the name field contains a pointer to the
 \ (empty) code field.
 : (mk-header) ( c-addr u -- target-xt )
-  ." (mk-header) " 2dup type   4 spaces .s cr
-  ."     nt: " name-there @ hex. cr
+  \ ." (mk-header) " 2dup type   4 spaces .s cr
+  \ ."     nt: " name-there @ hex. cr
   name-there @   latest tname,   'latest !
   dup tname-c, \ Length byte
   0 DO ( c-addr )

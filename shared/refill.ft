@@ -53,4 +53,3 @@ host presume (quit)
 
 \ Begins with REFILL, so doesn't expect an existing string.
 target : (EVALMANY) ( ... src-id -- ... ) +SRC (quit) -SRC ;
-

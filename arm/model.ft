@@ -57,7 +57,7 @@ label DOCOL
 \ DOVAR is the code word for a CREATEd definition without a DOES> - it pushes
 \ the address of the parameter field.
 \ The address of the cell after DOVAR is in lr.
-\ With colocated names and data, that cell is the start of the parameter field.
+\ With collocated names and data, that cell is the start of the parameter field.
 \ With separated names, there's a pointer to the parameter field there.
 colocated-names? [IF]
   : pfa->tos, ( -- ) lr tos mov, ;
@@ -136,15 +136,6 @@ label DOSTRING
 \ Compiles the bl DOVAR.
 : ,dovar ( -- ) dovar bl, ;
 
-\ Compiles a pointer to the data area, if necessary.
-\ Does nothing when data and code space are unified, since the parameter field
-\ immediately follows the code.
-colocated-names? [IF]
-  : ,pfa ( -- ) ;
-[ELSE]
-  : ,pfa ( -- ) data-there @ tcode, ;
-[THEN]
-
 \ Compiles a string literal into the thread.
 \ In ITC/DTC that's DOSTRING, then the length, then the chars.
 \ NB The length is a byte, not a cell. This errors if it's too big.
@@ -165,16 +156,8 @@ colocated-names? [IF]
 \ cell [LIT|x] pattern.
 : tliteral ( x --    X: -- x ) lit tcompile,   tcode, ;
 
-: t>body ( target-xt -- target-body ) tcell+ ;
-
-config mix-code-and-data? @ 0= [IF]
-  \ With separated code and data spaces, there's an address in the code field
-  \ that points to the parameter field, so we have to read it back.
-  \ TODO: We can probably avoid several of these [IF] blocks by abstracting to
-  \ a few words like >cfa and >pfa, which do the right thing in the different
-  \ configurations.
-  : t>body ( target-xt -- target-body ) t>body tcode@ ;
-[THEN]
+\ For ARM the code field is always one instruction = 1 cell.
+: t>pfa ( t-xt -- pf-slot ) tcell+ ;
 
 \ Entry point at 64KB, stacks at 32MB with 2KB ($800) for the return stack.
 $02000000 CONSTANT rp0

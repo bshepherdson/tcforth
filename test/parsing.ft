@@ -6,7 +6,7 @@ here ( before after )
 swap CONSTANT GP1-before
      CONSTANT GP1-after
 
-T{ ' GP1 GP1-before -   ->   1 cells 4 chars + }T
+T{ ' GP1 GP1-before -   ->   1 cells 4 chars + /name-field + }T
 T{ ' GP1 GP1 <          ->   <TRUE> }T
 T{ GP1-after GP1 -      ->   1 cells }T
 

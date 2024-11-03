@@ -25,10 +25,12 @@ target : ,CF ( codeword-addr -- ) here   0 ,   !cf ;
 target : ,DOCOL ( -- ) [ host docol tliteral target ] ,CF ;
 
 host colocated-names? [IF]
-  target : ,PFA ( -- ) ;
+  target : ,PFA     ( -- ) ;
 host [ELSE]
-  target : ,PFA ( -- ) here , ;
+  target : ,PFA ( -- ) here cell+ , ;
 host [THEN]
+
+target : ,xt-slot ( -- ) ,pfa ;
 
 target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , ; IMMEDIATE
   host acts: tliteral ; IMPERATIVE
@@ -41,12 +43,24 @@ target : ALIGNED   3 + 3 invert and ;
 target : ALIGN     here aligned dp ! ;
   host acts: data-there @ 3 + 3 invert and data-there ! ;
 
-\ This is actually portable but since it fits right here between ALIGNED and
-\ (DOES>), there's no good place to put it with splitting this file into 3.
-target : >CFA ( nt -- xt )
-  cell+ dup c@ [ host mask_len tliteral target ] and + char+ aligned
-  \ If the code and name spaces are separated, read the xt pointer.
+\ Parallel to the host dictionary, words for accessing the name and the code
+\ field address.
+\ NOTE: This is actually portable but since it fits right here between ALIGNED
+\ and (DOES>), there's no good place to put it with splitting this file into 3.
+\ TODO: As noted on ALIGNED, with the new configuration this *could* be moved to
+\ somewhere portable!
+target : NAME>STRING ( nt -- c-addr u )
+  cell+ dup char+ swap c@ [ host mask_len tliteral target ] and ;
+
+target : >CFA    ( nt -- cfa )
+  name>string + aligned
   [ host config mix-code-and-name? @ 0= [IF] target ] @ [ host [THEN] target ] ;
+
+host config mix-code-and-name? @ [IF]
+target : /NAME-FIELD ( -- u ) 0 ;
+host [ELSE]
+target : /NAME-FIELD ( -- u ) 1 cells ;
+host [THEN]
 
 \ If the data and code spaces are combined, the body follows the codeword.
 \ If separated, there's a pointer to data space just after the codeword.

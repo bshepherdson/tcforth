@@ -30,8 +30,8 @@ $10000   code-there ORG!
 
 
 \ XXX: Experimenting with separate spaces.
-$30000   name-there ORG!
-$30000 $10000 -   name-there space>offset !
+$80000   name-there ORG!
+$80000 $10000 -   name-there space>offset !
 
 $2000000 data-there ORG!
 
@@ -49,6 +49,10 @@ $2000000 data-there ORG!
 \ - Test case: Make sure a DOES> word definied on the target fully works.
 \   - There might already be a case in the test suite for that? Worth writing
 \     if there isn't.
+\ Figure out the complete phrasing of eg. creating a dictionary definition,
+\ with internal words. It's a lot easier to get right across platforms that way,
+\ and shrinks the per-target interface. Lots of words like TARGET >CFA can be
+\ portable with the right phrasing.
 
 
 \ Metacompilation ============================================================

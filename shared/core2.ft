@@ -5,12 +5,15 @@ target definitions
 : DECIMAL 10 base ! ;
 
 \ (CREATE) builds a blank header, no code field.
-\ link | len | name... |
+\ But there's a pointer to the code field if the code and name spaces are
+\ separated.
+\ link | len | name... | padding... | (slot)
 target : (CREATE) ( "name" -- ) here latest ,   'latest !
     parse-name dup c,
     here swap ( src dst u )
     dup >R move> R> ( len )
-    allot align ;
+    allot align
+    ,xt-slot ;
 
 host definitions
 \ Host-side CREATE, used by eg. : CONSTANT ... HOST ACTS: CREATE ... ;
@@ -251,7 +254,7 @@ target : MAX ( x y -- max ) 2dup < IF swap THEN drop ;
 \ Recurse is tricky. It's an immediate word that uses latest at runtime.
 \ On the host, it's similar, since HOST LATEST exists.
 target : RECURSE ( -- ) latest >cfa compile, ; IMMEDIATE
-  host acts: latest t>cfa tcompile, ; IMPERATIVE
+  host acts: latest tname>int tcompile, ; IMPERATIVE
 
 target : PICK ( ... n -- ... nth ) 1+ cells sp@ + @ ;
 

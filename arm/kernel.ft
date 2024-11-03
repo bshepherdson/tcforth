@@ -19,9 +19,6 @@
 
 : push-nearby, ( value -- ) {{ tos }} push,   tos nearby, ;
 
-\ Standard dictionary headers: link, length+immediate+hidden word, len words of
-\ name, code field.
-
 : binary ( xt -- ) >R   {{ r0 }} pop,   tos r0 tos   R> execute ;
 
 code +     ' add, binary   end-code

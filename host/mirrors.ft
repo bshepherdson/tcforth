@@ -79,7 +79,8 @@ VARIABLE >mirror \ Holds the body address of the mirror currently executing.
   \ Create the Target header first, so we have its xt.
   \ But save the input pointer so we can hoik the name again.
   >IN @ >R
-  parse-name ( c-addr u ) (mk-header)  ( xt )
+  parse-name ( c-addr u )
+  (mk-header)  ( xt )
   R> >IN !   \ Input pointer is aimed at the name again.
   \ Set up compilation into the TARGET vocabulary, but without switching to
   \ looking words up in it.

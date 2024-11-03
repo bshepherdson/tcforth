@@ -166,7 +166,7 @@ latest tcell+ dup tname-c@ f_immed or swap tname-c!
 
 
 host code-there @
-." Metacompilation starts at " dup hex.  ." (" 2* hex. ." )" cr
+cr cr ." Metacompilation starts at " dup hex.  ." (" 2* hex. ." )" cr
 
 ?stack-clear
 

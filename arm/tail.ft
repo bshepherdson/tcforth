@@ -3,14 +3,8 @@
 
 host definitions
 \ This needs to be the last lines in the target compilation.
-host latest         latest0 S" latest         latest0: " type hex.s cr tcode!
-host data-there @   dp0     S" data-there @   dp0:     " type hex.s cr tcode!
-
-\ XXX: These need to be updated! To support bootstrapping on a device like GBA,
-\ these need a separate version that can't initialize writable fields. It needs
-\ to copy the initial LATEST and HERE values from ROM to RAM on startup.
-\ Both versions could do that; or this file can be split.
-\ The GBA startup is different enough that maybe that's okay?
+host latest         latest0 tcode!
+host data-there @   dp0     tcode!
 
 \ At this point the assembler's output region should be complete. Dump the
 \ resulting binary with -e 'output-file-xt @ execute dump'

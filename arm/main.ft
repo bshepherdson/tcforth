@@ -10,9 +10,9 @@ host REQUIRE ../host/configuration.ft
 
 interactive-forth!
 
-\ XXX: Experimenting with separate spaces.
-separate-spaces!
-config data-space-blank? ON
+\ Optional: separate spaces
+\ separate-spaces!
+\ config data-space-blank? ON
 
 8    config char-bits    !
 4    config cell-width   !
@@ -29,30 +29,11 @@ $10000   code-there ORG!
 \ Since the spaces are mixed, that relocated all of them together.
 
 
-\ XXX: Experimenting with separate spaces.
-$80000   name-there ORG!
-$80000 $10000 -   name-there space>offset !
-
-$2000000 data-there ORG!
-
-\ XXX: START HERE - Basi interpreter is working but the target-side compiler
-\ is broken. That's not strictly necessary for the Gameboy project, so I could
-\ punt. But it seems worth investigating and fixing if practical.
-\ Need to properly set up DP and make sure it's (1) compiling everything
-\ (names, code and data) in data space. In that sense it's the same as typical
-\ compilers, feeding into one writable space.
-\ The trick is that there's some new indirection that it's not handling:
-\ Names point at codewords, rather than being followed by them.
-\ The codeword of a CREATEd word is not followed immediately by the data field,
-\ but by a pointer to the data field (and *that* could immediately follow its
-\ own pointer...)
-\ - Test case: Make sure a DOES> word definied on the target fully works.
-\   - There might already be a case in the test suite for that? Worth writing
-\     if there isn't.
-\ Figure out the complete phrasing of eg. creating a dictionary definition,
-\ with internal words. It's a lot easier to get right across platforms that way,
-\ and shrinks the per-target interface. Lots of words like TARGET >CFA can be
-\ portable with the right phrasing.
+\ Optional: separate spaces
+\ $80000   name-there ORG!
+\ $80000 $10000 -   name-there space>offset !
+\
+\ $2000000 data-there ORG!
 
 
 \ Metacompilation ============================================================

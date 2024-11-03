@@ -18,13 +18,6 @@
 \ TARGET HERE is the mirror word that compiles the Target xt for HERE (!)
 HOST DEFINITIONS
 
-\ NOTE: Actually there isn't a single HOST HERE because of separated spaces.
-\ Instead there are three, for data, name and code spaces.
-\ XXX: These placeholders can be removed once separated spaces are working.
-\ But we can just keep these for later if it's useful.
-: DP    76 throw ;
-: HERE  77 throw ;
-
 
 \ First line of code, the entry point. This is at $0 in code-there space, but
 \ will be loaded at $10000 by the ARM runtime.

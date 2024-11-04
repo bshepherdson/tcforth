@@ -33,15 +33,17 @@ target : QUIT ( -- )
 host config data-space-blank? @ [IF]
   \ Span of the data space on the host.
   cr cr S" Compiling data initializers since data space starts blank!" type cr
-  data-there space>span
+  data-there space>span ." Host span: " over hex.  over . cr
   dup bytes/tchar /       ( host-addr u-bytes u-tchars )
   code-there @
   over tcode-allot        ( host-addr u-bytes u-tchars target-addr )
   tuck
   \ Compiles literals for ( src dst u ) in target terms.
+  ." Target move: "
   target : init-data ( -- )
-    [ host tliteral data-there space>org @ tliteral tliteral target ]
+    [ host dup hex. tliteral data-there space>org @ dup hex. tliteral dup hex. tliteral target ]
     move ;
+host cr
 
   host ( host-addr u-bytes target-addr )
   code-there >space ( host-src u-bytes host-dst )

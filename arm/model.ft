@@ -129,6 +129,12 @@ label DOSTRING
 \ Compiles the bl DOVAR.
 : ,dovar ( -- ) dovar bl, ;
 
+colocated-names? [IF]
+  : t,pfa ( -- ) ;
+[ELSE]
+  : t,pfa ( -- ) data-there @ tcode, ;
+[THEN]
+
 \ Compiles a string literal into the thread.
 \ In ITC/DTC that's DOSTRING, then the length, then the chars.
 \ NB The length is a byte, not a cell. This errors if it's too big.

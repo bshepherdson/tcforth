@@ -15,13 +15,20 @@ interactive-forth!
 
 config little-endian?   OFF
 
+\ XXX: Playing with separate spaces.
+\ separate-spaces!
+\ config data-space-blank?  ON
+
 \ Target spaces ==============================================================
 REQUIRE ../host/spaces.ft
 
 ' <be16@> IS <tc@*>
 ' <be16!> IS <tc!*>
 
-$0 code-there ORG!
+$0    code-there ORG!
+\ $4000 name-there ORG!   $8000 name-there space>offset !
+\ $6000 data-there ORG!
+
 
 REQUIRE assembler.ft      \ DCPU-16 assembler
 

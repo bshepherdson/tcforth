@@ -17,7 +17,7 @@ target : (CREATE) ( "name" -- ) here latest ,   'latest !
 
 host definitions
 \ Host-side CREATE, used by eg. : CONSTANT ... HOST ACTS: CREATE ... ;
-: CREATE ( "name" --    X: -- addr )   (tcreate) ,dovar ,pfa ;
+: CREATE ( "name" --    X: -- addr )   (tcreate) ,dovar t,pfa ;
 target definitions
 
 target : CREATE ( "name" --     X: -- addr )

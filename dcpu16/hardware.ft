@@ -49,10 +49,10 @@ VARIABLE dev-serial
 
 
 : identify ( dev-num -- )
-  dup lem?      IF dev-lem1802  ! EXIT THEN
-  dup m35fd?    IF dev-m35fd    ! EXIT THEN
-  dup keyboard? IF dev-keyboard ! EXIT THEN
-  dup serial?   IF dev-serial   ! EXIT THEN
+  dup lem?      IF $1802 log dev-lem1802  ! EXIT THEN
+  dup m35fd?    IF $35fd log dev-m35fd    ! EXIT THEN
+  dup keyboard? IF $abcd log dev-keyboard ! EXIT THEN
+  dup serial?   IF $5555 log dev-serial   ! EXIT THEN
   drop ;
 
 : init-devices ( -- )

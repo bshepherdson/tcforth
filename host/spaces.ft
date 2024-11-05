@@ -126,6 +126,13 @@ DEFER default-spaces! ( -- )
   ( 0|sum ) ABORT" Error configuring target memory spaces: you must set all of CODE-SPACE, NAME-SPACE and DATA-SPACE" ;
 
 
+: blank-space! ( there-array -- ) -1 swap space>offset ! ;
+
+config data-space-blank? @ [IF]
+  data-there blank-space!
+[THEN]
+
+
 \ Read and Write helpers =====================================================
 0 VALUE current-space
 
@@ -321,7 +328,9 @@ hit-7 off
 
 : dump-space ( there-array file -- )
   \ Bail if this space is a blank data space, or the name-space.
-  over skip-space? IF 2drop EXIT THEN
+  over skip-space? IF
+    ." Skipping the uninitialized data space at target " over space>org @ hex. cr
+    2drop EXIT THEN
 
   >R
   dup space>offset @   R@ extend-file

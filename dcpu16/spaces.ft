@@ -1,0 +1,8 @@
+\ Target spaces ==============================================================
+REQUIRE ../host/spaces.ft
+
+\ Address units are 16-bit values stored on the host as 2 bytes, big-endian.
+' <be16@> IS <tc@*>
+' <be16!> IS <tc!*>
+
+$0    code-there ORG!

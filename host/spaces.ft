@@ -277,7 +277,7 @@ DEFER <tc!*> ( tchar c-addr -- )
 \   ." spaces order: "
 \   all-spaces @ BEGIN ?dup WHILE dup space>org @ hex.   space>next @ REPEAT cr ;
 
-: dump ( c-addr u -- )
+: dump-forth ( c-addr u -- )
   cr cr ." Assembling to " 2dup type cr
   \ .spaces
 

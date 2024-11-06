@@ -1,0 +1,43 @@
+REQUIRE assembler.ft      \ DCPU-16 assembler
+
+host REQUIRE ../host/helpers.ft
+host REQUIRE model.ft                             \ Add the DCPU-16 model words
+host REQUIRE ../host/dictionary.ft
+host REQUIRE ../host/mirrors.ft
+
+?stack-clear
+
+\ Now we have what we need to metacompile the CODE definitions at the heart of
+\ the new kernel.
+host REQUIRE kernel.ft
+
+\ Overwrite the jump target of the entry code to be main.
+\ The instruction is at $0000 and the jump target is at $0001.
+main 1 tcode!
+
+\ The main part of the metacompiler
+?stack-clear
+host REQUIRE ../host/metacompiler.ft
+
+\ Now an interleaved dance of shared and target-specific metacompiled code.
+host REQUIRE ../shared/basics.ft
+host REQUIRE branches.ft               \ Target-specific branching helpers.
+host REQUIRE ../shared/control-structures.ft
+host REQUIRE ../shared/exceptions.ft
+host REQUIRE model-target.ft
+host REQUIRE ../shared/input.ft
+host REQUIRE ../shared/core2.ft
+host REQUIRE ../shared/refill.ft
+host REQUIRE lib.ft                    \ Division etc. helpers
+host REQUIRE hardware.ft               \ Hardware handling
+host REQUIRE screen.ft
+host REQUIRE ../shared/output.ft
+host REQUIRE ../shared/error-messages.ft
+host REQUIRE intro.ft                  \ DCPU-16/Risque-16 HW init; intro msg
+host REQUIRE ../shared/init.ft         \ Shared init code.
+
+\ NB: You should always include tail.ft as the last stage of your build.
+\ It actually emits the assembled image.
+
+\ Known-missing words ========================================================
+\ Core: ENVIRONMENT? WORD

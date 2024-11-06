@@ -25,14 +25,13 @@ VICE_C64_FLAGS ?= -nativemonitor \
 
 # DCPU cinematic universe - DCPU-16, Risque-16, Mocha 86k
 forth-dcpu16.bin: host/*.ft dcpu16/*.ft shared/*.ft
-	$(FORTH) dcpu16/main.ft dcpu16/disks.ft dcpu16/tail.ft \
-		-e 'S" forth-dcpu16.bin" dump bye'
+	$(FORTH) dcpu16/main.ft -e 'bye'
 
 dcpu16: forth-dcpu16.bin
 run-dcpu16: forth-dcpu16.bin
 	$(EMULATOR) -disk $(DCPU_DISK) forth-dcpu16.bin
 
-forth-rq16.bin: host/*.ft rq16/*.ft shared/*.ft dcpu16/*
+forth-rq16.bin: host/*.ft rq16/*.ft shared/*.ft dcpu16/*.ft
 	$(FORTH) rq16/main.ft dcpu16/disks.ft rq16/tail.ft \
 		-e 'S" forth-rq16.bin" dump bye'
 

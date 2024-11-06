@@ -1,7 +1,9 @@
-host definitions
+native definitions
 
 \ Converts the name text to upper-case.
 : >upper ( ch -- ch' ) dup 'a' 'z' 1+ within IF 'a' 'A' - - THEN ;
 
 : ?stack-clear ( -- ) depth IF ." Stack not clear: " .s cr abort THEN ;
 
+: cat ( dst src u -- dst' )
+  rot swap   2dup + >R   move   R> ;

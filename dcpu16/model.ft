@@ -67,7 +67,9 @@ colocated-names? [IF]
   \ It's important that this not be empty, but rather a no-op.
   : pfa->tos, ( -- ) ra ra set, ;
 [ELSE]
-  : pfa->tos, ( -- ) [ip] push sti, ;
+  : pfa->tos, ( -- )
+    pop ra set,
+    [a] push set, ;
 [THEN]
 
 label DOVAR

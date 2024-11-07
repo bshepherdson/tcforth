@@ -77,5 +77,7 @@ host definitions
 : TDOES,
   [T'] (DOES>)        tliteral   [T'] compile, tcompile,
   [T'] EXIT           tliteral   [T'] compile, tcompile,
-  pfa_tos_code tcode@ tliteral   [T'] ,        tcompile,
+  pfa_tos_code_top pfa_tos_code DO
+    i tcode@ tliteral   [T'] , tcompile,   1 tcells +LOOP
+  \ pfa_tos_code tcode@ tliteral   [T'] ,        tcompile,
   jsr_docol    tcode@ tliteral   [T'] ,        tcompile, ;

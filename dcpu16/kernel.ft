@@ -451,6 +451,7 @@ end-code
 \ A jsr docol for reference.
 label jsr_docol      docol # jsr,
 label pfa_tos_code   pfa->tos,
+label pfa_tos_code_top
 
 code (DO) ( limit index --   R: -- limit index )
   pop ra set,

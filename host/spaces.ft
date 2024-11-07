@@ -262,11 +262,18 @@ DEFER <tc!*> ( tchar c-addr -- )
   swap space>max @
   over - 1+ ;
 
-: dump-space ( there-array file -- )
-  \ Bail if this space is the
-  over data-there =   config data-space-blank? @ and IF
+: skip-space? ( space -- ? )
+  dup data-there =   config data-space-blank? @ and IF
     ." Skipping the data space, it's uninitialized." cr
-    2drop EXIT THEN
+    drop true EXIT THEN
+
+  name-there =   config has-dictionary? @ 0= and dup IF
+    ." Skipping the name space, no dictionary." cr
+  THEN ( ? ) ;
+
+: dump-space ( there-array file -- )
+  \ Bail if this space is a blank data space, or the name-space.
+  over skip-space? IF 2drop EXIT THEN
 
   >R
   dup space>offset @   R@ extend-file

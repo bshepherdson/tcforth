@@ -1,0 +1,65 @@
+\ A small sample app showing how to use TC-Forth to build a portable, standalone
+\ application. (That is, one that's ROM-ready and does not contain an
+\ interactive Forth system.)
+\ Even without an interactive Forth system, you can choose whether to include:
+\ - input vocabulary (KEY, ACCEPT, etc.) with:       config input-vocabulary?
+\ - output vocabulary (EMIT, TYPE, CR, etc.) with:   config output-vocabulary?
+
+\ This sample uses both, which is the default for ROM-APPLICATION!
+\ You can save a fair bit of space by dropping these from apps which do not
+\ use terminal input, output, or both.
+
+\ Initial setup ==============================================================
+: machine S" arm" ;
+
+\ This path should be whatever gets you to embed/portable.ft
+REQUIRE ../embed/portable.ft
+
+MD-REQUIRE ../$/preamble.ft
+\ No interactive Forth system, but it still has KEY, ACCEPT, EMIT, TYPE, etc.
+rom-application!
+
+MD-REQUIRE ../$/spaces.ft
+
+\ Configuring the spaces as necessary; see the fields in host/spaces.ft.
+$4000 data-there org!
+
+\ Metacompiler ===============================================================
+\ Load the TC-Forth metacompiler and build the Forth system for it.
+MD-REQUIRE ../$/system.ft
+
+\ Application code ===========================================================
+\ In a larger application, you probably want to write most of the code in a way
+\ that's ignorant of the Metacompiler! If you call the Target version of REQUIRE
+\ it will process that file (transitively) while metacompiling for the target.
+\ Like this:     target REQUIRE my/application
+
+\ In this single file example, we just call TARGET and write the code here.
+target
+
+
+\ Reads a single KEY, and EMITs a dot, in a loop.
+: touchy1 ( -- ) key drop [char] . emit ;
+: touchy  ( -- ) BEGIN touchy1 AGAIN ;
+\
+\ Make sure you call the TC-Forth word BOOT to initialize any hardware, etc.
+\ Then you can run whatever code you like.
+: STARTUP ( -- ) boot touchy ;
+
+
+\ Finalizing =================================================================
+\ After your application code (eg. target REQUIRE my/application.ft) we return
+\ to this main orchestration file.
+\ Put the xt of the Forth word where execution should begin into entry-point.
+\ Note: Must be in HOST state and use tcode! to write it.
+host
+T' STARTUP   entry-point tcode!
+
+\ Put a word that returns the name of the output file into tcforth-output
+\ (a DEFER'd word on the host)
+:noname S" touchy.bin" ; IS tcforth-output
+
+\ And call back to TC-Forth to write out the application!
+MD-REQUIRE ../$/finalize.ft
+
+bye

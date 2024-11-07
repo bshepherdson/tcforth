@@ -1,0 +1,47 @@
+\ For embedding into applications that want to compiler themselves with
+\ TC-Forth's metacompiler into (possibly non-interactive) target applications.
+
+\ See samples/touchy.ft for an example of building an application like this.
+
+wordlist >order definitions \ Push a new wordlist onto the top, and compile to it.
+
+CREATE md-req-scratch 256 allot align
+
+: locate-$ ( c-addr u -- offset-0-based | -1 )
+  >R 0 BEGIN dup R@ U< WHILE ( c-addr offset )
+    over c@   [char] $ = IF nip R> drop   EXIT THEN
+    1+ swap char+ swap REPEAT ( c-addr len )
+  2drop R> drop -1 ;
+
+: cat ( src u dst -- dst' )
+  swap   2dup + >R   move   R> ;
+
+: split-at ( c-addr u offset -- c1 u1 c2 u2 )
+  swap >R      ( c-addr offset     R: u ) \ The prefix part is ready!
+  2dup chars + ( c1 u1/offset c2   R: u )
+  over R> swap - ;
+
+: with-machine ( c-addr u -- c-addr u )
+  2dup locate-$
+  \ If we get -1, there's no $, so just return it as-is.
+  dup -1 = IF drop EXIT THEN
+
+  \ Otherwise, split the string into the area and compile.
+  ( c-addr u-total u-$ )
+  split-at ( c1 u1 c2 u2 )
+  1 /string          \ Skip past the $ itself.
+  2swap              \ Prefix on top now.
+  md-req-scratch cat \ Write the prefix
+  machine rot    cat \ and the machine part
+  cat                \ and the postfix ( dst' )
+
+  md-req-scratch tuck - ;
+
+\ Move compilation to the primary wordlist, but keep the above in the search order.
+get-current previous definitions >order
+
+: MD-REQUIRED ( c-addr u -- )   with-machine REQUIRED ;
+: MD-REQUIRE  ( "filename" -- ) parse-name MD-REQUIRED ;
+
+\ And discard the local wordlist altogether.
+previous

@@ -5,3 +5,4 @@ host REQUIRE spaces.ft
 host REQUIRE system.ft
 host REQUIRE disks.ft
 host REQUIRE finalize.ft
+bye

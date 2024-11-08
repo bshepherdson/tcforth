@@ -201,10 +201,8 @@ VARIABLE key-xt
 : reset-lem ( -- ) keyboard default-colours reset-scroll clear ;
 
 : init-lem ( -- )
-  dev-lem1802 @ dup log -1 = IF EXIT THEN \ No such device, just bail.
+  dev-lem1802 @ -1 = IF EXIT THEN \ No such device, just bail.
   keyboard
-
-  vram log
 
   \ Send an HWI with A=0, B=vram; no response regs. So that's a mask of 3.
   0 vram 3   dev-lem1802 @ >device

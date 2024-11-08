@@ -1,0 +1,17 @@
+\ Initial setup for TC-Forth on Risque-16.
+: tc-machine S" rq16" ;
+
+REQUIRE ../host/vocabularies.ft
+REQUIRE ../host/helpers.ft
+
+host definitions
+
+\ Metacompiler configuration =================================================
+host REQUIRE ../host/configuration.ft
+
+interactive-forth!
+16   config char-bits   !
+1    config cell-width  !
+1    config instr-width !
+
+config little-endian? OFF

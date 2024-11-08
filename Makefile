@@ -40,8 +40,7 @@ test-dcpu16: forth-dcpu16.bin test.disk test.dcs FORCE
 # Risque-16 ==================================================================
 # My RISC-style, Thumb-inspired "competitor" in the DCPU cinematic universe.
 forth-rq16.bin: host/*.ft rq16/*.ft shared/*.ft dcpu16/*.ft
-	$(FORTH) rq16/main.ft dcpu16/disks.ft rq16/tail.ft \
-		-e 'S" forth-rq16.bin" dump bye'
+	$(FORTH) rq16/main.ft
 
 rq16: forth-rq16.bin
 run-rq16: forth-rq16.bin

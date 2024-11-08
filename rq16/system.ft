@@ -1,0 +1,33 @@
+\ Risque-16 code =============================================================
+REQUIRE assembler.ft
+
+host REQUIRE model.ft                      \ Machine-specific model words
+host REQUIRE ../host/dictionary.ft
+host REQUIRE ../host/mirrors.ft
+
+?stack-clear
+
+\ Now we have what we need to metacompile the CODE definitions at the heart of
+\ the new kernel.
+host definitions REQUIRE kernel.ft
+
+\ The main part of the metacompiler
+?stack-clear
+host REQUIRE ../host/metacompiler.ft
+
+\ Now an interleaved dance of shared and target-specific metacompiled code.
+host REQUIRE ../shared/basics.ft
+host REQUIRE branches.ft               \ Target-specific branching helpers.
+host REQUIRE ../shared/control-structures.ft
+host REQUIRE ../shared/exceptions.ft
+host REQUIRE model-target.ft
+host REQUIRE ../shared/input.ft
+host REQUIRE ../shared/core2.ft
+host REQUIRE ../shared/refill.ft
+host REQUIRE lib.ft                    \ Division etc. helpers
+host REQUIRE ../dcpu16/hardware.ft     \ DCPU-16 files, but the same HW.
+host REQUIRE ../dcpu16/screen.ft
+host REQUIRE ../shared/output.ft
+host REQUIRE ../shared/error-messages.ft
+host REQUIRE ../dcpu16/intro.ft        \ DCPU-16/Risque-16 HW init; intro msg
+host REQUIRE ../shared/init.ft         \ Shared init code.

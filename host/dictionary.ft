@@ -88,3 +88,10 @@ f_hidden 1-             CONSTANT mask_len
 \ Called by TCREATE. For separate spaces this compiles a pointer to data
 \ space. Does nothing if the spaces are combined.
 : ,pfa ( -- ) colocated-names? 0= IF data-there @ tcode, THEN ;
+
+\ TODO: This can be portable, it's a dictionary thing.
+colocated-names? [IF]
+  : t,pfa ( -- ) ;
+[ELSE]
+  : t,pfa ( -- ) data-there @ tcode, ;
+[THEN]

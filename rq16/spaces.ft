@@ -1,0 +1,7 @@
+\ Target spaces ==============================================================
+REQUIRE ../host/spaces.ft
+
+' <be16@> IS <tc@*>
+' <be16!> IS <tc!*>
+
+$0 code-there ORG!

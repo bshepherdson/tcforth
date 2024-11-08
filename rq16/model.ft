@@ -62,12 +62,26 @@ label DOCOL
   r0 ip mov,
   next,
 
+\ DOVAR is the code word for a CREATEd definition without a DOES> - r0 contains
+\ the parameter field address. With colocated code and data, that needs to be
+\ moved to tos. With separate, it needs to be a memory read.
+\ See the DOES> design below for more details.
+colocated-names? [IF]
+: pfa->tos, ( -- )
+  {{ tos }} push,
+  r0 tos mov, ;
+[ELSE]
+: pfa->tos, ( -- )
+  {{ tos }} push,
+  r0 [] tos ldr, ;
+[THEN]
+
+
 \ This is the code word for CREATEd words by default.
 \ r0 holds the parameter field address; it needs to be pushed.
 \ (DOES>) rewrites the code word to point at the dodoes-code, see below.
 label DOVAR
-  {{ tos }} push,
-  r0 tos mov,
+  pfa->tos,
   next,
 
 \ Pseudo code word for literals in the stream.
@@ -122,8 +136,7 @@ VARIABLE 'EXIT   \ These get populated later.
   here
   \ On entering here, r0 is the parameter field address, and the thread follows
   \ after this code.
-  {{ tos }} push,
-  r0 tos mov,     \ Pushing the parameter field address.
+  pfa->tos,
   2 # pc r0 add,  \ PC+2 -> r0 - that points AFTER the following (long) branch.
   docol b,
   \ That's 5 words, 5 cycles, plus DOCOL. Unfortunately fairly bulky.
@@ -153,7 +166,7 @@ VARIABLE 'EXIT   \ These get populated later.
 \ differently.
 : tliteral ( x --   X: -- x ) lit tcompile,   tcode, ;
 
-: t>body ( target-xt -- target-body ) tcell+ ;
+: t>pfa ( target-xt -- target-body ) tcell+ ;
 
 label entry-point 0 asm,
 

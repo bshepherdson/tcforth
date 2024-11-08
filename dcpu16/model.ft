@@ -141,13 +141,6 @@ label DOSTRING
 \ a long JSR lit.
 : ,dovar ( -- ) $7c20 tcode, dovar tcode, ;
 
-\ TODO: This can be portable, it's a dictionary thing.
-colocated-names? [IF]
-  : t,pfa ( -- ) ;
-[ELSE]
-  : t,pfa ( -- ) data-there @ tcode, ;
-[THEN]
-
 \ Compiles a string literal into the thread.
 \ In ITC/DTC that's DOSTRING, then the length, then the chars.
 : ,dostring ( c-addr u -- )

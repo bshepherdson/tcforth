@@ -6,6 +6,4 @@ host definitions
 host latest var_latest tcode!
 host here   var_dp     tcode!
 
-\ The assembled image must be emitted with
-\   S" filename" dump
-\ but that's handled with -e in the Makefile
+host tcforth-output dump-forth

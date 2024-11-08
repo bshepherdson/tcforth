@@ -13,6 +13,14 @@ target : ,CF ( codeword-addr -- ) , ;
 \ In ITC this means the address of DOCOL.
 target : ,DOCOL ( -- ) [ host docol tliteral target ] ,CF ;
 
+host colocated-names? [IF]
+  target : ,PFA ( -- ) ;
+host [ELSE]
+  target : ,PFA ( -- ) here cell+ , ;
+host [THEN]
+
+target : ,xt-slot ( -- ) ,pfa ;
+
 target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , ; IMMEDIATE
   host acts: tliteral ; IMPERATIVE
 
@@ -33,7 +41,18 @@ target : ALIGN ; host acts: ;
 target : >CFA ( nt -- xt )
   cell+ dup c@ [ host mask_len tliteral target ] and + char+ aligned ;
 
+host config mix-code-and-name? @ [IF]
+target : /NAME-FIELD ( -- u ) 0 ;
+host [ELSE]
+target : /NAME-FIELD ( -- u ) 1 cells ;
+host [THEN]
+
+host config mix-code-and-data? @ [IF]
 target : >BODY ( xt -- addr ) 2 cells + ;
+host [ELSE]
+target : >BODY ( xt -- addr ) 2 cells + @ ;
+host [THEN]
+
 
 target : PAD ( -- addr ) $fb00 ;
 
@@ -61,12 +80,21 @@ host definitions
 : EXIT-compile, ( -- )
   'EXIT @ tliteral   [T'] compile, tcompile, ;
 
+code-there @
+pfa->tos,
+code-there @
+CONSTANT pfa-tos-code-top
+CONSTANT pfa-tos-code
+
+
 : TDOES,
   [T'] (DOES>) tliteral  [T'] compile, tcompile,
   [T'] EXIT    tliteral  [T'] compile, tcompile,
 
-  [ {{ tos }} push, 1 asm-lit tliteral          ] [T'] , tcompile,
-  [ r0 tos mov,     1 asm-lit tliteral          ] [T'] , tcompile,
+  pfa-tos-code-top pfa-tos-code DO
+    i tcode@ tliteral   [T'] , tcompile,
+  1 tcells +LOOP
+
   [ 2 # pc r0 add,  1 asm-lit tliteral          ] [T'] , tcompile,
   [ docol b,        2 asm-lit tliteral tliteral ] [T'] , dup tcompile, tcompile,
 ;

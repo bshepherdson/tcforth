@@ -67,3 +67,12 @@ interactive-forth!
 : bytes/tcell  ( -- u ) bits/tcell   3 rshift ;
 : bytes/tchar  ( -- u ) config char-bits @   3 rshift ;
 : tchar-mask   ( -- u-mask ) 1   config char-bits @ lshift   1- ;
+
+\ Output configuration =======================================================
+native definitions
+DEFER tcforth-output
+:noname ( -- c-addr u )
+  pad S" forth-" cat   machine cat   S" .bin" cat
+  pad tuck - ; IS tcforth-output
+
+host definitions

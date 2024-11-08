@@ -1,81 +1,8 @@
-\ Entry point for metacompiling the portable kernel to ARM 32-bit.
-\ Most of the heavy lifting is done in other files, this is just orchestrating.
+\ Main entry point for building the interactive Forth system for
+\ 32-bit little-endian ARM.
 
-REQUIRE ../host/vocabularies.ft
-
-host definitions
-
-\ Metacompiler configuration =================================================
-host REQUIRE ../host/configuration.ft
-
-interactive-forth!
-
-\ Optional: separate spaces
-\ separate-spaces!
-\ config data-space-blank? ON
-
-8    config char-bits    !
-4    config cell-width   !
-4    config instr-width  !
-
-config little-endian?   ON
-
-
-\ Target spaces ==============================================================
-REQUIRE ../host/spaces.ft
-
-\ The QEMU ARM system loads the user code at $10000.
-$10000   code-there ORG!
-\ Since the spaces are mixed, that relocated all of them together.
-
-
-\ Optional: separate spaces
-\ $80000   name-there ORG!
-\ $80000 $10000 -   name-there space>offset !
-\
-\ $2000000 data-there ORG!
-
-
-\ Metacompilation ============================================================
-REQUIRE assembler.ft
-host REQUIRE ../host/helpers.ft
-?stack-clear
-host REQUIRE model.ft
-?stack-clear
-host REQUIRE ../host/dictionary.ft
-host REQUIRE ../host/mirrors.ft
-
-\ Now we have what we need to metacompile the CODE definitions at the heart of
-\ the new kernel.
-host REQUIRE kernel.ft   ?stack-clear
-host REQUIRE startup.ft  ?stack-clear
-
-\ The main part of the metacompiler
-host REQUIRE ../host/metacompiler.ft
-
-\ Now an interleaved dance of shared and target-specific metacompiled code.
-host REQUIRE ../shared/basics.ft
-host REQUIRE branches.ft               \ Target-specific branching helpers.
-host REQUIRE ../shared/control-structures.ft
-host REQUIRE ../shared/exceptions.ft
-host REQUIRE model-target.ft
-host REQUIRE ../shared/input.ft
-host REQUIRE ../shared/core2.ft
-host REQUIRE ../shared/refill.ft
-host REQUIRE lib.ft                    \ Division etc. helpers
-host REQUIRE serial.ft
-host REQUIRE terminal.ft
-host REQUIRE ../shared/output.ft
-host REQUIRE ../shared/error-messages.ft
-host REQUIRE intro.ft
-host REQUIRE ../shared/init.ft         \ Shared init code.
-
-host definitions
-VARIABLE output-file-xt
-:noname S" forth-arm.bin" ; output-file-xt !
-
-\ NB: You should always include tail.ft as the last stage of your build.
-\ It actually emits the assembled image.
-
-\ Known-missing words ========================================================
-\ Core: ENVIRONMENT? WORD
+REQUIRE preamble.ft
+host REQUIRE spaces.ft
+host REQUIRE system.ft
+host REQUIRE finalize.ft
+bye

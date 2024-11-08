@@ -1,21 +1,15 @@
-REQUIRE assembler.ft      \ DCPU-16 assembler
-
-host REQUIRE model.ft                             \ Add the DCPU-16 model words
+\ Metacompilation ============================================================
+REQUIRE assembler.ft    ?stack-clear
+host REQUIRE model.ft   ?stack-clear
 host REQUIRE ../host/dictionary.ft
 host REQUIRE ../host/mirrors.ft
 
-?stack-clear
-
 \ Now we have what we need to metacompile the CODE definitions at the heart of
 \ the new kernel.
-host REQUIRE kernel.ft
-
-\ Overwrite the jump target of the entry code to be main.
-\ The instruction is at $0000 and the jump target is at $0001.
-main 1 tcode!
+host REQUIRE kernel.ft   ?stack-clear
+host REQUIRE startup.ft  ?stack-clear
 
 \ The main part of the metacompiler
-?stack-clear
 host REQUIRE ../host/metacompiler.ft
 
 \ Now an interleaved dance of shared and target-specific metacompiled code.
@@ -28,9 +22,9 @@ host REQUIRE ../shared/input.ft
 host REQUIRE ../shared/core2.ft
 host REQUIRE ../shared/refill.ft
 host REQUIRE lib.ft                    \ Division etc. helpers
-host REQUIRE hardware.ft               \ Hardware handling
-host REQUIRE screen.ft
+host REQUIRE serial.ft
+host REQUIRE terminal.ft
 host REQUIRE ../shared/output.ft
 host REQUIRE ../shared/error-messages.ft
-host REQUIRE intro.ft                  \ DCPU-16/Risque-16 HW init; intro msg
+host REQUIRE intro.ft
 host REQUIRE ../shared/init.ft         \ Shared init code.

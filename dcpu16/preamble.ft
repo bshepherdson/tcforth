@@ -1,19 +1,8 @@
-\ Entry point for metacompiling the portable kernel to DCPU-16.
-\ Most of the heavy lifting is done in other files, this is just orchestrating.
+\ Initial setup for TC-Forth on DCPU-16.
+: tc-machine S" dcpu16" ;
 
 REQUIRE ../host/vocabularies.ft
 REQUIRE ../host/helpers.ft
-
-native definitions
-[undefined] machine [IF]
-DEFER machine
-:noname S" dcpu16" ; IS machine
-[THEN]
-
-native DEFER tcforth-output
-:noname ( -- c-addr u )
-  pad S" forth-" cat   machine cat   S" .bin" cat
-  pad tuck - ; IS tcforth-output
 
 host definitions
 

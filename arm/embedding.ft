@@ -52,4 +52,5 @@ VARIABLE embedding-ptr
 
 host definitions
 T' run-tests   entry-point tcode!
-:noname S" forth-arm-tests.bin" ; output-file-xt !
+
+:noname S" forth-arm-tests.bin" ; IS tcforth-output

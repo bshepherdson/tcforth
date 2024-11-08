@@ -21,7 +21,6 @@ host definitions
 : DEST>POST   tcell+ ;
 
 
-config has-dictionary? @ [IF]
 target definitions
 target : 0BRANCH,
     [ host T' (0BRANCH) tliteral target ] compile,   here 0 , ;
@@ -34,4 +33,3 @@ target : BRANCH,
 target : !DEST ( dest slot -- ) !  ;          host acts: !dest ;
 target : DEST>BRANCH            1 cells - ;   host acts: dest>branch ;
 target : DEST>POST              cell+ ;       host acts: dest>post ;
-[THEN]

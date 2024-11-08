@@ -1,0 +1,22 @@
+\ Initial setup for TC-Forth on ARM.
+: tc-machine S" arm" ;
+
+REQUIRE ../host/vocabularies.ft
+REQUIRE ../host/helpers.ft
+
+
+\ Metacompiler configuration =================================================
+host REQUIRE ../host/configuration.ft
+
+interactive-forth!
+
+\ Optional: separate spaces
+\ separate-spaces!
+\ config data-space-blank? ON
+
+\ 32-bit, byte addressable, little-endian.
+8    config char-bits    !
+4    config cell-width   !
+4    config instr-width  !
+
+config little-endian?   ON

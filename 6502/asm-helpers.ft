@@ -22,20 +22,24 @@
     0      zp,x   lda,
     ( zp ) $      sta, ;
 
+\ Makes space on the data stack and pops the return stack into it.
 : R>,
     dex, dex,
     pla,   0 zp,x sta,
     pla,   1 zp,x sta, ;
 
+\ Makes space on the return stack and pops the data stack into it.
 : >R,
     1 zp,x lda,   pha,
     0 zp,x lda,   pha,
     inx, inx, ;
 
+\ Pops the return stack, putting the result in W.
 : R>W,
     pla,   wl zp sta,
     pla,   wh zp sta, ;
 
+\ Pushes W onto the return stack.
 : W>R,
     wh zp lda,   pha,
     wl zp lda,   pha, ;
@@ -123,4 +127,3 @@
   dup     $ sta,
   swap hi # lda,
   1+      $ sta, ;
-

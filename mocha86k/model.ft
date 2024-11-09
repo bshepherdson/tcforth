@@ -50,11 +50,6 @@ $deadbeef # pc setl, \ Forcing an unsigned-long jump. Target will get adjusted.
 : pushrsp, ( rhs -- ) -[j]      setl, ;
 : poprsp,  ( lhs -- ) [j]+ swap setl, ;
 
-: tchars    ( n -- n2 ) ;
-: tchar+    ( n -- n2 ) 1+ ;
-: tcells    ( n -- n2 ) 2* ;
-: tcell+    ( n -- n2 ) 2 + ;
-
 : tcompile,  ( xt -- )      t, ;
 : tdecompile ( slot -- xt ) t@ ;
 

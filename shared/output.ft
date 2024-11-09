@@ -39,7 +39,7 @@ VARIABLE (picout)
     <# 0 #S [ host '-' tliteral target ] hold #>
   ELSE <# dup abs S>D #S rot sign #> THEN ;
 
-: .  ( n -- )       (#HOLD) type space ;
+: .  ( n -- ) (#HOLD) type space ;
 : .R ( n width -- ) >R (#HOLD) R> over - spaces type ;
 
 : HEX. ( u -- )

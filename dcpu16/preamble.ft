@@ -13,6 +13,7 @@ interactive-forth!
 16    config char-bits    !
 1     config cell-width   !
 1     config instr-width  !
+1     config alignment    !
 
 config little-endian?   OFF
 

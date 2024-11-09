@@ -52,7 +52,7 @@ target : ALIGN     here aligned dp ! ;
 target : NAME>STRING ( nt -- c-addr u )
   cell+ dup char+ swap c@ [ host mask_len tliteral target ] and ;
 
-target : >CFA    ( nt -- cfa )
+target : >CFA    ( nt -- xt )
   name>string + aligned
   [ host config mix-code-and-name? @ 0= [IF] target ] @ [ host [THEN] target ] ;
 

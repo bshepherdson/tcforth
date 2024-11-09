@@ -52,7 +52,7 @@ VARIABLE cursor
 
 : init-screen ( -- )
   \ TODO: Ensure I/O is mapped in.
-  [ host here cr cr ." init-screen breakpoint: " hex. cr cr target ]
+  [ host code-there @ cr cr ." init-screen breakpoint: " hex. cr cr target ]
   blue  border-color c!
   black bg-color     c!
   vmcsb c@ 2 or vmcsb c!

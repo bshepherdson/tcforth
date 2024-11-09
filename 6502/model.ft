@@ -42,28 +42,18 @@ $0090 CONSTANT sp0
 $ff   CONSTANT rp0
 \ System stack (used for RSP) is empty-descending, so $FF is an empty stack.
 
-code-there CONSTANT DP
-: here dp @ ;
-$2000 dp !
+: HERE ( -- ) 99 throw ;
+: DP   ( -- ) 98 throw ;
 
 \ Assembler macros
 \ These are "personal", ie. they're used by the model and kernel for this machine, not in the
 \ shared code.
 : next, ( -- ) rts, ; \ STC NEXT is actually return from subroutine.
 
-: tchars ;
-: tchar+ 1+ ;
-: tcells 2* ;
-: tcell+ 2 + ;
-
 \ This is tricky! Compiling a literal value is definitely not the same as compiling a call!
 \ The xt is the code address for the word, so we compile a JSR $xxxx to it.
 : tcompile,  ( xt -- ) $ jsr, ;
 : tdecompile ( slot -- xt ) 1+ tcode@ ;
-
-\ No alignment on 6502.
-: taligned  ( x -- x2 ) ;
-: talign    ( -- )      ;
 
 VARIABLE 'latest
 : LATEST ( -- nt ) 'latest @ ;
@@ -104,16 +94,33 @@ $0000 $ jmp,
 \ return addresses work on the 6502.
 \ So pop it from the return stack, add 1, and push it onto the data stack.
 \ Then the RTS at the end will return to the thread.
+colocated-names? [IF]
+: pfa->tos, ( -- )
+  dex, dex,
+  pla,        \ lo -> A
+  clc,
+  1 # adc,    \ A+1 -> A
+  0 zp,x sta, \ -> TOS_lo
+  pla,        \ hi -> A
+  0 # adc,
+  1 zp,x sta, ;
+[ELSE]
+  dex, dex,
+  pla,        \ lo -> A
+  clc,
+  1 # adc,    \ A+1 -> A
+  wl zp  sta, \ -> W_lo
+  pla,        \ hi -> A
+  0 # adc,
+  wh zp  sta, \ -> W_hi
+
+  \ Now the address is ready in W, and there's space on the stack already.
+  wl (zp)>tos,
+[THEN]
+
 label DOVAR
-    dex, dex,
-    pla,        \ lo -> A
-    clc,
-    1 # adc,    \ A+1 -> A
-    0 zp,x sta, \ -> TOS_lo
-    pla,        \ hi -> A
-    0 # adc,
-    1 zp,x sta,
-    rts, \ Actually returning to the calling thread.
+  pfa->tos,
+  rts, \ Actually returning to the calling thread.
 
 \ Expects a byte with the length, then that many characters.
 \ Uses w2l to hold the length temporarily.
@@ -180,16 +187,11 @@ VARIABLE '(DOES>)
 : DOES, ( -- 'dodoes-code )
     \ Sequence 1 - compiling things into CONSTANT.
     '(DOES>) @ tcompile,   rts,
-    here
+    code-there @
 
     \ Sequence 3 - parameter field address on hardware/return stack,
     \ needs to be pushed.
-    \ The PC pushed on the 6502 is unfortunately a byte too early, so increment
-    \ it as we go.
-    dex, dex,
-    clc,
-    pla,   1 # adc,   0 zp,x sta,
-    pla,   0 # adc,   1 zp,x sta,
+    pfa->tos,
     \ Now we're set up to continue executing the DOES> code.
 ;
 
@@ -217,16 +219,10 @@ VARIABLE '(DOES>)
 \ code to push the literal.
 \ JSR DOLIT + the word is 10B 16c, plus the overhead of jumping and back.
 \ Inlining it is 10B 16c also but without overhead.
-: tliteral ( x --   X: -- x )
-    dex, dex,
-    dup lo #    lda,
-    0      zp,x sta,
-        hi #    lda,
-    1      zp,x sta, \ 10B 16c
-;
+: tliteral ( x --   X: -- x ) lit, ;
 
 \ The codeword is 3 bytes wide.
-: t>body ( target-xt -- target-body ) 3 + ;
+: t>pfa ( target-xt -- target-body ) 3 + ;
 
 label entry-point 0 asm,16
 
@@ -368,8 +364,6 @@ label entry-point 0 asm,16
 \ will continue from after EXECUTE in the thread.
 
 
-\ Tangential consideration: no carry on indirect indexed access ==============
-\ There's a bug (if that it be) on the 6502 family where an indexed indirect
-\ read like abs,x, (zp,x) or (zp),y will not carry between the bytes.
-\ This is not a problem for token threading, but it may be for some ops.
-\ TODO: Look up all uses of the risky modes to make sure there's no risks.
+\ Tangential consideration: no carry on indirect jumps =======================
+\ JMP ($xxxx) has a bug, so any mode expecting to use it needs to make sure
+\ $xxxx is not $xxFF.

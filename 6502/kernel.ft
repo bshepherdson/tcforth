@@ -904,7 +904,7 @@ label debug-spin
 label main
   sei, \ No interrupts for now.
   cld, \ Just in case, no one wants decimal mode.
-  $ff # ldx,
+  rp0 # ldx,
   txs,
   sp0 # ldx,
 

@@ -39,9 +39,3 @@ VARIABLE empty-stack-xt
   quit ;
 
 host   T' run-tests   entry-point tcode!
-
-require tail.ft
-
-here hex. cr
-S" forth-c64-test.prg" dump
-bye

@@ -1,0 +1,11 @@
+\ Testing entry point for the interactive Forth system on C64.
+
+REQUIRE preamble.ft
+host REQUIRE spaces.ft
+host REQUIRE system.ft
+
+host :noname S" forth-c64-test.prg" ; IS tcforth-output
+host REQUIRE test-tail.ft
+
+host REQUIRE finalize.ft
+bye

@@ -13,6 +13,14 @@ target : ,CF ( codeword-addr -- ) compile, ;
 \ In STC this is empty, so this word is a no-op.
 target : ,DOCOL ( -- ) ;
 
+host colocated-names? [IF]
+  target : ,PFA ( -- ) ;
+host [ELSE]
+  target : ,PFA ( -- ) here cell+ , ;
+host [THEN]
+
+target : ,xt-slot ( -- ) ,pfa ;
+
 \ Writes code such that this literal will be pushed during execution.
 target : LITERAL ( C: x --    X: -- x )
     \ DEX DEX     = $caca
@@ -44,12 +52,27 @@ target : EXIT [ host $60 tliteral target ] c, ; IMMEDIATE
 target : ALIGNED ; host acts: ;
 target : ALIGN ; host acts: ;
 
+target : NAME>STRING ( nt -- c-addr u )
+  cell+ dup char+ swap c@ [ host mask_len tliteral target ] and ;
+
 \ This is actually portable but since it fits right here between ALIGNED and
 \ (DOES>), there's no good place to put it with splitting this file into 3.
 target : >CFA ( nt -- xt )
-  cell+ dup c@ [ host mask_len tliteral target ] and + char+ aligned ;
+  name>string + aligned
+  [ host config mix-code-and-name? @ 0= [IF] target ] @ [ host [THEN] target ] ;
 
+host config mix-code-and-name? @ [IF]
+target : /NAME-FIELD ( -- u ) 0 ;
+host [ELSE]
+target : /NAME-FIELD ( -- u ) 1 cells ;
+host [THEN]
+
+host config mix-code-and-data? @ [IF]
 target : >BODY ( xt -- addr ) 3 + ;
+host [ELSE]
+target : >BODY ( xt -- addr ) 3 + @ ;
+host [THEN]
+
 
 \ TODO: Figure out a more coherent memory map - where should I put the PAD?
 target : PAD ( -- addr ) $7800 ;
@@ -85,6 +108,13 @@ host definitions
 
 \ Runs during compilation TARGET : DOES> - compile code into its thread!
 
+code-there @
+pfa->tos,
+code-there @
+CONSTANT pfa-tos-code-top
+CONSTANT pfa-tos-code
+
+
 : TDOES,
   [T'] (DOES>) tliteral  [T'] compile, tcompile,
   EXIT-compile,
@@ -92,20 +122,14 @@ host definitions
   \ on the return (hardware) stack. Shift this to the data stack.
   \ However, the return address is actually 1 byte before the next opcode, so
   \ it must be incremented as it goes onto the data stack.
-  \ The code required is:
-  \ DEX DEX    = ca ca     $caca
-  \ CLC PLA    = 18 68     $6818
-  \ ADC #1     = 69 01     $0169
-  \ STA 00,x   = 95 00     $0095
-  \ PLA ADC #0 = 68 69     $6968
-  \ STA 01,x   = 00 95 01  $9500  $01
-  $caca tliteral [T'] ,  tcompile,
-  $6818 tliteral [T'] ,  tcompile,
-  $0169 tliteral [T'] ,  tcompile,
-  $0095 tliteral [T'] ,  tcompile,
-  $6968 tliteral [T'] ,  tcompile,
-  $9500 tliteral [T'] ,  tcompile,
-  $01   tliteral [T'] c, tcompile, ;
+  \ This is the action of pfa->tos, which we have a copy of handy.
+  pfa-tos-code-top pfa-tos-code DO
+    i 1+   pfa-tos-code-top U< IF \ Room to do a word at once.
+      i tcode@ tliteral   [T'] , tcompile,
+    ELSE \ Just one byte at a time.
+      i tcode-c@ tliteral   [T'] c, tcompile,
+    THEN
+  1 tcells +LOOP ;
   \ Which is 13B per word that DOES>, eg. CONSTANT, etc.
   \ It's slower and more complicated to JSR to a routine for this, since it
   \ covers the PFA on the stack.

@@ -14,6 +14,7 @@ begin-structure configuration
   field: char-bits
   field: cell-width      \ In target address units
   field: instr-width
+  field: alignment       \ Alignment of a target cell, in target address units.
   field: little-endian?
 end-structure
 
@@ -61,7 +62,8 @@ interactive-forth!
 : tchar+    ( u1 -- u2 ) 1+ ;
 : tcell+    ( u1 -- u2 ) 1 tcells + ;
 
-: taligned  ( tc-addr -- t-addr ) 1 tcells 1- +   1 tcells 1- invert and ;
+: taligned  ( tc-addr -- t-addr )
+  config alignment @ 1-   tuck +   swap invert and ;
 
 : bits/tcell   ( -- u ) config cell-width @   config char-bits @ * ;
 : bytes/tcell  ( -- u ) bits/tcell   3 rshift ;

@@ -38,13 +38,13 @@ begin-structure [space]
   field: space>next
 end-structure
 
-: insert-space ( new-space -- )
-  all-spaces @ 0= IF all-spaces ! EXIT THEN
-  all-spaces BEGIN dup @ WHILE ( new-space 'space )
-    over space>org @   over @ space>org @   ( new-space 'space   new-org org )
-    U< IF 2dup @ space>next !   !   EXIT THEN
-    @ space>next
-  REPEAT ( new-space 'space ) ! ;
+\ : insert-space ( new-space -- )
+\   all-spaces @ 0= IF all-spaces ! EXIT THEN
+\   all-spaces BEGIN dup @ WHILE ( new-space 'space )
+\     over space>org @   over @ space>org @   ( new-space 'space   new-org org )
+\     U< IF 2dup @ space>next !   !   EXIT THEN
+\     @ space>next
+\   REPEAT ( new-space 'space ) ! ;
 
 
 \ Creates a new THERE-PTR array, with the specified host-ptr.
@@ -57,7 +57,8 @@ end-structure
   0   R@ space>ptr         !
   0   R@ space>org         !
   0   R@ space>offset      !
-  R> insert-space ;
+  all-spaces @ R@ space>next !
+  R> all-spaces ! ;
 
 
 \ Define all three spaces, per the configuration flags.
@@ -277,8 +278,25 @@ DEFER <tc!*> ( tchar c-addr -- )
 
   >R
   dup space>offset @   R@ extend-file
+  -1 over space>offset !    \ Set the offset to -1 so it won't be used again.
   space>span
   R> write-file ABORT" Failed to write file" ;
+
+\ Finds the "next" space, ordering by the offset field.
+VARIABLE min-space
+: space-dumped? ( space -- ? ) space>offset @ -1 = ;
+: ?min-space ( space -- )
+  \ Spaces which have been written have their offsets overwritten to -1.
+  dup space-dumped? IF drop EXIT THEN
+
+  min-space @ 0= IF min-space ! EXIT THEN \ Default to the first one.
+  dup space>offset @   min-space @ space>offset @ U<   IF
+    min-space ! ELSE drop THEN ;
+
+: next-space ( -- there-array|0 )
+  0 min-space !
+  all-spaces @ BEGIN ?dup WHILE dup ?min-space   space>next @ REPEAT
+  min-space @ ;
 
 \ : .spaces ( -- )
 \   ." spaces order: "
@@ -286,15 +304,14 @@ DEFER <tc!*> ( tchar c-addr -- )
 
 : dump-forth ( c-addr u -- )
   cr cr ." Assembling to " 2dup type cr
-  \ .spaces
 
   W/O BIN create-file ABORT" Failed to open output file" ( file )
 
   \ Write all the spaces which have been defined.
-  all-spaces @ BEGIN ?dup WHILE ( file there-array )
-    2dup swap dump-space
-    space>next @
-  REPEAT
+  BEGIN next-space ?dup WHILE ( file there-array )
+    dup .space
+    over dump-space
+  REPEAT ( file )
 
   \ And close the file.
   dup flush-file ABORT" Failed to flush"

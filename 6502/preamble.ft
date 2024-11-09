@@ -1,5 +1,5 @@
-\ Initial setup for TC-Forth on Risque-16.
-: tc-machine S" rq16" ;
+\ Initial setup for TC-Forth on Commodore-64.
+: tc-machine S" 6502" ;
 
 REQUIRE ../host/vocabularies.ft
 REQUIRE ../host/helpers.ft
@@ -10,9 +10,10 @@ host definitions
 host REQUIRE ../host/configuration.ft
 
 interactive-forth!
-16   config char-bits   !
-1    config cell-width  !
-1    config instr-width !
-1    config alignment   !
 
-config little-endian? OFF
+8   config char-bits   !
+2   config cell-width  !
+1   config instr-width !
+1   config alignment   !
+
+config little-endian? ON

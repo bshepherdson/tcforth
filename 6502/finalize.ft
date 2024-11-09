@@ -1,0 +1,14 @@
+\ Final file that goes last in the process.
+\ This sets Target's LATEST and DP properly.
+
+host definitions
+\ This needs to be the last lines in the target compilation.
+host latest         var_latest tcode!
+host data-there @   var_dp_ptr tcode!
+
+S" entry-point   " type entry-point hex. cr
+S" entry-point @ " type entry-point tcode@ hex. cr
+
+\ At this point the assembler's output region should be complete.
+\ Dump the binary!
+host tcforth-output dump-forth

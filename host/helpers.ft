@@ -8,6 +8,8 @@ native definitions
 : cat ( dst src u -- dst' )
   rot swap   2dup + >R   move   R> ;
 
+: hex.s ( -- ) base @ >R   hex   .s    R> base ! ;
+
 \ If MACHINE is not defined, define it and point it at the built-in TC-MACHINE.
 [IFUNDEF] machine
 : machine ( -- c-addr u ) tc-machine ;

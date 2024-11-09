@@ -1,73 +1,10 @@
-\ Entry point for metacompiling the portable kernel to Commodore-64.
-\ Most of the heavy lifting is done in other files, this is just orchestrating.
+\ Unified entry point for building the interactive Forth system on C64.
 
-REQUIRE ../host/vocabularies.ft
+REQUIRE preamble.ft
+host REQUIRE spaces.ft
+host REQUIRE system.ft
 
-host definitions
+:noname S" forth-c64.prg" ; IS tcforth-output
 
-\ Metacompiler configuration =================================================
-host REQUIRE ../host/configuration.ft
-
-8   config char-bits   !
-2   config cell-width  !
-1   config instr-width !
-
-config little-endian? ON
-
-\ Target spaces ==============================================================
-REQUIRE ../host/spaces.ft
-
-$0801  CONSTANT origin
-origin code-there ORG!
-$0810  CONSTANT machine-code-entry
-
-$2 code-there space>offset ! \ There's a 2-byte PRG header first.
-
-\ Add a new tiny space for the "origin" pointer in the .prg file.
-here   2 allot   align   THERE-PTR prg-header
-\ It's a 2-byte little-endian offset value, which is the same format as a
-\ target cell.
-$0 prg-header org!
-$0 prg-header space>offset !
-origin $0 prg-header <t!>
-
-
-host definitions REQUIRE assembler.ft
-host definitions REQUIRE registers.ft
-host definitions REQUIRE asm-helpers.ft
-
-host REQUIRE ../host/helpers.ft
-host REQUIRE model.ft                      \ Machine-specific model words
-host REQUIRE ../host/dictionary.ft
-host REQUIRE ../host/mirrors.ft
-
-\ Now we have what we need to metacompile the CODE definitions at the heart of
-\ the new kernel.
-host definitions REQUIRE kernel.ft
-host REQUIRE hardware.ft
-
-\ The main part of the metacompiler
-host REQUIRE ../host/metacompiler.ft
-
-\ Now an interleaved dance of shared and target-specific metacompiled code.
-host REQUIRE ../shared/basics.ft
-host REQUIRE branches.ft
-host REQUIRE ../shared/control-structures.ft
-host REQUIRE ../shared/exceptions.ft
-host REQUIRE model-target.ft
-host REQUIRE ../shared/input.ft
-host REQUIRE ../shared/core2.ft
-host REQUIRE ../shared/refill.ft
-host REQUIRE lib.ft
-host REQUIRE screen.ft
-host REQUIRE ../shared/output.ft
-host REQUIRE ../shared/error-messages.ft
-host REQUIRE files.ft
-host REQUIRE intro.ft
-host REQUIRE ../shared/init.ft
-
-\ NB: You should always include tail.ft as the last stage of your build.
-\ It actually emits the assembled image.
-
-\ Known-missing words ========================================================
-\ Core: ENVIRONMENT? WORD
+host REQUIRE finalize.ft
+bye

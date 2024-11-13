@@ -29,7 +29,6 @@
 code +        pop peek add,   end-code
 code -        pop peek sub,   end-code \ This is correct NOS - TOS order!
 code *        pop peek mli,   end-code
-code -        pop peek sub,   end-code
 code /        pop peek dvi,   end-code
 code MOD      pop peek mdi,   end-code
 code U/       pop peek div,   end-code
@@ -378,7 +377,7 @@ end-code
 
 code EXIT
   \ Get the target XT for EXIT and stash it in the forward reference.
-  code-there @ 'EXIT !
+  code-space @ 'EXIT !
 
   ip poprsp,
 end-code

@@ -36,58 +36,94 @@ begin-structure [space]
   field: space>org
   field: space>offset
   field: space>next
+  field: space>init-copy?
 end-structure
 
-\ : insert-space ( new-space -- )
-\   all-spaces @ 0= IF all-spaces ! EXIT THEN
-\   all-spaces BEGIN dup @ WHILE ( new-space 'space )
-\     over space>org @   over @ space>org @   ( new-space 'space   new-org org )
-\     U< IF 2dup @ space>next !   !   EXIT THEN
-\     @ space>next
-\   REPEAT ( new-space 'space ) ! ;
 
-
-\ Creates a new THERE-PTR array, with the specified host-ptr.
 \ Sets THERE, ORG and file-offset all to 0; these should be customized by
 \ target-specified code as needed. Use ORG! to set these.
-: there-ptr ( host-space   "name" --   X: -- there-array )
-  CREATE here >R   [space] allot
+: there-ptr ( host-c-addr -- space )
+  native here host >R   [space] allot
   dup R@ space>host-array  !
       R@ space>max         !
   0   R@ space>ptr         !
   0   R@ space>org         !
   0   R@ space>offset      !
+  0   R@ space>init-copy?  !
   all-spaces @ R@ space>next !
-  R> all-spaces ! ;
+  R@ all-spaces !
+  R> ;
 
 
-\ Define all three spaces, per the configuration flags.
-\ code-space always exists for real, so start there.
-new-space THERE-PTR code-there
+\ The system needs code, name and data spaces. These are VALUEs, so that
+\ user code can swap out which one is active to eg. separate initialized,
+\ read-only and uninitialized data.
+0 VALUE code-space   \ Initialized, executable, maybe read-only.
+0 VALUE name-space   \ Initialized, maybe read-only.
+0 VALUE data-space   \ Initialized, writable data.
 
-\ Name space always exists at least in the metacompiler.
-\ So even if it won't reach the output file, create it.
-config mix-code-and-name? @ [IF]
-  S" Name space is: one with code space" type cr
-  code-there CONSTANT name-there
-[ELSE]
-  S" Name space is: separate" type cr
-  new-space THERE-PTR name-there
-[THEN]
 
-\ Finally, data space also always exists in the metacompiler.
-\ It might or might not be shared with the code space.
-config mix-code-and-data? @ [IF]
-  S" Data space is: one with code space" type cr
-  code-there CONSTANT data-there
-[ELSE]
-  S" Data space is: separate" type cr
-  new-space THERE-PTR data-there
-[THEN]
+\ Configuring spaces =========================================================
+\ These steps are necessary for each space.
 
-\ Moves both THERE and ORG (the target pointers) to the given target-addr.
+\ 1. Call this for all spaces, to set the base address on the target.
 : org! ( target-addr there-array -- )
   2dup !   space>org ! ;
+
+\ 2. Set up the space in the output file.
+\ - For initialized spaces present in the output file, set space>offset.
+\   - If the data is loaded in ROM and needs to be copied, call copied!
+\ - If the space should be skipped in the output, call ephemeral!
+: copied!    ( there-array -- ) space>init-copy? ON ;
+: ephemeral! ( there-array -- ) -1 swap space>offset ! ;
+
+
+\ Standard setups ============================================================
+\ A single integrated space. The simplest configuration for things like DCPU-16
+\ which load an input binary into writable memory.
+\ (If has-dictionary? is false, then the name-space is separate.)
+: single-space! ( -- )
+  new-space THERE-PTR
+  dup TO code-space
+      TO data-space
+
+  config has-dictionary? @ IF code-space ELSE new-space THEN
+  TO name-space ;
+
+
+\ Basic split spaces, each one a separate large area on the host.
+\ Throws if the configuration doesn't match - it must have indirect names and data.
+: split-spaces! ( -- )
+  config names-indirect? @ 0= ABORT" Cannot do split spaces without names-indirect? ON"
+  config data-indirect?  @ 0= ABORT" Cannot do split spaces without data-indirect? ON"
+
+  new-space THERE-PTR TO code-space
+  new-space THERE-PTR TO name-space
+  new-space THERE-PTR TO data-space ;
+
+
+\ Custom setups ==============================================================
+\ Allocate whatever space on the host you like and set them in the foo-space
+\ VALUEs.
+\ All of the foo-spaces **must** be set to something! Several of them can
+\ be the same underlying space, however. (Note that a name-space is required for
+\ the metacompiler, even if the dictionary doesn't reach the output file.)
+
+
+\ Defaulting =================================================================
+\ The top of the machine/system.ft calls ?default-spaces.
+\ If *all three* spaces are still 0, it silently calls that machine's default-spaces!
+\ If *all three* spaces are set to something, it silently does nothing.
+\ If only some of the spaces are nonzero, it errors - either use the defaults
+\ or roll your own!
+DEFER default-spaces! ( -- )
+
+: ?default-spaces ( -- )
+  code-space 0=   name-space 0= +   data-space 0= + ( #blanks )
+  dup -3 = IF drop default-spaces! EXIT THEN \ All blank, set defaults and bail.
+
+  \ 0 blanks: Good custom setup. Neither 3 nor 0, an error:
+  ( 0|sum ) ABORT" Error configuring target memory spaces: you must set all of CODE-SPACE, NAME-SPACE and DATA-SPACE" ;
 
 
 \ Read and Write helpers =====================================================
@@ -185,21 +221,21 @@ DEFER <tc!*> ( tchar c-addr -- )
 : space>there ( space -- host-addr ) dup @ swap >space ;
 
 \ API - Canonical spaces =====================================================
-: tcode-c@ ( target-addr -- tchar ) code-there <tc@> ;
-: tname-c@ ( target-addr -- tchar ) name-there <tc@> ;
-: tdata-c@ ( target-addr -- tchar ) data-there <tc@> ;
+: tcode-c@ ( target-addr -- tchar ) code-space <tc@> ;
+: tname-c@ ( target-addr -- tchar ) name-space <tc@> ;
+: tdata-c@ ( target-addr -- tchar ) data-space <tc@> ;
 
-: tcode@   ( target-addr -- tcell ) code-there <t@> ;
-: tname@   ( target-addr -- tcell ) name-there <t@> ;
-: tdata@   ( target-addr -- tcell ) data-there <t@> ;
+: tcode@   ( target-addr -- tcell ) code-space <t@> ;
+: tname@   ( target-addr -- tcell ) name-space <t@> ;
+: tdata@   ( target-addr -- tcell ) data-space <t@> ;
 
-: tcode-c! ( tchar target-addr -- ) code-there <tc!> ;
-: tname-c! ( tchar target-addr -- ) name-there <tc!> ;
-: tdata-c! ( tchar target-addr -- ) data-there <tc!> ;
+: tcode-c! ( tchar target-addr -- ) code-space <tc!> ;
+: tname-c! ( tchar target-addr -- ) name-space <tc!> ;
+: tdata-c! ( tchar target-addr -- ) data-space <tc!> ;
 
-: tcode!   ( tcell target-addr -- ) code-there <t!> ;
-: tname!   ( tcell target-addr -- ) name-there <t!> ;
-: tdata!   ( tcell target-addr -- ) data-there <t!> ;
+: tcode!   ( tcell target-addr -- ) code-space <t!> ;
+: tname!   ( tcell target-addr -- ) name-space <t!> ;
+: tdata!   ( tcell target-addr -- ) data-space <t!> ;
 
 \ API - Allot ======================================================================
 : <t-allot> ( #tchars space -- )
@@ -208,25 +244,25 @@ DEFER <tc!*> ( tchar c-addr -- )
   dup @ swap >space  ( host-addr )
   1- +max ;
 
-: tname-allot ( #tchars -- ) name-there <t-allot> ;
-: tcode-allot ( #tchars -- ) code-there <t-allot> ;
-: tdata-allot ( #tchars -- ) data-there <t-allot> ;
+: tname-allot   ( #tchars -- ) name-space   <t-allot> ;
+: tcode-allot   ( #tchars -- ) code-space   <t-allot> ;
+: tdata-allot   ( #tchars -- ) data-space   <t-allot> ;
 
 : <t,> ( tcell space -- )
   tuck   dup @ swap <t!>
   1 tcells   swap <t-allot> ;
 
-: tname,   ( tcell -- ) name-there <t,> ;
-: tcode,   ( tcell -- ) code-there <t,> ;
-: tdata,   ( tcell -- ) data-there <t,> ;
+: tname,   ( tcell -- ) name-space <t,> ;
+: tcode,   ( tcell -- ) code-space <t,> ;
+: tdata,   ( tcell -- ) data-space <t,> ;
 
 : <tc,> ( tchar space -- )
   tuck   dup @ swap <tc!>
   1 swap <t-allot> ;
 
-: tname-c, ( tchar -- ) name-there <tc,> ;
-: tcode-c, ( tchar -- ) code-there <tc,> ;
-: tdata-c, ( tchar -- ) data-there <tc,> ;
+: tname-c, ( tchar -- ) name-space <tc,> ;
+: tcode-c, ( tchar -- ) code-space <tc,> ;
+: tdata-c, ( tchar -- ) data-space <tc,> ;
 
 
 \ API - Alignment ============================================================
@@ -234,14 +270,14 @@ DEFER <tc!*> ( tchar c-addr -- )
 : <t-align> ( there-ptr -- )
   dup @ dup taligned swap -   swap <t-allot> ;
 
-: tname-align ( -- ) name-there <t-align> ;
-: tcode-align ( -- ) code-there <t-align> ;
-: tdata-align ( -- ) data-there <t-align> ;
+: tname-align ( -- ) name-space <t-align> ;
+: tcode-align ( -- ) code-space <t-align> ;
+: tdata-align ( -- ) data-space <t-align> ;
 
 
 \ Extras =====================================================================
 : TVARIABLE ( "name" --    X: -- t-addr )
-  data-there @   0 tdata,   CONSTANT ;
+  data-space @   0 tdata,   CONSTANT ;
 
 
 \ File output ================================================================
@@ -258,19 +294,32 @@ DEFER <tc!*> ( tchar c-addr -- )
   ." Target:  " dup space>org @ hex. cr
   ." File:    "     space>offset @ hex. cr ;
 
+\ Host span
 : space>span ( there-array -- c-addr u )
   dup  space>host-array @
   swap space>max @
   over - 1+ ;
 
-: skip-space? ( space -- ? )
-  dup data-there =   config data-space-blank? @ and IF
-    ." Skipping the data space, it's uninitialized." cr
-    drop true EXIT THEN
+: space>target-size ( space -- u )
+  space>span nip       ( u-bytes )
+  bytes/tchar + 1-   bytes/tchar / ;
 
-  name-there =   config has-dictionary? @ 0= and dup IF
-    ." Skipping the name space, no dictionary." cr
-  THEN ( ? ) ;
+: space>target-span ( space -- t-addr u )
+  dup space>org @ swap space>target-size ;
+
+
+: toss ( space -- ) ephemeral! ;
+
+: skip-space? ( space -- ? )
+  space>offset @ -1 = ;
+  \ dup data-space =   config data-space-blank? @ and IF
+  \   ." Skipping the data space, it's uninitialized." cr
+  \   toss true EXIT THEN
+
+  \ name-space =   config has-dictionary? @ 0= and dup IF
+  \   name-space toss
+  \   ." Skipping the name space, no dictionary." cr
+  \ THEN ( ? ) ;
 
 : dump-space ( there-array file -- )
   \ Bail if this space is a blank data space, or the name-space.

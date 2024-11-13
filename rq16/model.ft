@@ -8,7 +8,7 @@ host definitions
 0     CONSTANT rp0
 $ff7f CONSTANT sp0 \ This is the value to literally write to SP for an empty stack.
 
-code-there CONSTANT DP
+code-space CONSTANT DP
 : here dp @ ;
 0 dp !
 
@@ -49,10 +49,10 @@ VARIABLE 'latest
 
 \ Starting the assembly ======================================================
 \ At the top of memory on the Risque-16 are the reset and interrupt vectors.
-0 code-there !
+0 code-space !
 $8000 b, \ Dummy long branch; will get rewritten with main.
 
-8 code-there !
+8 code-space !
 $8000 b, \ Dummy long branch; will get rewritten with the interrupt handler.
 
 \ Code words =================================================================
@@ -66,14 +66,14 @@ label DOCOL
 \ the parameter field address. With colocated code and data, that needs to be
 \ moved to tos. With separate, it needs to be a memory read.
 \ See the DOES> design below for more details.
-colocated-names? [IF]
-: pfa->tos, ( -- )
-  {{ tos }} push,
-  r0 tos mov, ;
-[ELSE]
+config data-indirect? @ [IF]
 : pfa->tos, ( -- )
   {{ tos }} push,
   r0 [] tos ldr, ;
+[ELSE]
+: pfa->tos, ( -- )
+  {{ tos }} push,
+  r0 tos mov, ;
 [THEN]
 
 

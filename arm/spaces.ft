@@ -2,12 +2,12 @@
 REQUIRE ../host/spaces.ft
 
 \ The QEMU ARM system loads the user code at $10000.
-$10000   code-there ORG!
+$10000   code-space ORG!
 \ Since the spaces are mixed, that relocated all of them together.
 
 
 \ Optional: separate spaces
-\ $80000   name-there ORG!
-\ $80000 $10000 -   name-there space>offset !
+\ $80000   name-space ORG!
+\ $80000 $10000 -   name-space space>offset !
 \
-\ $2000000 data-there ORG!
+\ $2000000 data-space ORG!

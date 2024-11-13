@@ -6,11 +6,18 @@ REQUIRE vocabularies.ft
 host definitions
 
 begin-structure configuration
-  field: has-dictionary?
+  \ Including or excluding parts of the code.
   field: keyboard-input?
-  field: data-space-blank?
-  field: mix-code-and-data?
-  field: mix-code-and-name?
+  field: keyboard-output?
+
+  \ Nature of the target system:
+  \ - If it includes the dictionary and Forth text interpreters
+  \ - If the code is on a ROM and the data must be elsewhere.
+  field: has-dictionary?
+  field: names-indirect?
+  field: data-indirect?
+
+  \ Parameters of the target.
   field: char-bits
   field: cell-width      \ In target address units
   field: instr-width
@@ -20,37 +27,17 @@ end-structure
 
 configuration allocate drop CONSTANT config
 
-\ Derived value that's used in a few places.
-: colocated-names? ( -- ? )
-  config has-dictionary? @
-  config mix-code-and-data? @ and
-  config mix-code-and-name? @ and ;
-
-\ A built-in configuration, with all three spaces unified, fully interactive.
 : interactive-forth! ( -- )
-  config has-dictionary?    ON
-  config keyboard-input?    ON
-  config data-space-blank?  OFF
-  config mix-code-and-data? ON
-  config mix-code-and-name? ON ;
+  config has-dictionary?  ON
+  config keyboard-input?  ON
+  config keyboard-output? ON ;
 
-\ A built-in configuration, with no interactivity or keyboard, all spaces
-\ separate, and a blank data space.
-: rom-application! ( -- )
-  config has-dictionary?    OFF
-  config keyboard-input?    OFF
-  config data-space-blank?  ON
-  config mix-code-and-data? OFF
-  config mix-code-and-name? OFF ;
+: standalone! ( -- )
+  config has-dictionary?  OFF
+  config names-indirect?  ON ;
 
-\ Add-on to other configurations.
-: separate-spaces! ( -- )
-  config mix-code-and-name? OFF
-  config mix-code-and-data? OFF ;
-
-\ Default configuration:
-\ - interactive Forth
-interactive-forth!
+: in-rom! ( -- )
+  config data-indirect?   ON ;
 
 
 \ Helpers ====================================================================

@@ -945,7 +945,7 @@ label main
 
 \ Write a JMP to main at the start of the machine code.
 \ (There's a dummy jump there to be overwritten.
-code-there @
-machine-code-entry code-there !
+code-space @
+machine-code-entry code-space !
 main $ jmp,
-code-there !
+code-space !

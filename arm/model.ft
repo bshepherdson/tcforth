@@ -19,10 +19,10 @@
 HOST DEFINITIONS
 
 
-\ First line of code, the entry point. This is at $0 in code-there space, but
+\ First line of code, the entry point. This is at $0 in code-space space, but
 \ will be loaded at $10000 by the ARM runtime.
 ?stack-clear
-code-there @ b,
+code-space @ b,
 
 
 \ Some assembler macros
@@ -52,10 +52,10 @@ label DOCOL
 \ The address of the cell after DOVAR is in lr.
 \ With collocated names and data, that cell is the start of the parameter field.
 \ With separated names, there's a pointer to the parameter field there.
-colocated-names? [IF]
-  : pfa->tos, ( -- ) lr tos mov, ;
-[ELSE]
+config data-indirect? @ [IF]
   : pfa->tos, ( -- ) lr [] tos ldr, ;
+[ELSE]
+  : pfa->tos, ( -- ) lr tos mov, ;
 [THEN]
 
 label DOVAR
@@ -96,7 +96,7 @@ VARIABLE 'EXIT   \ These get populated later.
 : DOES, ( -- xt-does )
   '(DOES>) @ tcode,
   'EXIT    @ tcode,
-  code-there @
+  code-space @
   {{ tos }} push,
   pfa->tos,
   docol bl, ;
@@ -129,10 +129,10 @@ label DOSTRING
 \ Compiles the bl DOVAR.
 : ,dovar ( -- ) dovar bl, ;
 
-colocated-names? [IF]
-  : t,pfa ( -- ) ;
+config data-indirect? @ [IF]
+  : t,pfa ( -- ) data-space @ tcode, ;
 [ELSE]
-  : t,pfa ( -- ) data-there @ tcode, ;
+  : t,pfa ( -- ) ;
 [THEN]
 
 \ Compiles a string literal into the thread.
@@ -149,7 +149,7 @@ colocated-names? [IF]
 \ ;CODE or DOES> at does-xt.
 \ On DTC ARM, this compiles bl does-xt.
 : !dodoes ( does-xt word-xt -- )
-  code-there @ >R   code-there !   bl,   R> code-there ! ;
+  code-space @ >R   code-space !   bl,   R> code-space ! ;
 
 \ Compile a literal. This is in the model because eg. STC doesn't use the two-
 \ cell [LIT|x] pattern.
@@ -166,7 +166,7 @@ label entry-point 0 asm,
 
 \ Space for : and ; ==========================================================
 \ : :   (CREATE) ,docol smudge ] exit    5 cells and the codeword
-: allot-: ( -- ) 6 tcells code-there +! ;
+: allot-: ( -- ) 6 tcells code-space +! ;
 \ : ;   EXIT-compile, smudge [ exit
 \ EXIT-compile, pushes: lit + xt + compile, = 3, plus smuge [ exit for 6, plus the codeword = 7
-: allot-; ( -- ) 7 tcells code-there +! ;
+: allot-; ( -- ) 7 tcells code-space +! ;

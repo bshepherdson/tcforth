@@ -20,3 +20,31 @@ config little-endian?   OFF
 \ XXX: Playing with separate spaces.
 \ separate-spaces!
 \ config data-space-blank?  ON
+
+\ Target spaces ==============================================================
+REQUIRE ../host/spaces.ft
+
+\ Address units are 16-bit values stored on the host as 2 bytes, big-endian.
+' <be16@> IS <tc@*>
+' <be16!> IS <tc!*>
+
+: spaces::single ( -- )
+  single-space!
+
+  $0 code-space ORG! ;
+
+: spaces::separate ( -- )
+  config data-indirect?  ON
+  config names-indirect? ON
+
+  split-spaces!
+  $0000 code-space ORG!   $0000 code-space space>offset !
+  $1800 name-space ORG!   $3000 name-space space>offset !
+  $3000 data-space ORG!   $6000 data-space space>offset ! ;
+
+: spaces::copying ( -- )
+  spaces::separate
+  data-space space>init-copy? ON
+  -1   data-space space>offset ! ;
+
+' spaces::single IS default-spaces!

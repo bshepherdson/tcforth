@@ -24,7 +24,25 @@ VICE_C64_FLAGS ?= -nativemonitor \
 
 # DCPU-16 ====================================================================
 forth-dcpu16.bin: host/*.ft dcpu16/*.ft shared/*.ft
-	$(FORTH) dcpu16/main.ft -e 'bye'
+	$(FORTH) dcpu16/preamble.ft \
+		-e "' spaces::single IS default-spaces!" \
+		dcpu16/system.ft dcpu16/disks.ft \
+		-e 'host :noname S" $@" ; IS tcforth-output' \
+		dcpu16/finalize.ft -e 'bye'
+
+forth-dcpu16-separate.bin: host/*.ft dcpu16/*.ft shared/*.ft
+	$(FORTH) dcpu16/preamble.ft \
+		-e "' spaces::separate IS default-spaces!" \
+		dcpu16/system.ft dcpu16/disks.ft \
+		-e 'host :noname S" $@" ; IS tcforth-output' \
+		dcpu16/finalize.ft -e 'bye'
+
+forth-dcpu16-copying.bin: host/*.ft dcpu16/*.ft shared/*.ft
+	$(FORTH) dcpu16/preamble.ft \
+		-e "' spaces::copying IS default-spaces!" \
+		dcpu16/system.ft dcpu16/disks.ft \
+		-e 'host :noname S" $@" ; IS tcforth-output' \
+		dcpu16/finalize.ft -e 'bye'
 
 dcpu16: forth-dcpu16.bin
 run-dcpu16: forth-dcpu16.bin
@@ -35,7 +53,11 @@ test.disk: test/*.ft
 		test/parsing.ft test/rest.ft test/end.ft > test.disk
 
 test-dcpu16: forth-dcpu16.bin test.disk test.dcs FORCE
-	$(EMULATOR) -turbo -disk test.disk -script test.dcs forth-dcpu16.bin
+	$(EMULATOR) -turbo -disk test.disk -script test.dcs $<
+test-dcpu16-separate: forth-dcpu16-separate.bin test.disk test.dcs FORCE
+	$(EMULATOR) -turbo -disk test.disk -script test.dcs $<
+test-dcpu16-copying: forth-dcpu16-copying.bin test.disk test.dcs FORCE
+	$(EMULATOR) -turbo -disk test.disk -script test.dcs $<
 
 # Risque-16 ==================================================================
 # My RISC-style, Thumb-inspired "competitor" in the DCPU cinematic universe.
@@ -94,7 +116,8 @@ test-c64: forth-c64-test.prg FORCE
 	$(VICE_C64) $(VICE_C64_FLAGS) -warp forth-c64-test.prg
 
 # Top level ==================================================================
-test: test-dcpu16 test-rq16 test-mocha86k test-arm test-c64 FORCE
+test: test-dcpu16 test-dcpu16-separate test-dcpu16-copying \
+	test-rq16 test-mocha86k test-arm test-c64 FORCE
 
 clean: FORCE
 	rm -f *.bin forth-c64.prg test.disk serial.in serial.out

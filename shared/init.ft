@@ -28,31 +28,46 @@ target : QUIT ( -- )
   src-keyboard 'source-id !
   (QUIT) ( TODO: BYE ) ;
 
-\ NOTE: Nothing (initialized) should go into the data space after this point in
-\ the code! If that's a nuisance, this could be indirected further.
-host config data-space-blank? @ [IF]
-  \ Span of the data space on the host.
-  cr cr S" Compiling data initializers since data space starts blank!" type cr
-  data-there space>span ." Host span: " over hex.  over . cr
-  dup bytes/tchar /       ( host-addr u-bytes u-tchars )
-  code-there @
-  over tcode-allot        ( host-addr u-bytes u-tchars target-addr )
-  tuck
-  \ Compiles literals for ( src dst u ) in target terms.
-  ." Target move: "
-  target : init-data ( -- )
-    [ host dup hex. tliteral data-there space>org @ dup hex. tliteral dup hex. tliteral target ]
-    move ;
-host cr
 
-  host ( host-addr u-bytes target-addr )
-  code-there >space ( host-src u-bytes host-dst )
-  swap move
+host config data-indirect? @ [IF]
+\ Copy initialized data ======================================================
+host definitions
+code-space @   0 tcode,   CONSTANT initializers
+
+S" Initializers at: " type initializers hex. cr
+
+host
+: initializer, ( space -- )
+  code-space @   initializers tcode@
+  tcode,   initializers tcode!
+  dup space>target-span ( space t-addr u-tchars )
+  over tcode,   dup tcode,   0 ?DO   ( space t-addr )
+    2dup i + swap <tc@> ( space t-addr tchar )
+    tcode-c, LOOP 2drop ;
+
+: prepare-data-initializers ( -- )
+  config data-indirect? @ 0= ABORT" Copying data to RAM without data-indirect? flag is pointless"
+
+  all-spaces @ BEGIN ?dup WHILE
+    dup space>init-copy? @ IF dup initializer, THEN
+    space>next @
+  REPEAT ;
+
+\ The initializers form a linked list of: [ next | dst | len | tchars... ]
+target definitions
+: init-data ( -- )
+  [ host initializers tliteral target ] @ BEGIN ?dup WHILE
+    dup 3 cells +   over dup cell+ @   swap 2 cells + @ move
+    @
+  REPEAT ;
+
 host [ELSE]
-  \ With an initialized data space, there's nothing to do here.
-  target : init-data ( -- ) ;
-host [THEN]
-target
+\ Nothing to copy ============================================================
+\ With an initialized data space, there's nothing to do here.
+target definitions
+: init-data ( -- ) ;
+
+host [THEN] target
 
 \ Basic startup
 : boot  ( -- ) init-data   init-hardware   10 base ! ;

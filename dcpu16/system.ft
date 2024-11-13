@@ -1,3 +1,5 @@
+?stack-clear
+?default-spaces
 REQUIRE assembler.ft      \ DCPU-16 assembler
 
 host REQUIRE model.ft                             \ Add the DCPU-16 model words

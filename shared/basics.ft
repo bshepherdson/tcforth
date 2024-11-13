@@ -3,7 +3,7 @@
 \ ANS Forth standard names and arguments where practical.
 target definitions
 
-host ." Latest: " name-there @ hex. cr
+host ." Latest: " name-space @ hex. cr
 target : LATEST 'latest @ ;
   host acts: latest ;
 \ LATEST gives the name token. Skip over the link pointer and check the length.
@@ -37,6 +37,6 @@ target : ALLOT ( n -- ) dp +! ;
   host acts: tdata-allot ;
 
 target : HERE dp @ ;
-  host acts: data-there @ ;
+  host acts: data-space @ ;
 
 target : WITHIN ( x lo hi -- ? ) over - >R   - R> U< ;

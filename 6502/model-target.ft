@@ -98,7 +98,7 @@ host definitions
 \ Moves THERE back by u and pushes the most recently compiled words onto the
 \ stack (low address first).
 : asm-lit ( u -- w ... )
-  dup negate tcode-allot   0 DO code-there @ i + tcode@ LOOP ;
+  dup negate tcode-allot   0 DO code-space @ i + tcode@ LOOP ;
 
 \ Compiles code that will itself compile an exit.
 \ Runs while assembling ; for example.
@@ -108,9 +108,9 @@ host definitions
 
 \ Runs during compilation TARGET : DOES> - compile code into its thread!
 
-code-there @
+code-space @
 pfa->tos,
-code-there @
+code-space @
 CONSTANT pfa-tos-code-top
 CONSTANT pfa-tos-code
 

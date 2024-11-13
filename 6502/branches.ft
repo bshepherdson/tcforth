@@ -20,14 +20,14 @@
 \ First the host side words.
 \ JMP $abs is $4c
 host definitions
-: BRANCH,    $4c tcode-c, code-there @   0 tcode, ;
+: BRANCH,    $4c tcode-c, code-space @   0 tcode, ;
 
 : 0BRANCH,
   inx, inx,
   $fe zp,x lda,
   $ff zp,x ora,
   eq? if,
-    code-there @   1+ >R \ Point at the address, not the opcode.
+    code-space @   1+ >R \ Point at the address, not the opcode.
     0 $ jmp,
   then, R> ;
 \ That's 9B 15c, which is a little chunky but not too bad.

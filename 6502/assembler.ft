@@ -12,7 +12,7 @@
 : asm,   ( b -- ) tcode-c, ;
 : asm,16 ( w -- ) dup $ff and asm,   8 rshift $ff and asm, ;
 
-: label ( "name" --    X: -- t-addr ) code-there @ CONSTANT ;
+: label ( "name" --    X: -- t-addr ) code-space @ CONSTANT ;
 
 \ Addressing modes:
 \ Name                 | OG Syntax | This Syntax | Marker | Effect
@@ -248,7 +248,7 @@ $20 jumper jsr,
 : brancher ( op "name" -- ) CREATE , DOES>
   ( addr16 addr ) @ asm, ( addr16 )
   \ The delta is relative to the PC *after* the branch delta, which is there 1+
-  code-there @ 1+ - ( delta8 )
+  code-space @ 1+ - ( delta8 )
   dup -128 128 within 0= ABORT" Branch too far"
   255 and asm, ;
 
@@ -271,11 +271,11 @@ $70 brancher bvs,
 : vc? ['] bvs, ;   : vs? ['] bvc, ;
 
 : if,   ( xt-branch -- a-slot )
-  code-there @   dup 1+ >R   swap execute   R> ;
+  code-space @   dup 1+ >R   swap execute   R> ;
 
 \ Resolves a forward branch. It's relative to a-slot+2.
 : then, ( a-slot -- )
-  code-there @   over 1+ -   ( a-slot delta )   swap tcode-c! ;
+  code-space @   over 1+ -   ( a-slot delta )   swap tcode-c! ;
 
 \ On ELSE - assembly else, doesn't work - JMP only works on absolutes,
 \ whereas the branches use single relative bytes.

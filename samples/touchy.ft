@@ -17,12 +17,12 @@ REQUIRE ../embed/portable.ft
 
 MD-REQUIRE ../$/preamble.ft
 \ No interactive Forth system, but it still has KEY, ACCEPT, EMIT, TYPE, etc.
-rom-application!
+\ rom-application!
 
 MD-REQUIRE ../$/spaces.ft
 
 \ Configuring the spaces as necessary; see the fields in host/spaces.ft.
-$4000 data-there org!
+$4000 data-space org!
 
 \ Metacompiler ===============================================================
 \ Load the TC-Forth metacompiler and build the Forth system for it.

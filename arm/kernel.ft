@@ -15,7 +15,7 @@
 \ variables in the kernel.
 : nearby, ( value reg -- )
   2>R
-  code-there @ 8 + - dup 0< IF negate # pc 2R> sub, ELSE # pc 2R> add, THEN ;
+  code-space @ 8 + - dup 0< IF negate # pc 2R> sub, ELSE # pc 2R> add, THEN ;
 
 : push-nearby, ( value -- ) {{ tos }} push,   tos nearby, ;
 
@@ -235,12 +235,12 @@ TVARIABLE var_handler
 
 \ TODO: The input system is not necessary on non-interactive systems like GBA!
 \ I'm leaving it in for now for simpler compilation.
-data-there @ CONSTANT var_last_parse   config instr-width @   2* tdata-allot
-data-there @ CONSTANT var_source       config instr-width @   2* tdata-allot
+data-space @ CONSTANT var_last_parse   config instr-width @   2* tdata-allot
+data-space @ CONSTANT var_source       config instr-width @   2* tdata-allot
 TVARIABLE var_in_ptr
 TVARIABLE var_source_id
 
-data-there @ CONSTANT input-buf   128 tdata-allot
+data-space @ CONSTANT input-buf   128 tdata-allot
 
 
 
@@ -279,7 +279,7 @@ end-code
 
 
 : var-pusher ( var "name" -- )
-  code-there @ >R   asm,   code
+  code-space @ >R   asm,   code
   {{ tos }} push,
   R>    r0  nearby,
   r0 [] tos ldr,
@@ -408,7 +408,7 @@ end-code
 \ Words
 code EXIT
   \ Get the target XT for EXIT and stash it in a forward reference.
-  code-there @ 'EXIT !
+  code-space @ 'EXIT !
   \ Actual code for an EXIT
   ip poprsp,
 end-code

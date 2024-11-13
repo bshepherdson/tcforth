@@ -100,7 +100,7 @@ host definitions
 \ body from >mirror, compile the value from its txt field into the target, and
 \ save this new compilation address to txt.
 : mirror-forward ( -- )
-  code-there @
+  code-space @
   \ ." forward chaining to " dup hex. cr
   mirror-compile   >mirror @ mirror>txt ! ;
 
@@ -109,7 +109,7 @@ host definitions
   ['] mirror-forward   'mirror @ mirror>compile ! ;
 
 : (replace-xt) ( xt slot -- )
-  code-there @ >R   code-there !   tcompile,   R> code-there ! ;
+  code-space @ >R   code-space !   tcompile,   R> code-space ! ;
 
 \ Resolves a forward reference when we come to define it.
 \ ?forward runs after (TCREATE), so the newest mirror word's txt is the one we
@@ -165,7 +165,7 @@ latest tcell+ dup tname-c@ f_immed or swap tname-c!
   host acts: 0 state !   EXIT, ; IMPERATIVE
 
 
-host code-there @
+host code-space @
 cr cr ." Metacompilation starts at " dup hex.  ." (" 2* hex. ." )" cr
 
 ?stack-clear

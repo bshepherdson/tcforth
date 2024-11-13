@@ -5,13 +5,13 @@ target : IF   ( ? --     C: -- if-slot ) 0BRANCH, ; IMMEDIATE
   host acts: 0BRANCH, ; IMPERATIVE
 
 target : THEN ( ? --     C: if-slot -- ) here swap !dest ; IMMEDIATE
-  host acts: code-there @ swap !dest ; IMPERATIVE
+  host acts: code-space @ swap !dest ; IMPERATIVE
 target : ELSE ( ? --     C: if-slot -- else-slot )
     BRANCH,   swap here swap !dest ; IMMEDIATE
-  host acts: BRANCH,   swap code-there @ swap !dest ; IMPERATIVE
+  host acts: BRANCH,   swap code-space @ swap !dest ; IMPERATIVE
 
 target : BEGIN  ( --       C: -- top-loc ) here ; IMMEDIATE
-  host acts: code-there @ ; IMPERATIVE
+  host acts: code-space @ ; IMPERATIVE
 target : AGAIN  ( --       C: top-loc -- ) BRANCH, !dest ; IMMEDIATE
   host acts: BRANCH, !dest ; IMPERATIVE
 target : WHILE  ( ? --     C: -- while-slot ) 0BRANCH, ; IMMEDIATE
@@ -19,7 +19,7 @@ target : WHILE  ( ? --     C: -- while-slot ) 0BRANCH, ; IMMEDIATE
 target : REPEAT ( --       C: top-loc while-slot )
     swap branch, !dest ( while-slot )
     here swap !dest ; IMMEDIATE
-  host acts: swap BRANCH, !dest   code-there @ swap !dest ; IMPERATIVE
+  host acts: swap BRANCH, !dest   code-space @ swap !dest ; IMPERATIVE
 target : UNTIL  ( ? --     C: top-loc -- ) 0BRANCH, !dest ; IMMEDIATE
   host acts: 0BRANCH,   !dest ; IMPERATIVE
 

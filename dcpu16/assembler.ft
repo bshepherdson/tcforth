@@ -100,7 +100,7 @@ $10 unary hwn,   $11 unary hwq,   $12 unary hwi,
 $13 unary log,   $14 unary brk,   $15 unary hlt,
 
 
-: label ( "name" --    X: -- t-addr ) code-there @ CONSTANT ;
+: label ( "name" --    X: -- t-addr ) code-space @ CONSTANT ;
 
 \ Control structures
 \ ==================
@@ -115,5 +115,5 @@ $13 unary log,   $14 unary brk,   $15 unary hlt,
 \ compile a long-form literal, noting the address as a newly defined word.
 \ A later resolve will write it back.
 \ NB: Only works for RHS arguments.
-: fwd     ( -- resolve-token value operand ) code-there @ 1+   1000 # ;
-: resolve ( resolve-token ) code-there @ swap tcode! ;
+: fwd     ( -- resolve-token value operand ) code-space @ 1+   1000 # ;
+: resolve ( resolve-token ) code-space @ swap tcode! ;

@@ -4,7 +4,7 @@
 host definitions
 \ This needs to be the last lines in the target compilation.
 host latest         var_latest tcode!
-host data-there @   var_dp_ptr tcode!
+host data-space @   var_dp_ptr tcode!
 
 S" entry-point   " type entry-point hex. cr
 S" entry-point @ " type entry-point tcode@ hex. cr

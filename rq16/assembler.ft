@@ -7,7 +7,7 @@
 
 : asm, ( w -- ) tcode, ;
 
-: label ( "name" --    X: -- t-addr ) code-there @ CONSTANT ;
+: label ( "name" --    X: -- t-addr ) code-space @ CONSTANT ;
 
 
 \ - Registers are represented as  ( reg 0 )
@@ -215,7 +215,7 @@
 \ as -1 (all 1s) with the branch offset in the next word.
 : (branch) ( opcode --     X: absolute-target -- )
   CREATE , DOES> @ ( abs-tgt opcode )
-    over   code-there @ 1+   - ( abs-tgt opcode delta )
+    over   code-space @ 1+   - ( abs-tgt opcode delta )
     dup -256 256 within IF ( abs-tgt opcode delta )
       $1ff and swap 9 lshift or $a000 or asm, drop
     ELSE ( abs-tgt opcode delta )
@@ -329,10 +329,10 @@ $f (branch) ble,
 \ Control structures =========================================================
 \ Branch ops already take an absolute target; easy enough to use LABEL.
 \ fwd beq, compiles a dummy relative offset and leaves there on the stack.
-: fwd ( -- loc abs-target ) code-there @ dup 100 + ;
+: fwd ( -- loc abs-target ) code-space @ dup 100 + ;
 
 \ Resolve expects a loc on the stack, and resolves it to point to there @.
 : resolve ( loc -- )
-  code-there @ over - 1- ( loc relative ) dup 256 >= ABORT" fwd/resolve too long"
+  code-space @ over - 1- ( loc relative ) dup 256 >= ABORT" fwd/resolve too long"
   over tcode@ $1ff invert and or ( loc op' )
   swap tcode! ;

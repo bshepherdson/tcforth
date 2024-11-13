@@ -11,10 +11,10 @@ target : ,CF ( codeword-addr -- ) $7c20 , , ;
 
 target : ,DOCOL ( -- ) [ host jsr_docol tcode@ tliteral target ] , ;
 
-host colocated-names? [IF]
-  target : ,PFA ( -- ) ;
-host [ELSE]
+host config data-indirect? @ [IF]
   target : ,PFA ( -- ) here cell+ , ;
+host [ELSE]
+  target : ,PFA ( -- ) ;
 host [THEN]
 
 target : ,xt-slot ( -- ) ,pfa ;
@@ -35,18 +35,18 @@ target : ALIGN ; host acts: ;
 
 target : >CFA ( nt -- cfa )
   cell+ dup c@ [ host mask_len tliteral target ] and + char+ aligned
-  [ host config mix-code-and-name? @ 0= [IF] target ] @ [ host [THEN] target ] ;
+  [ host config names-indirect? @ [IF] target ] @ [ host [THEN] target ] ;
 
-host config mix-code-and-name? @ [IF]
-target : /NAME-FIELD ( -- u ) 0 ;
-host [ELSE]
+host config names-indirect? @ [IF]
 target : /NAME-FIELD ( -- u ) 1 cells ;
+host [ELSE]
+target : /NAME-FIELD ( -- u ) 0 ;
 host [THEN]
 
-host config mix-code-and-data? @ [IF]
-target : >BODY ( xt -- addr ) 2 cells + ;
-host [ELSE]
+host config names-indirect? @ [IF]
 target : >BODY ( xt -- addr ) 2 cells + @ ;
+host [ELSE]
+target : >BODY ( xt -- addr ) 2 cells + ;
 host [THEN]
 
 target : PAD ( -- addr ) $fb00 ;
@@ -71,7 +71,7 @@ host definitions
 
 : asm-lit ( -- x )
   -1 tcells tcode-allot
-  code-there @   tcode@ ;
+  code-space @   tcode@ ;
 
 \ Runs during compilation of TARGET : DOES> - compile code into its thread!
 : TDOES,

@@ -42,25 +42,25 @@ f_hidden 1-             CONSTANT mask_len
 \ With separate spaces, it contains a pointer into code space.
 : TNAME>STRING ( t-nt -- c-addr u ) tcell+ dup 1+ swap tname-c@ mask_len and ;
 : TNAME>CFA    ( t-nt -- t-cfa )    tname>string + taligned ;
-: TCFA@        ( t-cfa -- t-xt )    colocated-names? 0= IF tname@ THEN ;
+: TCFA@        ( t-cfa -- t-xt )    config names-indirect? @ IF tname@ THEN ;
 : TNAME>INT    ( t-nt -- t-xt )     tname>cfa tcfa@ ;
 
 \ With separate spaces, compiles the pointer to code space.
 \ With combined spaces, does nothing.
-: ,tcfa ( -- ) colocated-names? 0= IF code-there @ tname, THEN ;
+: ,tcfa ( -- ) config names-indirect? @ IF code-space @ tname, THEN ;
 
 \ Compiles a fresh Target header with an empty code field.
 \ With separated name and code spaces, the name field contains a pointer to the
 \ (empty) code field.
 : (mk-header) ( c-addr u -- target-xt )
   \ ." (mk-header) " 2dup type   4 spaces .s cr
-  \ ."     nt: " name-there @ hex. cr
-  name-there @   latest tname,   'latest !
+  \ ."     nt: " name-space @ hex. cr
+  name-space @   latest tname,   'latest !
   dup tname-c, \ Length byte
   0 DO ( c-addr )
     dup i + c@ >upper tname-c, LOOP drop ( )
   tname-align
-  code-there @    ( target-xt )
+  code-space @    ( target-xt )
   ,tcfa ;
 
 \ Looking up the name corresponding to an xt.
@@ -82,16 +82,16 @@ f_hidden 1-             CONSTANT mask_len
 \ "thread".
 \ When code and data spaces are combined, the parameter field follows the
 \ codeword. When they are separate, there is a pointer after the codeword.
-: tpfa@  ( tpf-slot -- body ) colocated-names? 0= IF tcode@ THEN ;
+: tpfa@  ( tpf-slot -- body ) config data-indirect? @ IF tcode@ THEN ;
 : t>body ( txt -- body )      t>pfa tpfa@ ;
 
 \ Called by TCREATE. For separate spaces this compiles a pointer to data
 \ space. Does nothing if the spaces are combined.
-: ,pfa ( -- ) colocated-names? 0= IF data-there @ tcode, THEN ;
+: ,pfa ( -- ) config data-indirect? @ IF data-space @ tcode, THEN ;
 
 \ TODO: This can be portable, it's a dictionary thing.
-colocated-names? [IF]
-  : t,pfa ( -- ) ;
+config data-indirect? @ [IF]
+  : t,pfa ( -- ) data-space @ tcode, ;
 [ELSE]
-  : t,pfa ( -- ) data-there @ tcode, ;
+  : t,pfa ( -- ) ;
 [THEN]

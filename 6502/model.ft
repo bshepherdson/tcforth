@@ -61,7 +61,7 @@ VARIABLE 'latest
 
 
 \ Start of assembly ==========================================================
-origin code-there !
+origin code-space !
 
 \ To make the machine code Forth system callable from the startup BASIC CLI,
 \ we need a fragment of BASIC code that calls into the machine code:
@@ -79,7 +79,7 @@ $00   tcode-c,  \ 080b: 00              NUL terminator
 $0000 tcode,    \ 080c: 00 00           Pointer to the next line, $0000 = end
 
 \ Then the machine code begins at $0810 = 2064.
-machine-code-entry code-there !
+machine-code-entry code-space !
 
 \ Assemble a dummy JMP $0000 here; it'll get overwritten with a JMP main at
 \ the bottom of kernel.ft
@@ -187,7 +187,7 @@ VARIABLE '(DOES>)
 : DOES, ( -- 'dodoes-code )
     \ Sequence 1 - compiling things into CONSTANT.
     '(DOES>) @ tcompile,   rts,
-    code-there @
+    code-space @
 
     \ Sequence 3 - parameter field address on hardware/return stack,
     \ needs to be pushed.

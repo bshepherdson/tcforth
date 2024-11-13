@@ -9,7 +9,7 @@
 : asm,      ( w -- ) tcode, ;
 : asm-byte, ( b -- ) tcode-c, ;
 
-: label ( "name" --    X: -- t-addr ) code-there @ CONSTANT ;
+: label ( "name" --    X: -- t-addr ) code-space @ CONSTANT ;
 
 
 \ Condition Fields ===========================================================
@@ -96,7 +96,7 @@ VARIABLE S?   0 S? !
 : (b) ( abs-addr link-mask -- )
   >R
   dup 3 and 0<> ABORT" B and BL addresses must be word-aligned"
-  code-there @ 8 +   - ( delta-bytes ) 2/ 2/ ( delta-words )
+  code-space @ 8 +   - ( delta-bytes ) 2/ 2/ ( delta-words )
   dup   -1 $7fffff invert and   $800000   within 0= ABORT" Branch too far"
   $ffffff and R> or $0a000000 or   +cond asm, ;
 
@@ -270,7 +270,7 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
   \ We want ultimately to have:  delta # pc 0 [-]/[+] rd 0 ldr,
   \ PC counts from 8 bytes ahead.
   2>R             ( abs )
-  code-there @ 8 + -   ( delta )
+  code-space @ 8 + -   ( delta )
   dup 0< IF negate # pc [-] ELSE # pc [+] THEN ( +delta # pc 0 [+]/[-] )
   2R> ldr, ;
 
@@ -334,14 +334,14 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
 \ Control structures =========================================================
 \ Branch ops already take an absolute target; easy enough to use LABEL.
 \ fwd beq, compiles a dummy relative offset and leaves there on the stack.
-: fwd ( -- loc abs-target ) code-there @ dup 100 + ;
+: fwd ( -- loc abs-target ) code-space @ dup 100 + ;
 
 \ Resolve expects a loc on the stack, and resolves it to point to here.
 \ We need to retain the condition code of the existing branch opcode.
 : resolve ( loc -- )
-  code-there @ >R
-  dup tcode@ $f0000000 and >R  ( loc   R: real-there cond )
-  code-there !
-  R> condition !   ( R: real-there )
+  code-space @ >R
+  dup tcode@ $f0000000 and >R  ( loc   R: real-space cond )
+  code-space !
+  R> condition !   ( R: real-space )
   R@ b,
-  R> code-there ! ;
+  R> code-space ! ;

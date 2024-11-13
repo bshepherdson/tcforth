@@ -1,6 +1,6 @@
 \ TODO Interrupt handling? The current system doesn't actually use them.
 label interrupt-handler
-  code-there @ b,   \ Just spin, we're not really handling these.
+  code-space @ b,   \ Just spin, we're not really handling these.
 
 
 \ Main =======================================================================
@@ -20,7 +20,7 @@ label main
   r0 bx,                 \ Jump right into that word's code field.
 
 \ Overwrite the jump target of the entry point at $10000 to be main.
-code-there @
-$10000 code-there !
+code-space @
+$10000 code-space !
 main b,
-code-there !
+code-space !

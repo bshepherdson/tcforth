@@ -43,7 +43,7 @@ code NEGATE  tos tos neg, end-code
   {{ r0 }} pop,
   1 # r2 neg,           \ -1 in r2
   tos r0 cmp,
-  code-there @ 2 + R> execute \ Skip over 1 if true
+  code-space @ 2 + R> execute \ Skip over 1 if true
     0 # r2 mov,         \ 0 in r2
   r2 tos mov,           \ r2 -> TOS
 ;
@@ -293,7 +293,7 @@ code S>D
   {{ tos }} push,
   0 # r0  mov,
   0 # tos cmp,
-  code-there @ 2 + bpl, \ Skip 1 if TOS is positive or 0.
+  code-space @ 2 + bpl, \ Skip 1 if TOS is positive or 0.
     1 # r0 neg,    \ -1 to r0 if it's negative.
   r0 tos mov,
 end-code

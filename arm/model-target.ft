@@ -24,10 +24,10 @@ target : ,CF ( codeword-addr -- ) here   0 ,   !cf ;
 \ This is   docol ,cf
 target : ,DOCOL ( -- ) [ host docol tliteral target ] ,CF ;
 
-host colocated-names? [IF]
-  target : ,PFA     ( -- ) ;
-host [ELSE]
+host config data-indirect? @ [IF]
   target : ,PFA ( -- ) here cell+ , ;
+host [ELSE]
+  target : ,PFA     ( -- ) ;
 host [THEN]
 
 target : ,xt-slot ( -- ) ,pfa ;
@@ -41,7 +41,7 @@ target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , 
 target : ALIGNED   3 + 3 invert and ;
   host acts: 3 + 3 invert and ;
 target : ALIGN     here aligned dp ! ;
-  host acts: data-there @ 3 + 3 invert and data-there ! ;
+  host acts: data-space @ 3 + 3 invert and data-space ! ;
 
 \ Parallel to the host dictionary, words for accessing the name and the code
 \ field address.
@@ -80,7 +80,7 @@ target : ,DOSTRING ( c-addr u -- )
   align ;
 
 target : PAD ( -- addr )
-  [ host data-there @ tliteral   128 tdata-allot   target ] ;
+  [ host data-space @ tliteral   128 tdata-allot   target ] ;
 
 \ DOES> ======================================================================
 \ Implementing sequence 2
@@ -96,7 +96,7 @@ host T' EXIT    'EXIT !
 host definitions
 
 \ Moves THERE back by 1 cell and pushes the most recently compiled word.
-: asm-lit ( -- w ) -4 tcode-allot   code-there @ tcode@ ;
+: asm-lit ( -- w ) -4 tcode-allot   code-space @ tcode@ ;
 
 : EXIT-compile, ( -- )
   'EXIT @ tliteral   [T'] compile, tcompile, ;

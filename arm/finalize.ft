@@ -3,7 +3,7 @@
 host definitions
 \ This needs to be the last lines in the target compilation.
 host latest         latest0 tcode!
-host data-there @   dp0     tcode!
+host data-space @   dp0     tcode!
 
 \ At this point the assembler's output region should be complete.
 \ Dump the binary!

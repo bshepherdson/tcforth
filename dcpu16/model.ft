@@ -63,13 +63,14 @@ label DOCOL
 \ DOVAR is at the very top of memory (circa $0007) it would fit inline, but this
 \ way the return address JSR pushes is the data field.
 \ See the DOES> design below for more details.
-colocated-names? [IF]
-  \ It's important that this not be empty, but rather a no-op.
-  : pfa->tos, ( -- ) ra ra set, ;
-[ELSE]
+config data-indirect? @ [IF]
   : pfa->tos, ( -- )
     pop ra set,
     [a] push set, ;
+[ELSE]
+  \ It's important that this not be empty, but rather a no-op.
+  \ TODO: Still? I think I rewrote the bit of code that expected to read this one cell.
+  : pfa->tos, ( -- ) ra ra set, ;
 [THEN]
 
 label DOVAR
@@ -109,7 +110,7 @@ VARIABLE 'EXIT   \ These get populated later.
 : DOES, ( -- xt-does )
   '(DOES>) @ tcode,
   'EXIT    @ tcode,
-  code-there @
+  code-space @
   pfa->tos,
   DOCOL # jsr,
 ;

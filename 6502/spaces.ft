@@ -2,10 +2,10 @@
 REQUIRE ../host/spaces.ft
 
 $0801  CONSTANT origin
-origin code-there ORG!
+origin code-space ORG!
 $0810  CONSTANT machine-code-entry
 
-$2 code-there space>offset ! \ There's a 2-byte PRG header first.
+$2 code-space space>offset ! \ There's a 2-byte PRG header first.
 
 \ Add a new tiny space for the "origin" pointer in the .prg file.
 here   2 allot   align   THERE-PTR prg-header
@@ -15,4 +15,4 @@ $0 prg-header org!
 $0 prg-header space>offset !
 origin $0 prg-header <t!>
 
-\ $3000 code-there ORG!
+\ $3000 code-space ORG!

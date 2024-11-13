@@ -209,7 +209,7 @@ host definitions
   !dest ( old-top   R: 'top )
   \ Now HERE is after the bottom of the loop, and should be put with !dest
   \ at (loop-top).
-  code-there @   R@ tdata@ !dest
+  code-space @   R@ tdata@ !dest
   \ Finally, put the old-top back into (loop-top).
   R> tdata!
   [T'] unloop tcompile, ;
@@ -276,9 +276,9 @@ target : SMUDGE ( -- )
   swap c! ;
 
 
-host code-there @ \ Save the old dp
+host code-space @ \ Save the old dp
 T' :
-( old-dp t-xt ) code-there ! \ Pretend we're compiling there.
+( old-dp t-xt ) code-space ! \ Pretend we're compiling there.
 ,docol
 T' (CREATE) tcompile,
 T' ,docol   tcompile,
@@ -289,7 +289,7 @@ exit,
 
 
 T' ;
-( old-dp t-xt ) code-there !    \ Pretend we're compiling at semicolon
+( old-dp t-xt ) code-space !    \ Pretend we're compiling at semicolon
 ,docol
 EXIT-compile,
 T' smudge   tcompile,
@@ -297,7 +297,7 @@ T' [        tcompile,
 exit,
 \ That's 7 cells with a 1-cell DOCOL.
 
-( old-dp ) code-there !
+( old-dp ) code-space !
 
 
 \ Signed long division =======================================================
@@ -336,4 +336,4 @@ target : */MOD ( n1 n2 n3 -- n4 ) >R M* R> sm/rem ;
 target : */    ( n1 n2 n3 -- n4 ) */MOD nip ;
 
 target : :noname ( C: -- xt ) here ,docol postpone ] ;
-  host acts: code-there @ ,docol   postpone target meta] ;
+  host acts: code-space @ ,docol   postpone target meta] ;

@@ -160,10 +160,15 @@ test-arm-copying: forth-arm-copying-tests.bin test.disk FORCE
 
 # Commodore 64 ===============================================================
 forth-c64.prg: host/*.ft 6502/*.ft shared/*.ft
-	$(FORTH) 6502/main.ft
+	$(FORTH) 6502/preamble.ft -e "' spaces::single IS default-spaces!" \
+		6502/system.ft -e 'host :noname S" $@" ; IS tcforth-output' \
+		6502/finalize.ft -e 'bye'
 
 forth-c64-test.prg: host/*.ft 6502/*.ft shared/*.ft
-	$(FORTH) 6502/main-test.ft
+	$(FORTH) 6502/preamble.ft -e "' spaces::single IS default-spaces!" \
+		6502/system.ft -e 'host :noname S" $@" ; IS tcforth-output' \
+		6502/test-tail.ft \
+		6502/finalize.ft -e 'bye'
 
 c64: forth-c64.prg
 
@@ -171,7 +176,7 @@ run-c64: forth-c64.prg
 	$(VICE_C64) $(VICE_C64_FLAGS) forth-c64.prg
 
 test-c64: forth-c64-test.prg FORCE
-	$(VICE_C64) $(VICE_C64_FLAGS) -warp forth-c64-test.prg
+	$(VICE_C64) $(VICE_C64_FLAGS) -warp $<
 
 # Top level ==================================================================
 test: test-dcpu16 test-dcpu16-separate test-dcpu16-copying \

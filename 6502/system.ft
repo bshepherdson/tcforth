@@ -1,3 +1,5 @@
+?default-spaces
+
 host definitions REQUIRE assembler.ft
 host definitions REQUIRE registers.ft
 host definitions REQUIRE asm-helpers.ft

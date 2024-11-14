@@ -17,3 +17,27 @@ interactive-forth!
 1   config alignment   !
 
 config little-endian? ON
+
+
+\ Target spaces ==============================================================
+REQUIRE ../host/spaces.ft
+
+$0801  CONSTANT origin
+$0810  CONSTANT machine-code-entry
+here   2 allot   align   THERE-PTR   CONSTANT prg-header
+
+\ Add a new tiny space for the "origin" pointer in the .prg file.
+\ It's a 2-byte little-endian offset value, which is the same format as a
+\ target cell.
+$0 prg-header org!
+$0 prg-header space>offset !
+origin $0 prg-header <t!>
+
+: spaces::single ( -- )
+  single-space!
+  origin code-space ORG!
+
+  \ There's a 2-byte PRG header first.
+  $2 code-space space>offset ! ;
+
+' spaces::single IS default-spaces!

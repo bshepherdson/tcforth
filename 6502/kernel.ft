@@ -408,21 +408,25 @@ end-code-bare
 
 
 \ Variables and core states ==================================================
-label var_latest      0 asm,16
-label var_base        0 asm,16
-label var_state       0 asm,16
-label var_handler     0 asm,16
+label dp0     0 asm,16
+label latest0 0 asm,16
 
-label var_last_parse  0 asm,16 0 asm,16
-label var_source      0 asm,16 0 asm,16
-label var_in_ptr      0 asm,16
-label var_source_id   0 asm,16
-label input-buf       128 tcode-allot
+TVARIABLE var_dp
+TVARIABLE var_latest
+TVARIABLE var_base
+TVARIABLE var_state
+TVARIABLE var_handler
+
+data-space @ CONSTANT var_last_parse   2 tcells tdata-allot
+data-space @ CONSTANT var_source       2 tcells tdata-allot
+TVARIABLE var_in_ptr
+TVARIABLE var_source_id
+
+data-space @ CONSTANT input-buf    128 tdata-allot
+
 
 \ The dictionary pointer is in the zero page for speed.
 code DP herel lit, end-code
-
-label var_dp_ptr 0 asm,16
 
 code , ( x -- )
     0     zp,x   lda,
@@ -928,9 +932,9 @@ label main
   \ TODO: Adjust the memory banks at this point, if we're going to.
 
   \ Set the initial DP into the ZP slot.
-  var_dp_ptr    $  lda,
+  dp0           $  lda,
   herel         zp sta,
-  var_dp_ptr 1+ $  lda,
+  dp0        1+ $  lda,
   hereh         zp sta,
 
   \ The hardware stack starts configured - set up the data stack by setting X.

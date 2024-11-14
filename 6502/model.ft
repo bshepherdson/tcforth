@@ -94,17 +94,8 @@ $0000 $ jmp,
 \ return addresses work on the 6502.
 \ So pop it from the return stack, add 1, and push it onto the data stack.
 \ Then the RTS at the end will return to the thread.
-colocated-names? [IF]
+config data-indirect? @ [IF]
 : pfa->tos, ( -- )
-  dex, dex,
-  pla,        \ lo -> A
-  clc,
-  1 # adc,    \ A+1 -> A
-  0 zp,x sta, \ -> TOS_lo
-  pla,        \ hi -> A
-  0 # adc,
-  1 zp,x sta, ;
-[ELSE]
   dex, dex,
   pla,        \ lo -> A
   clc,
@@ -115,7 +106,17 @@ colocated-names? [IF]
   wh zp  sta, \ -> W_hi
 
   \ Now the address is ready in W, and there's space on the stack already.
-  wl (zp)>tos,
+  wl (zp)>tos, ;
+[ELSE]
+: pfa->tos, ( -- )
+  dex, dex,
+  pla,        \ lo -> A
+  clc,
+  1 # adc,    \ A+1 -> A
+  0 zp,x sta, \ -> TOS_lo
+  pla,        \ hi -> A
+  0 # adc,
+  1 zp,x sta, ;
 [THEN]
 
 label DOVAR

@@ -1,8 +1,0 @@
-\ Main entry point for building the interactive Forth system for
-\ 32-bit little-endian ARM.
-
-REQUIRE preamble.ft
-host REQUIRE spaces.ft
-host REQUIRE system.ft
-host REQUIRE finalize.ft
-bye

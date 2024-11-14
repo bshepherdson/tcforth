@@ -235,13 +235,12 @@ TVARIABLE var_handler
 
 \ TODO: The input system is not necessary on non-interactive systems like GBA!
 \ I'm leaving it in for now for simpler compilation.
-data-space @ CONSTANT var_last_parse   config instr-width @   2* tdata-allot
-data-space @ CONSTANT var_source       config instr-width @   2* tdata-allot
+data-space @ CONSTANT var_last_parse   2 tcells tdata-allot
+data-space @ CONSTANT var_source       2 tcells tdata-allot
 TVARIABLE var_in_ptr
 TVARIABLE var_source_id
 
 data-space @ CONSTANT input-buf   128 tdata-allot
-
 
 
 label dp-indirect   var_dp asm,

@@ -114,17 +114,49 @@ test-mocha86k: forth-mocha86k.bin test.disk test-long.dcs FORCE
 
 # ARMv7 32-bit (bare metal) ==================================================
 forth-arm.bin: host/*.ft arm/*.ft shared/*.ft
-	$(FORTH) arm/main.ft -e bye
+	$(FORTH) arm/preamble.ft -e "' spaces::single IS default-spaces!" \
+		arm/system.ft -e 'host :noname S" $@" ; IS tcforth-output' \
+		arm/finalize.ft -e 'bye'
 
-arm: forth-arm.bin
+forth-arm-separate.bin: host/*.ft arm/*.ft shared/*.ft
+	$(FORTH) arm/preamble.ft -e "' spaces::separate IS default-spaces!" \
+		arm/system.ft -e 'host :noname S" $@" ; IS tcforth-output' \
+		arm/finalize.ft -e 'bye'
+
+forth-arm-copying.bin: host/*.ft arm/*.ft shared/*.ft
+	$(FORTH) arm/preamble.ft -e "' spaces::copying IS default-spaces!" \
+		arm/system.ft -e 'host :noname S" $@" ; IS tcforth-output' \
+		arm/finalize.ft -e 'bye'
+
+arm: forth-arm.bin forth-arm-separate.bin forth-arm-copying.bin
 run-arm: forth-arm.bin
-	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel forth-arm.bin
+	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel $<
+run-arm-separate: forth-arm-separate.bin
+	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel $<
+run-arm-copying: forth-arm-copying.bin
+	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel $<
 
-forth-arm-tests.bin: host/*.ft arm/*.ft shared/*.ft test.disk
-	$(FORTH) arm/main-test.ft
+forth-arm-tests.bin: host/*.ft arm/*.ft shared/*.ft test/*.ft
+	$(FORTH) arm/preamble.ft -e "' spaces::single IS default-spaces!" \
+		arm/system.ft -e 'host :noname S" $@" ; IS tcforth-output' \
+		arm/embedding.ft arm/finalize.ft -e 'bye'
+
+forth-arm-separate-tests.bin: host/*.ft arm/*.ft shared/*.ft test/*.ft
+	$(FORTH) arm/preamble.ft -e "' spaces::separate IS default-spaces!" \
+		arm/system.ft -e 'host :noname S" $@" ; IS tcforth-output' \
+		arm/embedding.ft arm/finalize.ft -e 'bye'
+
+forth-arm-copying-tests.bin: host/*.ft arm/*.ft shared/*.ft test/*.ft
+	$(FORTH) arm/preamble.ft -e "' spaces::copying IS default-spaces!" \
+		arm/system.ft -e 'host :noname S" $@" ; IS tcforth-output' \
+		arm/embedding.ft arm/finalize.ft -e 'bye'
 
 test-arm: forth-arm-tests.bin test.disk FORCE
-	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel forth-arm-tests.bin
+	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel $<
+test-arm-separate: forth-arm-separate-tests.bin test.disk FORCE
+	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel $<
+test-arm-copying: forth-arm-copying-tests.bin test.disk FORCE
+	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel $<
 
 # Commodore 64 ===============================================================
 forth-c64.prg: host/*.ft 6502/*.ft shared/*.ft
@@ -143,7 +175,8 @@ test-c64: forth-c64-test.prg FORCE
 
 # Top level ==================================================================
 test: test-dcpu16 test-dcpu16-separate test-dcpu16-copying \
-	test-rq16 test-mocha86k test-arm test-c64 FORCE
+	test-rq16 test-rq16-separate test-rq16-copying \
+	test-mocha86k test-arm test-c64 FORCE
 
 clean: FORCE
 	rm -f *.bin forth-c64.prg test.disk serial.in serial.out

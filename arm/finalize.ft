@@ -1,6 +1,9 @@
 \ Final file that goes last in the process.
 \ This sets Target's LATEST and DP properly.
 host definitions
+
+config data-indirect? @ [IF] prepare-data-initializers [THEN]
+
 \ This needs to be the last lines in the target compilation.
 host latest         latest0 tcode!
 host data-space @   dp0     tcode!

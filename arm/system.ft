@@ -1,4 +1,6 @@
 \ Metacompilation ============================================================
+?default-spaces
+
 REQUIRE assembler.ft    ?stack-clear
 host REQUIRE model.ft   ?stack-clear
 host REQUIRE ../host/dictionary.ft
@@ -6,7 +8,8 @@ host REQUIRE ../host/mirrors.ft
 
 \ Now we have what we need to metacompile the CODE definitions at the heart of
 \ the new kernel.
-host REQUIRE kernel.ft   ?stack-clear
+host definitions REQUIRE kernel.ft   ?stack-clear
+
 host REQUIRE startup.ft  ?stack-clear
 
 \ The main part of the metacompiler

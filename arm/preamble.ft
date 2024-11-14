@@ -4,15 +4,12 @@
 REQUIRE ../host/vocabularies.ft
 REQUIRE ../host/helpers.ft
 
+host definitions
 
 \ Metacompiler configuration =================================================
 host REQUIRE ../host/configuration.ft
 
 interactive-forth!
-
-\ Optional: separate spaces
-\ separate-spaces!
-\ config data-space-blank? ON
 
 \ 32-bit, byte addressable, little-endian.
 8    config char-bits    !
@@ -21,3 +18,37 @@ interactive-forth!
 4    config alignment    !
 
 config little-endian?   ON
+
+
+\ Target spaces ==============================================================
+REQUIRE ../host/spaces.ft
+
+\ Since the spaces are mixed, that relocated all of them together.
+
+\ Optional: separate spaces
+\ $80000   name-space ORG!
+\ $80000 $10000 -   name-space space>offset !
+\
+\ $2000000 data-space ORG!
+
+: spaces::single ( -- )
+  single-space!
+
+  \ The QEMU ARM system loads the user code at $10000.
+  $10000   code-space ORG! ;
+
+: spaces::separate ( -- )
+  config data-indirect?  ON
+  config names-indirect? ON
+
+  split-spaces!
+  $10000 code-space ORG!   $0000           code-space space>offset !
+  $40000 name-space ORG!   $40000 $10000 - name-space space>offset !
+  $80000 data-space ORG!   $80000 $10000 - data-space space>offset ! ;
+
+: spaces::copying ( -- )
+  spaces::separate
+  data-space space>init-copy? ON
+  -1   data-space space>offset ! ;
+
+' spaces::single IS default-spaces!

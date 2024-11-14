@@ -612,4 +612,3 @@ label main
   pop   tos setl,           \ And pop into TOS, fixing the off-by-one-cell SP0
   0 # iaqw,                 \ Enable interrupts again
   entry-point [#] pc setl,  \ Jump to the code field of the starter word COLD.
-

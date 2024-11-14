@@ -10,10 +10,9 @@ host REQUIRE ../host/mirrors.ft
 
 \ Now we have what we need to metacompile the CODE definitions at the heart of
 \ the new kernel.
-host definitions REQUIRE kernel.ft
+host definitions REQUIRE kernel.ft ?stack-clear
 
 \ The main part of the metacompiler
-?stack-clear
 host REQUIRE ../host/metacompiler.ft
 
 \ Now an interleaved dance of shared and target-specific metacompiled code.

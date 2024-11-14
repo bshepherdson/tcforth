@@ -27,7 +27,7 @@ target : ,DOCOL ( -- ) [ host docol tliteral target ] ,CF ;
 host config data-indirect? @ [IF]
   target : ,PFA ( -- ) here cell+ , ;
 host [ELSE]
-  target : ,PFA     ( -- ) ;
+  target : ,PFA ( -- ) ;
 host [THEN]
 
 target : ,xt-slot ( -- ) ,pfa ;
@@ -54,20 +54,20 @@ target : NAME>STRING ( nt -- c-addr u )
 
 target : >CFA    ( nt -- xt )
   name>string + aligned
-  [ host config mix-code-and-name? @ 0= [IF] target ] @ [ host [THEN] target ] ;
+  [ host config names-indirect? @ [IF] target ] @ [ host [THEN] target ] ;
 
-host config mix-code-and-name? @ [IF]
-target : /NAME-FIELD ( -- u ) 0 ;
-host [ELSE]
+host config names-indirect? @ [IF]
 target : /NAME-FIELD ( -- u ) 1 cells ;
+host [ELSE]
+target : /NAME-FIELD ( -- u ) 0 ;
 host [THEN]
 
 \ If the data and code spaces are combined, the body follows the codeword.
 \ If separated, there's a pointer to data space just after the codeword.
-host config mix-code-and-data? @ [IF]
-target : >BODY ( xt -- addr ) cell+ ;
-host [ELSE]
+host config data-indirect? @ [IF]
 target : >BODY ( xt -- addr ) cell+ @ ;
+host [ELSE]
+target : >BODY ( xt -- addr ) cell+ ;
 host [THEN]
 
 \ Compiles a string literal into a thread.

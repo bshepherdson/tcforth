@@ -138,6 +138,9 @@ target : ?NUMBER ( c-addr u -- n true | false )
     drop 2drop R> drop R> base ! 0
   THEN ;
 
+host presume .
+host presume hex.
+
 \ Interprets a single parsed word or number.
 target : INTERP1   ( c-addr u -- )
   2dup last-parse 2!

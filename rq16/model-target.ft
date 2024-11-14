@@ -36,10 +36,19 @@ target : ,DOSTRING ( c-addr u -- )
 target : ALIGNED ;
 target : ALIGN ; host acts: ;
 
+\ Parallel to the host dictionary, words for accessing the name and the code
+\ field address.
+\ NOTE: This is actually portable but since it fits right here between ALIGNED
+\ and (DOES>), there's no good place to put it with splitting this file into 3.
+\ TODO: As noted on ALIGNED, with the new configuration this *could* be moved to
+\ somewhere portable!
+target : NAME>STRING ( nt -- c-addr u )
+  cell+ dup char+ swap c@ [ host mask_len tliteral target ] and ;
+
 \ This is actually portable but since it fits right here between ALIGNED and
 \ (DOES>), there's no good place to put it with splitting this file into 3.
 target : >CFA ( nt -- xt )
-  cell+ dup c@ [ host mask_len tliteral target ] and + char+ aligned
+  name>string + aligned
   [ host config names-indirect? @ [IF] target ] @ [ host [THEN] target ] ;
 
 host config names-indirect? @ [IF]

@@ -198,18 +198,24 @@ code BREAK ( n -- )
 end-code
 
 
+\ Variables and core states ==================================================
+\ Values in ROM giving the initial LATEST and DP.
+label dp0       0 asm,
+label latest0   0 asm,
 
-label var_dp          0 asm,
-label var_latest      0 asm,
-label var_base        0 asm,
-label var_state       0 asm,
-label var_handler     0 asm,
+TVARIABLE var_dp
+TVARIABLE var_latest
+TVARIABLE var_base
+TVARIABLE var_state
+TVARIABLE var_handler
 
-label var_last_parse  0 asm, 0 asm,
-label var_source      0 asm, 0 asm,
-label var_in_ptr      0 asm,
-label var_source_id   0 asm,
-label input-buf       128 tcode-allot
+data-space @ CONSTANT var_last_parse   2 tcells tdata-allot
+data-space @ CONSTANT var_source       2 tcells tdata-allot
+TVARIABLE var_in_ptr
+TVARIABLE var_source_id
+
+data-space @ CONSTANT input-buf   128 tdata-allot
+
 
 code DP
   var_dp # push set,

@@ -7,7 +7,7 @@
 \ mirror words are regular.
 \ A code definition is the (TCREATE) header plus a code word that points just
 \ after itself.
-: code      ( "name" -- ) (TCREATE) here tcell+ tcode, ;
+: code      ( "name" -- ) (TCREATE) code-space @ tcell+ tcode, ;
 : end-code  ( -- )        next, ;
 \ End marker, but no NEXT.
 : end-code-bare ( -- ) ;
@@ -183,11 +183,11 @@ end-code
 
 \ C@ and C! are identical to @ and ! - just borrow their codewords.
 code C@
-  @-code   here 1 tcells -   tcode!
+  @-code   code-space @ 1 tcells -   tcode!
 end-code-bare
 
 code C!
-  !-code   here 1 tcells -   tcode!
+  !-code   code-space @ 1 tcells -   tcode!
 end-code-bare
 
 \ These store hi, lo in memory, but push as ( lo hi ) double-words.
@@ -235,17 +235,23 @@ end-code
 
 
 \ Variables and core states ==================================================
-label var_dp          0 asm,
-label var_latest      0 asm,
-label var_base        0 asm,
-label var_state       0 asm,
-label var_handler     0 asm,
+\ Values in ROM giving the initial LATEST and DP.
+label dp0       0 asm,
+label latest0   0 asm,
 
-label var_last_parse  0 asm, 0 asm,
-label var_source      0 asm, 0 asm,
-label var_in_ptr      0 asm,
-label var_source_id   0 asm,
-label input-buf       128 tcode-allot
+TVARIABLE var_dp
+TVARIABLE var_latest
+TVARIABLE var_base
+TVARIABLE var_state
+TVARIABLE var_handler
+
+data-space @ CONSTANT var_last_parse   2 tcells tdata-allot
+data-space @ CONSTANT var_source       2 tcells tdata-allot
+TVARIABLE var_in_ptr
+TVARIABLE var_source_id
+
+data-space @ CONSTANT input-buf   128 tdata-allot
+
 
 code DP
   var_dp lit,
@@ -430,7 +436,7 @@ end-code
 code EXIT
   \ Get the target XT for EXIT and stash it in a forward reference.
   \ It's actually 1 earlier because of the codeword.
-  here 1- 'EXIT !
+  code-space @ 1- 'EXIT !
   ip poprsp,
 end-code
 

@@ -1,8 +1,0 @@
-\ Unified entry point for building the interactive Forth system on Risque-16.
-
-REQUIRE preamble.ft
-host REQUIRE spaces.ft
-host REQUIRE system.ft
-host REQUIRE ../dcpu16/disks.ft
-host REQUIRE finalize.ft
-bye

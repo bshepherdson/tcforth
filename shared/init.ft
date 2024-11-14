@@ -29,6 +29,11 @@ target : QUIT ( -- )
   (QUIT) ( TODO: BYE ) ;
 
 
+target : INIT-DATA-PTRS ( -- )
+  [ host latest0 tliteral target ] @ [ host var_latest tliteral target ] !
+  [ host dp0     tliteral target ] @ [ host var_dp     tliteral target ] ! ;
+
+
 host config data-indirect? @ [IF]
 \ Copy initialized data ======================================================
 host definitions
@@ -59,15 +64,17 @@ target definitions
   [ host initializers tliteral target ] @ BEGIN ?dup WHILE
     dup 3 cells +   over dup cell+ @   swap 2 cells + @ move
     @
-  REPEAT ;
+  REPEAT
+  \ This has to go after the above, so the correct values are written in.
+  init-data-ptrs ;
 
 host [ELSE]
 \ Nothing to copy ============================================================
 \ With an initialized data space, there's nothing to do here.
 target definitions
-: init-data ( -- ) ;
+: init-data ( -- ) init-data-ptrs ;
 
-host [THEN] target
+host [THEN] target definitions
 
 \ Basic startup
 : boot  ( -- ) init-data   init-hardware   10 base ! ;

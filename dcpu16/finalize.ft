@@ -5,7 +5,7 @@ host definitions
 config data-indirect? @ [IF] prepare-data-initializers [THEN]
 
 \ This needs to be the last lines in the target compilation.
-host latest        var_latest tcode!
-host data-space @      var_dp tcode!
+host latest        latest0 tcode!
+host data-space @      dp0 tcode!
 
 host tcforth-output dump-forth

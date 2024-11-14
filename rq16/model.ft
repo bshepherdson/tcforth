@@ -8,9 +8,8 @@ host definitions
 0     CONSTANT rp0
 $ff7f CONSTANT sp0 \ This is the value to literally write to SP for an empty stack.
 
-code-space CONSTANT DP
-: here dp @ ;
-0 dp !
+: HERE ( -- ) 99 throw ;
+: DP   ( -- ) 98 throw ;
 
 \ Registers ==================================================================
 \ SP is data stack pointer
@@ -133,7 +132,7 @@ VARIABLE 'EXIT   \ These get populated later.
 
 : DOES, ( -- 'dodoes-code )
   '(DOES>) @ tcode,   'EXIT @ tcode,
-  here
+  code-space @
   \ On entering here, r0 is the parameter field address, and the thread follows
   \ after this code.
   pfa->tos,

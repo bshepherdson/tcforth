@@ -62,14 +62,40 @@ test-dcpu16-copying: forth-dcpu16-copying.bin test.disk test.dcs FORCE
 # Risque-16 ==================================================================
 # My RISC-style, Thumb-inspired "competitor" in the DCPU cinematic universe.
 forth-rq16.bin: host/*.ft rq16/*.ft shared/*.ft dcpu16/*.ft
-	$(FORTH) rq16/main.ft
+	$(FORTH) rq16/preamble.ft \
+		-e "' spaces::single IS default-spaces!" \
+		rq16/system.ft dcpu16/disks.ft \
+		-e 'host :noname S" $@" ; IS tcforth-output' \
+		rq16/finalize.ft -e 'bye'
 
-rq16: forth-rq16.bin
+forth-rq16-separate.bin: host/*.ft rq16/*.ft shared/*.ft dcpu16/*.ft
+	$(FORTH) rq16/preamble.ft \
+		-e "' spaces::separate IS default-spaces!" \
+		rq16/system.ft dcpu16/disks.ft \
+		-e 'host :noname S" $@" ; IS tcforth-output' \
+		rq16/finalize.ft -e 'bye'
+
+forth-rq16-copying.bin: host/*.ft rq16/*.ft shared/*.ft dcpu16/*.ft
+	$(FORTH) rq16/preamble.ft \
+		-e "' spaces::copying IS default-spaces!" \
+		rq16/system.ft dcpu16/disks.ft \
+		-e 'host :noname S" $@" ; IS tcforth-output' \
+		rq16/finalize.ft -e 'bye'
+
+rq16: forth-rq16.bin forth-rq16-separate.bin forth-rq-copying.bin
 run-rq16: forth-rq16.bin
-	$(EMULATOR) -arch rq -disk $(DCPU_DISK) forth-rq16.bin
+	$(EMULATOR) -arch rq -disk $(DCPU_DISK) $<
+run-rq16-separate: forth-rq16-separate.bin
+	$(EMULATOR) -arch rq -disk $(DCPU_DISK) $<
+run-rq16-copying: forth-rq16-copying.bin
+	$(EMULATOR) -arch rq -disk $(DCPU_DISK) $<
 
 test-rq16: forth-rq16.bin test.disk test.dcs FORCE
-	$(EMULATOR) -arch rq -turbo -disk test.disk -script test.dcs forth-rq16.bin
+	$(EMULATOR) -arch rq -turbo -disk test.disk -script test.dcs $<
+test-rq16-separate: forth-rq16-separate.bin test.disk test.dcs FORCE
+	$(EMULATOR) -arch rq -turbo -disk test.disk -script test.dcs $<
+test-rq16-copying: forth-rq16-copying.bin test.disk test.dcs FORCE
+	$(EMULATOR) -arch rq -turbo -disk test.disk -script test.dcs $<
 
 # Mocha 86k ==================================================================
 # My 32-bit big brother to the DCPU-16.

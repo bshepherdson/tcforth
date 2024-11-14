@@ -1,15 +1,7 @@
 target definitions
 
-\ TODO: This should be generic - any system with separated data will have to do
-\ this kind of indirection.
-: init-data-ptrs ( -- )
-  [ host latest0    tliteral target ] @
-  [ host var_latest tliteral target ] !
-  [ host dp0        tliteral target ] @
-  [ host var_dp     tliteral target ] ! ;
-
 : init-hardware ( -- )
-  init-data-ptrs init-serial ;
+  init-serial ;
 
 \ There's no shutdown hardware signal on the VersatilePB board!
 \ This approximates it by sending "(bye) - C-a x to quit QEMU" and spinning.

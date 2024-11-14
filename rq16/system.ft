@@ -1,4 +1,5 @@
 \ Risque-16 code =============================================================
+?default-spaces
 REQUIRE assembler.ft
 
 host REQUIRE model.ft                      \ Machine-specific model words

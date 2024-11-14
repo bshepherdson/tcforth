@@ -181,7 +181,8 @@ test-c64: forth-c64-test.prg FORCE
 # Top level ==================================================================
 test: test-dcpu16 test-dcpu16-separate test-dcpu16-copying \
 	test-rq16 test-rq16-separate test-rq16-copying \
-	test-mocha86k test-arm test-c64 FORCE
+	test-arm test-arm-separate test-arm-copying \
+	test-c64 test-mocha86k FORCE
 
 clean: FORCE
 	rm -f *.bin forth-c64.prg test.disk serial.in serial.out

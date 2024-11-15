@@ -12,10 +12,12 @@ host REQUIRE ../host/configuration.ft
 interactive-forth!
 16   config char-bits   !
 1    config cell-width  !
+1    config /codeword   ! \ Indirect threading
 1    config instr-width !
 1    config alignment   !
 
 config little-endian? OFF
+config threaded?      ON
 
 
 \ Target spaces ==============================================================

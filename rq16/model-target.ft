@@ -5,66 +5,19 @@
 \ ,DOCOL is already defined.
 target definitions
 
-\ Add ,CF, which expects the address of the codeword on the stack.
-\ For ITC this is , to compile the target address.
+\ Add !CF and ,CF, which expects the address of the codeword on the stack,
+\ and store or compile it respectively.
+\ For ITC these are simply ! and , to compile the target address.
+target : !CF ( codeword-addr xt -- ) ! ;
 target : ,CF ( codeword-addr -- ) , ;
 
 \ Write the code field for a colon definition.
 \ In ITC this means the address of DOCOL.
 target : ,DOCOL ( -- ) [ host docol tliteral target ] ,CF ;
 
-host config data-indirect? @ [IF]
-  target : ,PFA ( -- ) here cell+ , ;
-host [ELSE]
-  target : ,PFA ( -- ) ;
-host [THEN]
-
-target : ,xt-slot ( -- ) ,pfa ;
-
-target : LITERAL ( C: x --    X: -- x ) [ host lit tliteral target ] compile, , ; IMMEDIATE
-  host acts: tliteral ; IMPERATIVE
-
-\ Compiles a string literal into a thread.
-\ On ITC/DTC that means the address of DOSTRING, the length, then the words.
-target : ,DOSTRING ( c-addr u -- )
-  [ host dostring tliteral target ] compile,   \ Compile the codeword first.
-  dup >R c,        \ Then the length
-  here R@ move     \ And the text
-  R> chars allot ; \ And make room for it.
-
-\ No alignment on Risque-16 and other wordy machines.
-target : ALIGNED ;
-target : ALIGN ; host acts: ;
-
-\ Parallel to the host dictionary, words for accessing the name and the code
-\ field address.
-\ NOTE: This is actually portable but since it fits right here between ALIGNED
-\ and (DOES>), there's no good place to put it with splitting this file into 3.
-\ TODO: As noted on ALIGNED, with the new configuration this *could* be moved to
-\ somewhere portable!
-target : NAME>STRING ( nt -- c-addr u )
-  cell+ dup char+ swap c@ [ host mask_len tliteral target ] and ;
-
-\ This is actually portable but since it fits right here between ALIGNED and
-\ (DOES>), there's no good place to put it with splitting this file into 3.
-target : >CFA ( nt -- xt )
-  name>string + aligned
-  [ host config names-indirect? @ [IF] target ] @ [ host [THEN] target ] ;
-
-host config names-indirect? @ [IF]
-target : /NAME-FIELD ( -- u ) 1 cells ;
-host [ELSE]
-target : /NAME-FIELD ( -- u ) 0 ;
-host [THEN]
-
-host config data-indirect? @ [IF]
-target : >BODY ( xt -- addr ) 2 cells + @ ;
-host [ELSE]
-target : >BODY ( xt -- addr ) 2 cells + ;
-host [THEN]
-
-
 target : PAD ( -- addr ) $fb00 ;
+
+host REQUIRE ../shared/model-target.ft
 
 \ DOES> ======================================================================
 \ Implementing sequence 2
@@ -72,11 +25,6 @@ target : PAD ( -- addr ) $fb00 ;
 \ Inside target (DOES>), TORS points at the EXIT. Just after it is the
 \ dodoes-code that should become the new codeword.
 \ This is easy in ITC.
-target : (DOES>) R@ cell+   latest >cfa   ! ;
-
-host T' (DOES>) '(DOES>) !
-host T' EXIT    'EXIT !
-
 \ Runs during compilation TARGET : DOES> - compile code into its thread!
 host definitions
 

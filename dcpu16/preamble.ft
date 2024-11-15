@@ -12,10 +12,12 @@ host REQUIRE ../host/configuration.ft \ Default interactive is fine.
 interactive-forth!
 16    config char-bits    !
 1     config cell-width   !
+2     config /codeword    ! \ JSR + address
 1     config instr-width  !
 1     config alignment    !
 
 config little-endian?   OFF
+config threaded?        ON
 
 \ XXX: Playing with separate spaces.
 \ separate-spaces!

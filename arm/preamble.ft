@@ -14,7 +14,6 @@ interactive-forth!
 \ 32-bit, byte addressable, little-endian.
 8    config char-bits    !
 4    config cell-width   !
-\ TODO: Add this parameter to the other ones.
 4    config /codeword    !
 4    config instr-width  !
 4    config alignment    !

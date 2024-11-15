@@ -21,8 +21,10 @@ begin-structure configuration
   field: char-bits
   field: cell-width      \ In target address units
   field: instr-width
+  field: /codeword       \ In target address units
   field: alignment       \ Alignment of a target cell, in target address units.
   field: little-endian?
+  field: threaded?       \ True for threaded code, ie. DTC and ITC.
 end-structure
 
 configuration allocate drop CONSTANT config

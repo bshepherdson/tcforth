@@ -14,6 +14,7 @@ interactive-forth!
 8   config char-bits   !
 2   config cell-width  !
 1   config instr-width !
+3   config /codeword   !
 1   config alignment   !
 
 config little-endian? ON

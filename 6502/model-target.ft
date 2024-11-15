@@ -5,6 +5,9 @@
 \ ,DOCOL is already defined.
 target definitions
 
+\ JSR $1234 is   $20 $34 $12
+target : !CF ( codeword-addr xt -- ) $20 over c!   char+ ! ;
+
 \ Add ,CF which expects the address of the codeword on the stack.
 \ For STC this is compile, it must JSR $abs to the codeword.
 target : ,CF ( codeword-addr -- ) compile, ;
@@ -13,15 +16,8 @@ target : ,CF ( codeword-addr -- ) compile, ;
 \ In STC this is empty, so this word is a no-op.
 target : ,DOCOL ( -- ) ;
 
-host config data-indirect? @ [IF]
-  target : ,PFA ( -- ) here cell+ , ;
-host [ELSE]
-  target : ,PFA ( -- ) ;
-host [THEN]
-
-target : ,xt-slot ( -- ) ,pfa ;
-
 \ Writes code such that this literal will be pushed during execution.
+\ There's a portable version for threaded code.
 target : LITERAL ( C: x --    X: -- x )
     \ DEX DEX     = $caca
     [ host $caca tliteral target ] ,
@@ -36,48 +32,16 @@ target : LITERAL ( C: x --    X: -- x )
     [ host $0095 tliteral target ] , ; IMMEDIATE
   host acts: tliteral ; IMPERATIVE
 
-\ Compiles a string literal into a thread.
-\ On STC that means a jump to DOSTRING, the length, then the words.
-target : ,DOSTRING ( c-addr u -- )
-  [ host (dostring) tliteral target ] compile,   \ Compile the codeword first.
-  dup >R c,        \ Then the length
-  here R@ move     \ And the text
-  R> chars allot ; \ And make room for it.
-
-\ For STC, this is an IMMEDIATE word that compiles an RTS.
-target : EXIT [ host $60 tliteral target ] c, ; IMMEDIATE
-  host acts: $60 tcode-c, ; IMPERATIVE
-
-\ No alignment on 6502.
-target : ALIGNED ; host acts: ;
-target : ALIGN ; host acts: ;
-
-
-
-target : NAME>STRING ( nt -- c-addr u )
-  cell+ dup char+ swap c@ [ host mask_len tliteral target ] and ;
-
-\ This is actually portable but since it fits right here between ALIGNED and
-\ (DOES>), there's no good place to put it with splitting this file into 3.
-target : >CFA ( nt -- xt )
-  name>string + aligned
-  [ host config names-indirect? @ [IF] target ] @ [ host [THEN] target ] ;
-
-host config names-indirect? @ [IF]
-target : /NAME-FIELD ( -- u ) 1 cells ;
-host [ELSE]
-target : /NAME-FIELD ( -- u ) 0 ;
-host [THEN]
-
-host config data-indirect? @ [IF]
-target : >BODY ( xt -- addr ) 3 + @ ;
-host [ELSE]
-target : >BODY ( xt -- addr ) 3 + ;
-host [THEN]
-
-
+\ NOTE: This is per-thread, too!
 \ TODO: Figure out a more coherent memory map - where should I put the PAD?
 target : PAD ( -- addr ) $7800 ;
+
+host REQUIRE ../shared/model-target.ft
+
+\ For STC, this is an IMMEDIATE word that compiles an RTS.
+\ PORT: STC only, and the code compiled is machine-specific.
+target : EXIT [ host $60 tliteral target ] c, ; IMMEDIATE
+  host acts: $60 tcode-c, ; IMPERATIVE
 
 \ DOES> ======================================================================
 \ Implementing sequence 2
@@ -90,17 +54,10 @@ target : PAD ( -- addr ) $7800 ;
 \ ie. just before the RTS. We want it to point just after it, hence the 2+.
 \ Similarly, >CFA returns the address of the JSR opcode; 1+ that to get the
 \ destination address that needs overwriting.
-target : (DOES>) R@ cell+   latest >cfa 1+   ! ;
 
-host T' (DOES>) '(DOES>) !
 
 \ Runs during compilation TARGET : DOES> - compile code into its thread!
 host definitions
-
-\ Moves THERE back by u and pushes the most recently compiled words onto the
-\ stack (low address first).
-: asm-lit ( u -- w ... )
-  dup negate tcode-allot   0 DO code-space @ i + tcode@ LOOP ;
 
 \ Compiles code that will itself compile an exit.
 \ Runs while assembling ; for example.
@@ -109,13 +66,11 @@ host definitions
   $60 tliteral  [T'] c, tcompile, ;
 
 \ Runs during compilation TARGET : DOES> - compile code into its thread!
-
 code-space @
 pfa->tos,
 code-space @
 CONSTANT pfa-tos-code-top
 CONSTANT pfa-tos-code
-
 
 : TDOES,
   [T'] (DOES>) tliteral  [T'] compile, tcompile,
@@ -135,19 +90,3 @@ CONSTANT pfa-tos-code
   \ Which is 13B per word that DOES>, eg. CONSTANT, etc.
   \ It's slower and more complicated to JSR to a routine for this, since it
   \ covers the PFA on the stack.
-
-\ Early library code =========================================================
-\ A few Forth implementations of core words that aren't worth the space on a
-\ small machine.
-target definitions
-target : 2@ ( addr -- [addr+2] [addr] ) dup cell+ @   swap @ ;
-target : 2! ( [addr+2] [addr] addr -- ) swap over ! cell+ ! ;
-target : negate invert 1+ ;
-
-target : D>S drop ;
-target : UDM* ( l1 h1 u2 -- l3=l1*u2_lo h3=l1*u2_hi_+_h1*u2_lo )
-  tuck UM* D>S >R ( l1 u2             R: h1*u2_lo )
-  UM*             ( l1*u2_lo l1*u2_hi R: h1*u2_lo )
-  R> + ;
-
-\ TODO: Implement debugging helpers.

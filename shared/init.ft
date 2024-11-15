@@ -84,12 +84,4 @@ host [THEN] target definitions
 
 host   T' COLD   entry-point tcode!
 
-\ START HERE: Not sure how I broke ARM, but it's not working.
-\ Fix it, then set up the Makefile to test all three forms.
-\ XXX: Current most noticeable issue is that name lookup is returning what
-\ appears to be an ARM `bl` instruction, $EBFFFE1B, rather than the *address*
-\ of such an instruction! Trouble in the model, something indirect-threading
-\ got in there!
-
-\ TODO: Loads of the model-target code is pretty samey, and could be shared with
-\ judicious use of config flags and conditional bits on the host side.
+\ XXX: START HERE - Port the DCPU-16 family to the new unified model-target.

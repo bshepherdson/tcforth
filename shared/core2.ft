@@ -13,7 +13,7 @@ target : (CREATE) ( "name" -- ) here latest ,   'latest !
     here swap ( src dst u )
     dup >R move> R> ( len )
     allot align
-    ,xt-slot ;
+    ,pfa ;
 
 host definitions
 \ Host-side CREATE, used by eg. : CONSTANT ... HOST ACTS: CREATE ... ;

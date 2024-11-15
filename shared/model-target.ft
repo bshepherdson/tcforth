@@ -1,0 +1,114 @@
+target definitions
+
+\ TODO: Much of this is about compiling Forth code, and therefore not needed
+\ on non-interactive targets.
+
+host config data-indirect? @ [IF]
+  target : ,PFA ( -- ) here cell+ , ;
+host [ELSE]
+  target : ,PFA ( -- ) ;
+host [THEN]
+
+\ If LITERAL was not defined, assume we want the standard non-STC version.
+host <T'> LITERAL 0= [IF]
+  \ Error: non-threaded code (eg. STC) should define a custom LITERAL!
+  config threaded? @ 0= [IF] 95 throw [THEN]
+  target : LITERAL ( C: x --    X: -- x )
+    [ host lit tliteral target ] compile, , ; IMMEDIATE
+    host acts: tliteral ; IMPERATIVE
+host [THEN]
+
+\ Alignment ==================================================================
+\ Only needed when the target alignment is > 1.
+host config alignment @ 1 > [IF]
+  target : ALIGNED
+      [ host config alignment @ 1- tliteral target ] +
+      [ host config alignment @ 1- tliteral target ] invert and ;
+    host acts:   taligned ;
+  target : ALIGN     here aligned dp ! ;
+    host acts:   data-space @   taligned   data-space ! ;
+host [ELSE]
+  target : ALIGNED ;
+    host acts: ;
+  target : ALIGN ;
+    host acts: ;
+host [THEN]
+
+
+\ Compiling string-likes =====================================================
+target : ,STRING ( c-addr u -- )
+  here char+ swap   ( src dst u )
+  dup c,            \ Compile the length
+  dup chars allot   \ Make space for the string
+  move align ;      \ Copy the string and realign DP.
+
+target : ,DOSTRING ( c-addr u -- )
+  [ host dostring tliteral target ] compile, \ Compile the codeword
+  ,string ;
+
+target : NAME>STRING ( nt -- c-addr u )
+  cell+ dup char+ swap c@ [ host mask_len tliteral target ] and ;
+
+target : >CFA ( nt -- xt )
+  name>string + aligned
+  [ host config names-indirect? @ [IF] target ] @ [ host [THEN] target ] ;
+
+\ PORT: Portable
+host config names-indirect? @ [IF]
+target : /NAME-FIELD ( -- u ) 1 cells ;
+host [ELSE]
+target : /NAME-FIELD ( -- u ) 0 ;
+host [THEN]
+
+\ PORT: Machine-specific - but it could be a config/model parameter, eg. /CODEWORD
+\ TODO: Set the /codeword in all targets!
+host config data-indirect? @ [IF]
+target : >BODY ( xt -- addr ) [ host config /codeword @ tliteral target ] + @ ;
+host [ELSE]
+target : >BODY ( xt -- addr ) [ host config /codeword @ tliteral target ] + ;
+host [THEN]
+
+
+\ DOES> ======================================================================
+\ Implementing sequence 2
+\ (DOES>) runs in eg. CONSTANT to properly compile a particular constant.
+\ Inside target (DOES>), TORS points at the RTS at the end of CONSTANT.
+\ Just after it is the dodoes-code that should become the new codeword.
+
+\ PORT: Lightly machine-dependent - Exactly where in the codeword field is the address?
+\ ARM actually has to inline it into a hand-rolled BL instruction. So standardize this as
+\ a machine-specific !CF and call it from here; that simplifies the DOES> stuff.
+target : (DOES>) R@ cell+   latest >cfa   !cf ;
+
+host definitions
+T' (DOES>) '(DOES>) !
+<T'> EXIT [IF] T' EXIT   'EXIT ! [THEN]
+
+
+\ Fallback Forth versions of lib code ========================================
+\ Usually these should be written in native code, but if not, these will take
+\ over. These are more compact but slower.
+target definitions
+
+host <T'> 2@ 0= [IF]
+target : 2@ ( addr -- [addr+2] [addr] ) dup cell+ @   swap @ ;
+host [THEN]
+
+host <T'> 2! 0= [IF]
+target : 2! ( [addr+2] [addr] addr -- ) swap over ! cell+ ! ;
+host [THEN]
+
+host <T'> negate 0= [IF] target : negate invert 1+ ; host [THEN]
+
+host <T'> D>S 0= [IF] target : D>S drop ; host [THEN]
+
+host <T'> UDM* 0= [IF]
+target : UDM* ( l1 h1 u2 -- l3=l1*u2_lo h3=l1*u2_hi_+_h1*u2_lo )
+  tuck UM* D>S >R ( l1 u2             R: h1*u2_lo )
+  UM*             ( l1*u2_lo l1*u2_hi R: h1*u2_lo )
+  R> + ;
+host [THEN]
+
+\ TODO: Implement debugging helpers.
+\ PORT: Can I make the debugging helpers portable too? I think they can at least
+\ be threading model portable.

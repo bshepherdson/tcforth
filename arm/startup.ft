@@ -1,20 +1,109 @@
-\ TODO Interrupt handling? The current system doesn't actually use them.
+\ Interrupt handling =========================================================
+\ ARM has 13 regular registers: r0 through r12.
+\ That includes all of the Forth registers!
+\ Only SP (r13) and LR (r14) are banked for the different modes.
+
+\ CPU Modes:
+\ usr - Classic; but I'm not using it.
+\ sys - "System" mode users the User registers but can do privileged things
+\ svc - Supervisor mode (Kernel mode, what we start in)
+\ mon - Monitor mode only exists with the security extensions
+\ abt - Abort mode is for memory errors
+\ und - Undefined mode is for bad instructions
+\ irq - IRQ mode for regular interrupts
+\ fiq - FIQ mode ("fast IRQ") has banked r8-r14, but it's not used here.
+
+\ During startup, we're in Supervisor mode, and we set up its stack.
+\ We should be setting up the other stack pointers too - we can force a change:
+\ mov sp, something
+\ mov r7, sp
+\ msr CPSR_c, #0xDF    - System mode
+\ mov sp, r7
+\ msr CPSR_c, #0xD3    - Supervisor mode
+
+\ mov r0, #0x10
+\ msr SPSR, r0
+\ ldr lr, =code
+
+
+\ It's not safe to run Forth code freely because it might be using scratch
+\ registers. We would have to be careful about how many we use.
+\ We use r0-r4, and r8-r12 for Forth, so those are what needs saving.
+
+\ An alternative approach is to hijack some core instruction in the Forth
+\ system to trigger the Forth interrupt handler.
+\ I think the best combo approach is to check the basics directly with assembly
+\ code: timers, serial input, VBlank.
+\ If they want to run Forth code, it's a simple bit of code to enable a task
+\ to run next.
+\ For a prompt PAUSE we can hijack the codeword of EXIT to a new word that
+\ does an EXIT and a (PAUSE) right after.
+
+label 'task0   task0     asm,
+label timer-intclr $101e200c asm, \ Set to 1 to clear the interrupt flag.
+
+TVARIABLE ticks
+label 'ticks ticks asm,
+
+\ TODO: Currently this assumes the only interrupt source is the timer.
 label interrupt-handler
-  code-space @ b,   \ Just spin, we're not really handling these.
+  {{ r0 r1 }} push,        \ Make some space for working in
+  timer-intclr  r0 ldr-pc,
+  1 #           r1 mov,
+  r0 []         r1 str,
+  'ticks        r0 ldr-pc, \ Pointer to address to ticks cell
+  r0 []         r1 ldr,    \ Load the tick count
+  1 #   r1      r1 add,    \ Increment it
+  r0 []         r1 str,    \ And write back
+  {{ r0 r1 }} pop,         \ Restore the registers
+  4 # lr  pc  S sub,       \ LR is 4 bytes too far for hardware reasons.
 
 
 \ Main =======================================================================
+label 'sp0     task0-sp0 asm,
+label 'rp0     task0-rp0 asm,
+
+\ IF01 mmmm
+\ These have the modes, plus IRQ + FIQ masking and the res1 bit.
+\ Use cpsr-int-enable to lock them again.
+$00d0 CONSTANT cpsr-mode-usr
+$00d2 CONSTANT cpsr-mode-irq
+$00d3 CONSTANT cpsr-mode-svc
+$00df CONSTANT cpsr-mode-sys
+
+$0080 CONSTANT cpsr-int-mask
+: cpsr-int-enable  ( cpsr -- cpsr' ) cpsr-int-mask invert and ;
+: cpsr-int-disable ( cpsr -- cpsr' ) cpsr-int-mask or ;
+
 \ Machine code entry point, jumped to be the first instructions.
 label main
   \ Starts with interrupts disabled.
-  rp0 # rsp mov,
-  'sp0  sp  ldr-pc,
+  \ We need to set up a Forth "kernel" task for interrupt handling.
+  \ Each ARM mode has its own SP, so we have to set them up ahead of time.
+  'task0         up ldr-pc,   \ Main Task -> UP
+
+  \ We use task0 as the IRQ stack pointer too; set that up now.
+  cpsr-mode-irq # cpsr msr,   \ Now in IRQ mode
+  up              sp   mov,   \ Setting its SP
+  cpsr-mode-sys # cpsr msr,   \ Now to System, (ie. User + privileges)
+
+  \ - Each target defines: task0, default/rs, default/ds, sp0 and rp0.
+  \ - The stack pointers are set here in main so we can execute Forth code.
+  \ - COLD calls INIT-MULTI on multitasking configs
+  \ - INIT-MULTI sets the stack sizes and LINK field.
+  'rp0          rsp ldr-pc,   \ Main RP0  -> rsp
+  trp0 # up [+] rsp str,      \           -> RP0 field
+  'sp0           sp ldr-pc,   \ Main SP0  -> sp:
+  tsp0 # up [+]  sp str,      \           -> SP0 field
 
   \ We need to pretend to do SP! which pops the new TOS off the stack.
   {{ tos }} pop,
   \ Then we overwrite TOS with a marker $deadbeef that helps indicate where the
   \ top of the stack is.
-  'deadbeef tos ldr-pc, \ Marker for debugging the stack.
+  'deadbeef  tos ldr-pc, \ Marker for debugging the stack.
+
+  cpsr-mode-sys cpsr-int-enable # r0 mov, \ System mode, interrupts on
+  r0 cpsr msr,
 
   entry-point r0 ldr-pc, \ entry-point is a variable holding an xt; xt -> r0
   r0 bx,                 \ Jump right into that word's code field.

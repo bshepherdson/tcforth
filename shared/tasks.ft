@@ -1,0 +1,305 @@
+\ Multitasking code!
+\ Only REQUIREd:
+\ (1) on targets that support it, and
+\ (2) when config multitasking? is true.
+target definitions
+
+\ XXX: The current definition is not safe for preemptive schemes!
+\ That would require words to disable and re-enable interrupts, which are
+\ machine-dependent and not defined yet.
+
+\ TODO: Consider task alignment - eg. on machines with caches it would be good
+\ to have the stacks aligned on eg. 64- or 256-byte boundaries for speed.
+
+\ User area ==================================================================
+
+\ Size of the user area. User updatable via UALLOT
+host t/user @   target VALUE /USER
+
+target : UALLOT ( delta -- offset ) /USER   tuck +   TO /USER ;
+  host acts: t/user @   tuck t/user +! ;
+
+target : USER ( "name" --    X: -- addr )
+    CREATE   1 cells uallot ,   DOES> @ up@ + ;
+  host acts: CREATE 1 tcells uallot tdata, ; \ No DOES> - can't call these on the host.
+
+\ XXX: This list has to be mirrored in host/mirrors.ft
+\ TODO: That sucks and I'm sure I can find a better approach.
+target : link      ( -- addr ) [ host tlink      tliteral target ] up@ + ;
+target : task-sp   ( -- addr ) [ host tsp        tliteral target ] up@ + ;
+target : /stack    ( -- addr ) [ host t/stack    tliteral target ] up@ + ;
+target : /rstack   ( -- addr ) [ host t/rstack   tliteral target ] up@ + ;
+target : /task     ( -- addr ) [ host t/task     tliteral target ] up@ + ;
+target : sp0       ( -- addr ) [ host tsp0       tliteral target ] up@ + ;
+target : rp0       ( -- addr ) [ host trp0       tliteral target ] up@ + ;
+target : task-code ( -- addr ) [ host ttask-code tliteral target ] up@ + ;
+target : pad       ( -- addr ) [ host tpad       tliteral target ] up@ + ;
+
+
+\ TODO: Implement UVALUE and UDEFER; currently not possible because there's no
+\ indirection of `TO`. Multiple codewords for CREATEd words?
+
+\ Gets the offset of a USER variable.
+target : USER' ( "name" -- offset ) ' >body @ ;
+
+\ Given an address in this task's user area, return the same address in
+\ another task's user area.
+target : 'S ( addr1 task -- addr2 ) up@ - + ;
+
+\ Task area ==================================================================
+target VARIABLE task-area
+
+\ Allots u address units in the task area; returning the address at the start.
+host config tasks-desc? @ [IF]
+  \ Downward-growing task area: task-area points at the most recent task.
+  target : task-allot ( u -- task ) negate task-area +!   task-area @ ;
+host [ELSE]
+  \ Upward-growing task area: points at next free byte.
+  target : task-allot ( u -- task ) task-area @ tuck +   task-area ! ;
+host [THEN]
+
+
+\ Task creation ==============================================================
+target : newtask* ( u-data u-return -- task )
+  2dup /user + +   dup task-allot >R ( u-data u-return size   R: task )
+  rot  /stack  R@ 's !
+  over /rstack R@ 's ! ( u-return size    R: task )
+  R@ +                 ( u-return top     R: task )
+  dup    rp0 R@ 's ! \ Write top as RP0
+  swap - sp0 R@ 's ! \ And top minus u-return as SP0 ( R: task )
+  \ Copy any more starter vars: BASE.
+  base @   base R@ 's !
+  R> ;
+
+\ Creates a new task with stacksize address units for *each* of its stacks.
+target : newtask ( stacksize -- task ) dup newtask* ;
+target : task ( stacksize "name" --    X: -- task ) newtask CONSTANT ;
+
+\ Returns the *data* stack size of the current task.
+target : stacksize ( -- u ) /stack @ ;
+
+target : stacksize* ( -- u-data u-return ) /stack @   /rstack @ ;
+
+
+\ Cooperative scheduling =====================================================
+\ Technically the multitasker starts disabled, and must be enabled with MULTI.
+\ It can be disabled with SINGLE.
+\ This is implemented by toggling whether PAUSE is the real (PAUSE) or NOOP.
+target DEFER pause
+' noop ' pause defer!
+
+target : MULTI  ( -- )
+  ['] (pause) ['] pause defer! ;
+target : SINGLE ( -- )
+  ['] noop    ['] pause defer! ;
+
+
+\ Given a task, find the task which points to it as its LINK.
+target : PREV-TASK ( task -- task )
+  dup BEGIN 2dup link @ <> UNTIL ( target prev ) nip ;
+
+\ Removes a target task from the round-robin ring of tasks.
+target : SLEEP ( task -- )
+  \ Detail: STOP needs SLEEP to preserve the LINK field of the target task.
+  dup link @   swap prev-task link ! ;
+
+\ SLEEPs the current task so it will not run again.
+\ Hands off to the next ready task like PAUSE.
+target : STOP ( -- ) up@ SLEEP   PAUSE ;
+
+\ WAKEs a task so it will run. The awakened task goes in the front of the queue,
+\ and this task immediately PAUSEs to let the new one run.
+target : WAKE ( task -- )
+  up@ link @   over link ! \ Current task's successor -> target successor.
+  up@ link !               \ Target task -> my successor
+  PAUSE ;
+
+
+\ Printing ===================================================================
+target : .task ( task -- )
+  >R
+  ." Task: " R@ hex. cr
+  ."      IP: " task-code R@ 's      hex. cr
+  ."  Thread: " task-code R@ 's
+      dup @ hex.   cell+ dup @ hex.   cell+ dup @ hex.   cell+ @ hex. cr
+  ."      SP: " task-sp   R@ 's @    hex. cr
+  ."   Stack: " sp0       R@ 's @    task-sp R@ 's @ ( sp0 sp )
+  over hex. dup hex. cr
+  2dup - 1 cells /   >R
+  DO i @   1 cells +LOOP   R>          ( x1 .. xn depth )
+  BEGIN ?dup WHILE swap hex. 1- REPEAT ( R: task )
+  cr R> drop ;
+
+
+\ Killing tasks ==============================================================
+\ In a system without GC, tasks are forever. Since this is a bare metal system
+\ we don't assume there's a virtual memory system or OS to handle that sort of
+\ thing. Still, this is a useful API, and something needs to happen when a task
+\ reaches the end of its xt.
+
+\ KILL-TASK is current equivalent to STOP - it removes the current task from
+\ the ring of running tasks, and PAUSEs to let the next task run.
+\ It will never run again unless it gets INITIATEd again with a new xt.
+\ Technically killing a task is stronger than stopping it, but that's not a
+\ major concern.
+target : KILL-TASK ( -- ) STOP ;
+
+\ Kicking off tasks ==========================================================
+\ Pushes a value to the stack of a task.
+target : >task ( x task -- )
+  [ host tsp tliteral target ] +   ( x 'sp )
+  -1 cells over +! \ Decrement the stack pointer ( x 'sp )
+  @ ! ;
+
+host config tos-in-reg? @ [IF]
+  target : tos>task ( task -- ) $deadbeef swap >task ;
+host [ELSE]
+  target : tos>task ( task -- ) drop ;
+host [THEN]
+
+
+target : (initiate) ( xt task -- task )
+  ." Top of (initiate) " hex.s cr
+  >R
+  sp0 R@ 's @   task-sp R@ 's ." sp0 -> sp: " hex.s cr ! \ Set the task's SP to its SP0.
+  link @        link    R@ 's ." link -> new link: " hex.s cr ! \ Current LINK becomes the new thread's LINK.
+  R@ link ." new link -> link: " hex.s cr !                     \ The LINK of the current task is the new one
+  R@ tos>task                   \ This is a no-op if TOS is not in a register
+  rp0 R@ 's @   R@ ." Pushing rp0 to task: " hex.s cr >task        \ Push RP0 into the task's stack
+  dp @                          \ Save DP so we can compile
+  task-code R@ 's   dp !        \ DP points to pseudothread
+  here R@ >task  ( xt dp )      \ It's also the starting IP
+  swap compile,   ['] kill-task compile, ( ) \ Pseudothread now ready!
+  dp !   R> ;
+
+\ The fundamental word to kick off a task.
+\ Task stacks need to have ( (user-tos) rsp ip ) in their stacks.
+\ So the process is:
+\ 1. Set up the data stack pointer for the task.
+\ 2. Push those 2 (or 3) values.
+\ 3. Compile the xt and kill-task into the pseudothread in the user area.
+target : initiate ( xt task -- )
+  (initiate) .task
+  pause ;
+
+
+\ Creating tasks =============================================================
+\ Here are DOES>-like ways to call INITIATE than with a literal xt and task ptr.
+
+\ Example usage:
+\ 64 cells TASK some-task
+\ : start-something   some-task ACTIVATE code for some-task ;
+
+\ The resulting thread for start-something looks like this:
+\ [ ... (ACTIVATE) EXIT   codeword   code for some-task ... ]
+\ (ACTIVATE) needs to push the xt = the address of the codeword.
+\ We already have the pieces of this since it resembles (DOES>).
+target : (ACTIVATE) ( task -- )
+  \ Get the implied xt. The TORS points at EXIT in the thread.
+  R@ [ host config /exit @ tliteral target ] + swap initiate ;
+
+
+target : ACTIVATE ( C: colon-sys1 -- colon-sys2    X: task -- )
+    \ NOTE: Runs during a : definition likes DOES> !
+    postpone (activate)
+    [ host EXIT-compile, target ]
+    postpone smudge
+    \ NOT switching back to compilation state.
+
+    ,docol       \ Compile a docol code field.
+    \ Keep compiling the rest.
+  ; IMMEDIATE
+\ On the host, the logic is basically the same.
+  host acts:
+    [T'] (activate) tliteral   [T'] compile, tcompile,
+    exit,   ,docol
+  ; IMPERATIVE
+
+
+\ TODO: Write (PASS) and PASS.
+\ (PASS) copies the stack values to the task, preserving the task in TOS; it
+\ is followed by (ACTIVATE) as normal.
+\ PASS compiles (PASS) then does ACTIVATE.
+
+target : INIT-MULTI ( -- )
+  [ host default/ds tliteral   default/rs tliteral   target ] ( /ds /rs )
+  /rstack !   /stack ! ( )
+  [ host /task0 tliteral target ] ( /task0 )
+
+  \ Initialize the task area: with descending tasks, it points at task0;
+  \ with ascending tasks, it points just after.
+  [ host task0 tliteral target ]   ( /task0 task0 )
+  [ host config tasks-desc? @ [IF] target ] nip [ host [ELSE] target ] + [ host [THEN] target ]
+  task-area !
+
+  up@ link ! ;  \ Link task0 to itself, since it's the only running task.
+
+
+\ Shelved idea: Smarter linked lists
+\ - Ready tasks form a circular queue.
+\ - If there's only one task, it points to itself in both directions.
+\ - There's no pointer for the current task; it's in UP!
+\ - If a task gets blocked eg. on a semaphore, it gets removed from the ready
+\   ring and added to the back of the semaphore's queue.
+\ - When a task gets unblocked on a semaphore, it gets removed and queued
+\   to run next.
+
+\ Doubly-linked lists ========================================================
+\ TODO: Put this in a separate library file; it's reusable.
+\ Also, it's commented out here because a simpler round-robin scheme is used
+\ instead.
+
+\ XXX: vvvvvv DISABLED CODE vvvvvv
+host 0 [IF]
+
+\ The cells are stored [ next prev ], so 2@ yields ( prev next )
+\ Make prev come before next and next after previous.
+target : xlink ( prev next -- ) 2dup cell+ !   swap ! ;
+
+\ Enqueue to the back.
+target : q+ ( new-node node -- )
+  \ Fetch the previous node, and make it come before the new one.
+  2dup cell+ @ swap xlink ( new-node node )
+  xlink ( ) ;
+
+\ Enqueue to the front.
+target : +q ( new-node node -- )
+  \ Fetch the next node, make it the next of the new node.
+  2dup @ xlink
+  \ Then make the current node the prev of the new one.
+  swap   xlink ;
+
+\ Makes a node into a circular queue of length 1.
+target : encircle ( node -- ) dup dup 2! ;
+
+\ "Duck" out of the queue - makes the prev and next nodes into neighbours.
+\ Makes this item into its own neighbours.
+\ Note that if this is a queue of 1, it gets linked to itself.
+\ But that's exactly how it was about to go anyway!
+target : duck ( node -- ) dup cell+ @   over @ xlink   encircle ;
+
+host [THEN]
+\ XXX: ^^^^^^ DISABLED CODE ^^^^^^
+
+
+
+\ Semaphores =================================================================
+\ For now, these busy-wait + PAUSE on a cell being 0 or not.
+\ If it's 0, you keep waiting; if it's nonzero, decrement it and continue.
+\ When you're finished, you SIGNAL and it increments again.
+
+\ These details are not internals, but a public interface!
+\ Perhaps an interrupt handler should SIGNAL something from machine code.
+
+\ TODO: Interrupts on/off toggling for isolation with preemptive tasks?
+target : semaphore ( "name" --    X: -- semaphore ) CREATE 1 , ;
+
+\ This can wait for any cell to become nonzero; it needn't be a semaphore.
+target : wait ( addr -- )
+  BEGIN pause dup @ UNTIL
+  -1 swap +! ;
+
+\ SIGNAL increments a cell so anyone waiting for a semaphore can continue.
+target : signal  ( addr -- ) 1 swap +! ;
+\ SIGNAL> is "signal and go"; it PAUSEs to allow anyone waiting to run first.
+target : signal> ( addr -- ) 1 swap +! pause ;

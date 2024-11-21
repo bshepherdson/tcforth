@@ -78,7 +78,13 @@ host [THEN]
 \ PORT: Lightly machine-dependent - Exactly where in the codeword field is the address?
 \ ARM actually has to inline it into a hand-rolled BL instruction. So standardize this as
 \ a machine-specific !CF and call it from here; that simplifies the DOES> stuff.
-target : (DOES>) R@ cell+   latest >cfa   !cf ;
+
+\ XXX: Is this actually machine-independent? Does it work under STC?
+\ It's assuming the next chunk before the xt is 1 cell wide, but that only works
+\ in ITC and DTC. In STC and TTC it doesn't work - we need a config field for it.
+\ Probably /EXIT, and defaulting to a cell.
+target : (DOES>)
+  R@   [ host config /exit @ tliteral target ] +    latest >cfa   !cf ;
 
 host definitions
 T' (DOES>) '(DOES>) !

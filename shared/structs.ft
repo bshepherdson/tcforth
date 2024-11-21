@@ -1,0 +1,13 @@
+\ Only loaded when structures are enabled.
+\ These follow the Standard.
+target definitions
+
+: begin-structure ( "name" -- struct-sys 0 ) CREATE here 0   0 , DOES> @ ;
+: end-structure   ( struct-sys +n -- ) swap ! ;
+
+: +field ( offset1 +n "name" -- offset2    X: addr -- addr+offset1 )
+  CREATE   over ,   +   DOES> @ + ;
+
+: cfield: ( u1 "name" -- u2   X: addr -- addr+u1 ) 1 +field ;
+: field:  ( u1 "name" -- u2   X: addr -- addr+u1 ) aligned 1 cells +field ;
+: 2field: ( u1 "name" -- u2   X: addr -- addr+u1 ) aligned 2 cells +field ;

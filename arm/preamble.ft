@@ -15,11 +15,14 @@ interactive-forth!
 8    config char-bits    !
 4    config cell-width   !
 4    config /codeword    !
+4    config /exit        !
 4    config instr-width  !
 4    config alignment    !
 
 config little-endian?   ON
 config threaded?        ON
+config multitasking?    ON
+config tos-in-reg?      ON
 
 
 \ Target spaces ==============================================================

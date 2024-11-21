@@ -27,15 +27,15 @@ al?
 \ Operands ===================================================================
 \ Each instruction style has a relatively fixed set of inputs, so little in the
 \ way of marking them is required.
-: r0    0 0 ;   : r1    1 0 ;   : r2    2 0 ;   : r3    3 0 ;
-: r4    4 0 ;   : r5    5 0 ;   : r6    6 0 ;   : r7    7 0 ;
-: r8    8 0 ;   : r9    9 0 ;   : r10  10 0 ;   : r11  11 0 ;
-: r12  12 0 ;   : r13  13 0 ;   : r14  14 0 ;   : r15  15 0 ;
-: sp r13 ;
-: lr r14 ;
-: pc r15 ;
+\ : r0    0 0 ;   : r1    1 0 ;   : r2    2 0 ;   : r3    3 0 ;
+\ : r4    4 0 ;   : r5    5 0 ;   : r6    6 0 ;   : r7    7 0 ;
+\ : r8    8 0 ;   : r9    9 0 ;   : r10  10 0 ;   : r11  11 0 ;
+\ : r12  12 0 ;   : r13  13 0 ;   : r14  14 0 ;   : r15  15 0 ;
+\ : sp r13 ;
+\ : lr r14 ;
+\ : pc r15 ;
 
-: # ( value -- value 1 ) 1 ;
+\ : # ( value -- value 1 ) 1 ;
 
 \ Op2 has several forms, though:
 \ - I=0 register forms
@@ -58,23 +58,29 @@ al?
 : ROR ( -- shift-type )      $83 ;
 : RRX ( -- imm-0 shift-type) 0 # ror ;
 
-\ - Registers are represented as  ( reg 0 )
-\ - Immediates are represented as ( imm 1 )
+\ - Registers are represented as    ( reg  0 )
+\ - Immediates are represented as   ( imm  1 )
+\ - Special regs are represented as ( sreg 2 )
 \ - Labels are represented as immediates, usually.
 
 : reg CREATE , DOES> @ 0 ;
-0 reg r0   1 reg r1   2 reg r2   3 reg r3
-4 reg r4   5 reg r5   6 reg r6   7 reg r7
+ 0 reg r0   1 reg r1   2 reg r2   3 reg r3
+ 4 reg r4   5 reg r5   6 reg r6   7 reg r7
+ 8 reg r8   9 reg r9  10 reg r10 11 reg r11
+12 reg r12 13 reg r13 14 reg r14 15 reg r15
+: sp r13 ;
+: lr r14 ;
+: pc r15 ;
 
 : # ( imm -- imm 1 ) 1 ;
-
 
 \ Helpers ====================================================================
 \ These throw if the range is exceeded.
 : ?u4 ( imm -- ) 0 16  within 0= ABORT" Out of U4 range" ;
 : ?u8 ( imm -- ) 0 256 within 0= ABORT" Out of U8 range" ;
 
-: ?reg  ( 0 -- ) 0<>  ABORT" Expected register" ;
+: ?reg  ( 0 -- ) 0<>   ABORT" Expected register" ;
+: ?spec ( 2 -- ) 2 <>  ABORT" Expected special register" ;
 
 : +cond ( opcode -- opcode' ) $0fffffff and   condition @ 28 lshift or   al? ;
 
@@ -171,7 +177,24 @@ $d (dp2) mov,   $f (dp2) mvn,
 $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
 
 
-\ TODO MRS and MSR, if I need them.
+\ MSR and MRS ================================================================
+: cpsr ( -- 0 2 ) 0 2 ;
+
+\ MSR - Move register to special
+\ MRS - Move special to register
+\ I=1   Immediate MSR: cccc 00I1 0So0 fsxc 1111 RRRR iiii iiii
+\ S=0 for CPSR, 1 for SPSR
+\ o=1 for MSR
+\ f=1 to write flags;      s=1 to write status field
+\ x=1 for extension field; c=1 for control field (bits 7-0)
+\ RRRR is ROR in steps of 2 for the immediate
+\ i is the immediate
+\ For our purposes here, MSR is I=1, c=1,
+: msr, ( imm 1 spec 2 )
+  ?spec 0<> $00400000 and >R
+  drop dup ?u8   $ff and
+  $0321f000 or R> or +cond asm, ;
+
 
 \ Multiply ===================================================================
 \ cccc 0000 00AS dddd nnnn ssss 1001 mmmm

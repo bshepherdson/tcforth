@@ -142,10 +142,23 @@ host definitions
 (T') -     'mirror !   act -
 (T') @     'mirror !   act tdata@
 (T') !     'mirror !   act tdata!
+(T') or    'mirror !   act or
+(T') and   'mirror !   act and
+
+\ TODO: Is code space the right place to be sending these?
+\ I wonder if they're really used.
+
 (T') ,     'mirror !   act tcode,
 (T') c,    'mirror !   act tcode-c,
+
 (T') cells 'mirror !   act tcells
+(T') chars 'mirror !   act tchars
 (T') dup   'mirror !   act dup
+(T') drop  'mirror !   act drop
+(T') swap  'mirror !   act swap
+(T') 2dup  'mirror !   act 2dup
+(T') 2drop 'mirror !   act 2drop
+(T') 2swap 'mirror !   act 2swap
 
 \ Not all machines define * in kernel code.
 <T'> * [IF] (T') * 'mirror ! act * [THEN]

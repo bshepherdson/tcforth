@@ -1,10 +1,13 @@
 \ ===================== MACHINE/MODEL DEPENDENT SECTION ======================
 \ DTC, TOS in register.
 \ r13/sp is data stack, r14/lr is used for links.
-\ r12 is IP, r11 is RSP, r10 is tos.
+\ r12 is IP, r11 is RSP, r10 is tos, r9 is UP.
+HOST DEFINITIONS
+
 : ip  r12 ;
 : rsp r11 ;
 : tos r10 ;
+: up  r9  ;
 
 \ bl docol, bl dovar, bl dodoes-code can fit into one cell.
 
@@ -16,7 +19,6 @@
 \ NATIVE HERE pushes the Host's dictionary pointer.
 \ HOST   HERE pushes the Target's dictionary pointer
 \ TARGET HERE is the mirror word that compiles the Target xt for HERE (!)
-HOST DEFINITIONS
 
 
 \ First line of code, the entry point. This is at $0 in code-space space, but
@@ -158,9 +160,17 @@ config data-indirect? @ [IF]
 \ For ARM the code field is always one instruction = 1 cell.
 : t>pfa ( t-xt -- pf-slot ) tcell+ ;
 
-\ Entry point at 64KB, stacks at 32MB with 2KB ($800) for the return stack.
-$02000000 CONSTANT rp0
-$01fff7fc CONSTANT sp0 \ Fix main if this is changed.
+\ Entry point at 64KB, dictionary follows, and tasks start at 8MB.
+\ 512 cells of return stack and 1024 cells of data stack for the main task.
+$00800000 CONSTANT task0
+
+256 tcells CONSTANT default/rs
+512 tcells CONSTANT default/ds
+
+256 tcells default/ds + task0 +   CONSTANT task0-sp0
+ task0-sp0 default/rs +           CONSTANT task0-rp0
+
+task0-rp0 task0 - CONSTANT /task0
 
 label entry-point 0 asm,
 

@@ -1,0 +1,44 @@
+\ Implements the ARM SP804 dual timer module for QEMU VersatilePB
+target definitions
+
+: tm-load ( -- ) ;
+: tm-value 4 + ;
+: tm-ctl   8 + ;
+
+$80 CONSTANT TM-ENABLED?
+$40 CONSTANT TM-PERIODIC?
+$20 CONSTANT TM-INTERRUPTS?
+
+$00 CONSTANT TM-RATE-CLK
+$04 CONSTANT TM-RATE-CLK/16
+$08 CONSTANT TM-RATE-CLK/256
+
+$02 CONSTANT TM-32bit?
+$01 CONSTANT TM-ONE-SHOT?
+
+$101e2000 CONSTANT timer1
+$101e3000 CONSTANT timer2
+
+$10140000 CONSTANT pic
+$0010     CONSTANT pic-timer1
+
+$10       CONSTANT vic-intenable
+$14       CONSTANT vic-intenclear
+
+\ With a 1/16 divider and 1MHz, the timer ticks at 62500 Hz.
+\ That's 250 squared, so a clock counter of 500 yields a 125Hz timer interrupt.
+\ The overhead of that is low enough to be reasonable, I think.
+500       CONSTANT interval
+
+tm-enabled? tm-periodic? or   tm-interrupts? or   tm-rate-clk/16 or
+CONSTANT tm-flags
+
+: init-timers ( -- )
+  \ ." Top" cr
+  interval timer1 tm-load ( ." Timer load: " hex.s cr ) !
+  tm-flags timer1 tm-ctl  ( ." Timer ctl:  " hex.s cr ) !
+  \ XXX: This needs to be reenabled for the timer interrupt to work - but it
+  \ seems to lock up the system?
+  pic vic-intenable +   dup @   pic-timer1 or   swap ! ;
+
+: ticks ( -- addr ) [ host 'ticks tcode@ tliteral target ] ;

@@ -94,8 +94,16 @@ target : ['] ( "name" --    X: -- xt )
 
 host REQUIRE case.ft
 host REQUIRE strings.ft
+
+
 target definitions
 
+
+host config multitasking? @ [IF]
+  target : BASE ( -- addr ) [ host tbase tliteral target ] up@ + ;
+host [ELSE]
+  target : BASE ( -- addr ) [ host data-space @   10 tdata,   tliteral target ] ;
+host [THEN]
 
 \ Basic, unsigned number parsing.
 \ Tries to parse as many digits according to BASE as possible.
@@ -163,12 +171,6 @@ target : INTERP1   ( c-addr u -- )
 \ Fundamental single-line interpreter loop.
 target : INTERPRET ( -- )
   BEGIN parse-name dup WHILE interp1 REPEAT 2drop ;
-
-target : ABORTED ( -- )
-  R> [ host rp0 tliteral target ] rp! >R \ Drops everything but ABORTED's own return
-  [ host T' [ tcompile, target ]
-  0 'source-id !             \ Force a keyboard source.
-  [ host sp0 tliteral target ] sp! ;
 
 host presume ACCEPT presume EMIT presume REVERSE
 target

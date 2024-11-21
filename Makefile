@@ -11,7 +11,7 @@ DCPU_DISK ?= /dev/null
 
 ARM_QEMU ?= qemu-system-arm -M versatilepb -m 128M -nographic
 ARM_QEMU_FLAGS ?=
-#ARM_QEMU_FLAGS ?= -D log.txt -d exec -d cpu
+#ARM_QEMU_FLAGS ?= -D log.txt -d exec,cpu,int
 ARM_PREFIX ?= arm-none-eabi-
 
 VICE_C64 ?= x64sc

@@ -145,8 +145,6 @@ code R>    {{ tos }} push,   tos poprsp,       end-code
 code R@    {{ tos }} push,   rsp [] tos ldr,   end-code
 
 
-label 'sp0   sp0 asm,
-
 \ DEPTH is a bit weird with TOS in register. The bottom value in memory is
 \ actually whatever dummy value was in the TOS register when the first real
 \ value was pushed.
@@ -155,9 +153,9 @@ label 'sp0   sp0 asm,
 \ then measures the depth from sp0, rather than the real empty SP.
 code DEPTH
   {{ tos }} push,
-  'sp0    r0  ldr-pc,
-  sp      r0  tos sub,
-  tos 2 # lsr tos mov, \ Convert bytes to cells
+  tsp0 # up [+] r0  ldr,
+  sp     r0     tos sub,
+  tos 2 # lsr   tos mov, \ Convert bytes to cells
 end-code
 
 
@@ -220,7 +218,6 @@ code BREAK ( n -- )
 end-code
 
 
-
 \ Variables and core states ==================================================
 \ Values in ROM giving the initial LATEST and DP.
 label dp0     0 asm,
@@ -229,7 +226,6 @@ label latest0 0 asm,
 \ Space in the RAM for system variables.
 TVARIABLE var_dp
 TVARIABLE var_latest
-TVARIABLE var_base
 TVARIABLE var_state
 TVARIABLE var_handler
 
@@ -287,7 +283,6 @@ end-code
 var_handler    var-pusher HANDLER
 var_latest     var-pusher 'LATEST
 var_state      var-pusher STATE
-var_base       var-pusher BASE
 
 \ TODO: These can also be skipped for non-interactive builds.
 var_source     var-pusher 'SOURCE
@@ -341,14 +336,14 @@ end-code
 code UDM* ( l1 h1 u2 -- l3 h3 ) \ That is, multiply unsigned double by single.
   \ ARM supports multiplying two 32-bit integers to produce a 64-bit result!
   {{ r0 r1 }} pop,   \ l1 -> r1   h2 -> r0   u2 -> tos
-  \ First multiply l1 * u2 -> r4:r3
+  \ First multiply l1 * u2 -> r3:r2
   \ This assembler's syntax is rs rm rdhi rdlo umull,
-  r1 tos r4 r3 umull,    \ l1*u2 -> r4:r3; r3 is the low final result.
-  \ Now do a UMLAL h1*u2, into r5:r4. That is, the existing upper result is
+  r1 tos r3 r2 umull,    \ l1*u2 -> r3:r2; r2 is the low final result.
+  \ Now do a UMLAL h1*u2, into r4:r3. That is, the existing upper result is
   \ added to the low half of this upper multiply.
-  r0 tos r5 r4 umlal,    \ h1*u2 + r4 -> r5:r4; r4 is the high final result.
-  {{ r3 }} push,
-  r4 tos mov,
+  r0 tos r4 r3 umlal,    \ h1*u2 + r3 -> r4:r3; r3 is the high final result.
+  {{ r2 }} push,
+  r3 tos mov,
 end-code
 
 code UM/MOD ( ulo uhi udiv -- ur uq )
@@ -388,7 +383,6 @@ code UM/MOD ( ulo uhi udiv -- ur uq )
   r1 tos mov,     ( rem quot )
 end-code
 
-
 \ Branches ===================================================================
 \ Like the DCPU model, ARM uses 32-bit absolute targets in the thread.
 code (BRANCH)
@@ -417,6 +411,7 @@ end-code
 \ XXX: remove me
 label uart0dr $101f1000 asm,
 label 'deadbeef $deadbeef asm,
+
 
 code MOVE< ( src dst u -- ) \ Copies from low addresses to high.
   \ Length is in TOS
@@ -524,7 +519,48 @@ code J ( -- index1   R: index1 limit2 index2 -- index1 limit2 index2 )
 end-code
 
 
+\ Optional: Multitasking =====================================================
+config multitasking? @ [IF]
 
+\ Linked list of ready tasks, with end pointer.
+data-space @   2 tcells tdata-allot   CONSTANT ready-tasks ( tail head )
+
+\ Core words to juggle the user pointer in and out of its register.
+code UP@
+  {{ tos }} push,
+  up  tos   mov,
+end-code
+
+code UP!
+  tos  up   mov,
+  {{ tos }} pop,
+end-code
+
+\ Enters a task, whose address should already be in UP.
+\ The data stack begins with ( user-tos rsp ip ) loaded.
+code (RESTART)
+label inner-restart
+  tsp   # up [+] sp ldr, \ Load the task's SP.
+  {{ ip  }} pop,         \ Load the IP first.
+  {{ rsp }} pop,         \ Next the RSP.
+  {{ tos }} pop,         \ And finally the user TOS.
+end-code \ NEXT into the IP.
+
+\ Leaves a task, saving its values.
+code (PAUSE)
+label inner-pause
+  {{ tos }} push,        \ Save the user TOS first.
+  {{ rsp }} push,        \ Save the RSP next.
+  {{ ip  }} push,        \ Save the IP on top.
+  tsp   # up [+] sp str, \ Store the task's SP to the SP slot.
+  tlink # up [+] up ldr, \ Load the linked task into UP.
+  inner-restart b,       \ Jump to (RESTART) with the new thread.
+end-code-bare
+
+[THEN]
+
+
+\ Debugging helpers ==========================================================
 code H. ( x -- )
   uart0dr r0 ldr-pc,
 

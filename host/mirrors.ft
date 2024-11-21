@@ -90,3 +90,29 @@ VARIABLE >mirror \ Holds the body address of the mirror currently executing.
 ;
 
 host definitions
+
+config multitasking? @ [IF]
+\ TODO: This should be moved to a new host-side file.
+
+VARIABLE t/user
+0 t/user !
+
+: tuser-allot ( delta -- offset ) t/user @   swap t/user +! ;
+
+: TUSER ( "name" --   X: -- offset ) 1 tcells tuser-allot CONSTANT ;
+
+\ XXX: This list has to be mirrored in shared/tasks.ft
+\ TODO: That sucks and I'm sure I can find a better approach.
+TUSER tlink
+TUSER tsp
+TUSER t/stack
+TUSER t/rstack
+TUSER t/task   \ TODO: This one is actually redundant, can use rp0.
+TUSER tsp0
+TUSER trp0
+TUSER tbase
+4   tcells tuser-allot CONSTANT ttask-code
+128 tchars tuser-allot CONSTANT tpad
+
+[THEN]
+\ All done.

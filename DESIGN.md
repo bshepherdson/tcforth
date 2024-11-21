@@ -456,3 +456,40 @@ the Target itself.
       target-specific code in place.
 
 Plus definitions for the ANS Forth words `ALIGNED ALIGN PAD`.
+
+## Multitasking
+
+To support multitasking, several changes are necessary to the engine:
+
+- Certain variables must be `USER` variables: `BASE`, etc.
+    - The dictionary and the input buffer are global; this is not multi-user.
+    - Among these variables are `rp0` and `sp0`, the bottom stack addresses
+      for this task.
+    - Each task also has a `tstate` flag and a `next-task` pointer for linking.
+    - Finally, each task has its own `PAD` (or eg. number formatting could
+      step on other tasks).
+
+- User space is not allocated in a `host/spaces.ft` space, but rather reserved
+  in the header of each task and its offset reserved.
+- The `UP` or user pointer is the address of the task (which is also the address
+  of the *user area* at the start of the task.
+    - This should ideally go in a register, if one is available.
+- Certain words need `pause` inserted into them.
+
+The size of a task is the size of the user area, plus the size of the return and
+data stacks.
+
+### Current task
+
+A task is represented by its `UP` address. So the current task can be accessed
+with `up@`.
+
+### User vars
+
+Variables defined with `USER`, values with `UVALUE` and deferred words with
+`UDEFER` store their data area in the current task's user area.
+
+These words store an offset from `UP`, and add it to `UP` when executed.
+They are powered by `UALLOT`.
+
+`User' FOO` returns the offset of `FOO`; it is implemented as `: USER' ' >body @ ;`

@@ -7,6 +7,9 @@
 \ ,DOCOL is already defined.
 target definitions
 
+\ Assumes a base clock rate of 1MHz, the default for QEMU's VersatilePB.
+target : CPUFREQ ( -- u-hz ) 1000000 ;
+
 \ ARM BL  is cccc 101L + 24-bit signed offset in words.
 \ XXX: Assumes the target is in range!
 target : !CF ( codeword-addr xt -- )
@@ -24,8 +27,8 @@ target : ,CF ( codeword-addr -- ) here   0 ,   !cf ;
 \ This is   docol ,cf
 target : ,DOCOL ( -- ) [ host docol tliteral target ] ,CF ;
 
-target : PAD ( -- addr )
-  [ host data-space @ tliteral   128 tdata-allot   target ] ;
+\ target : PAD ( -- addr )
+\   [ host data-space @ tliteral   128 tdata-allot   target ] ;
 
 host REQUIRE ../shared/model-target.ft
 

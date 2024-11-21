@@ -1,7 +1,41 @@
+\ Interrupt vectors ==========================================================
+host definitions
+
+\ These are traditionally ldr pc, [pc, #...] indirections out of a table.
+\ Encoded as: cccc 0101 1001 1111 1111 iiii iiii iiii
+\ Using PC as a base it reads PC+8. If PC=p, we want p+$20, so offset is $18.
+$e59ff018 CONSTANT ldr_pc_[pc+8,#18]
+code-space @
+
+ldr_pc_[pc+8,#18] tcode, \ $00 ldr reset
+ldr_pc_[pc+8,#18] tcode, \ $04 ldr undefined
+ldr_pc_[pc+8,#18] tcode, \ $08 ldr SVC
+ldr_pc_[pc+8,#18] tcode, \ $0c ldr Prefetch
+ldr_pc_[pc+8,#18] tcode, \ $10 ldr Abort
+ldr_pc_[pc+8,#18] tcode, \ $14 ldr Reversed
+ldr_pc_[pc+8,#18] tcode, \ $18 ldr IRQ
+ldr_pc_[pc+8,#18] tcode, \ $1c ldr unused
+
+\ $20 offsets
+main              tcode, \ $20 reset
+0                 tcode, \ $24 undefined
+0                 tcode, \ $28 SVC
+0                 tcode, \ $2c Prefetch
+0                 tcode, \ $30 Abort
+0                 tcode, \ $34 Reversed
+interrupt-handler tcode, \ $38 IRQ
+0                 tcode, \ $3c unused
+
+CONSTANT int-vectors
+
 target definitions
 
+\ Set up the timer properly.
+: init-interrupts ( -- )
+  [ host int-vectors tliteral target ] 0 $40 move ;
+
 : init-hardware ( -- )
-  init-serial ;
+  init-serial init-timers init-interrupts ;
 
 \ There's no shutdown hardware signal on the VersatilePB board!
 \ This approximates it by sending "(bye) - C-a x to quit QEMU" and spinning.

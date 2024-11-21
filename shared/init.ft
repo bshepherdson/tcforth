@@ -7,6 +7,12 @@ target : \   source >in ! drop ; IMMEDIATE
 target : (   41 parse 2drop ; IMMEDIATE
   host acts: native 41 parse 2drop host ; IMPERATIVE-BOTH
 
+target : ABORTED ( -- )
+  R> rp0 @ rp! >R \ Drops everything but ABORTED's own return
+  [ host T' [ tcompile, target ]
+  0 'source-id !             \ Force a keyboard source.
+  task-sp @ sp! ;
+
 \ Fundamental multi-line interpreter loop.
 \ Separate from QUIT because it gets called by file readers as well.
 target : (QUIT) ( -- )
@@ -22,7 +28,7 @@ target : (QUIT) ( -- )
 \ Empties the return stack, selects keyboard input, forces interpreter state,
 \ and (QUIT)s to keep interpreting.
 target : QUIT ( -- )
-  [ host rp0 tliteral target ] rp!
+  rp0 @ rp!
   [ host T' [ tcompile, target ]
   10 base !
   src-keyboard 'source-id !
@@ -77,11 +83,13 @@ target definitions
 host [THEN] target definitions
 
 \ Basic startup
-: boot  ( -- ) init-data   init-hardware   10 base ! ;
+: boot  ( -- )
+  init-data   init-hardware
+  \ TODO: This phrasing keeps appearing - some helper for it would be good.
+  [ host config multitasking? @ [IF] target ] init-multi [ host [THEN] target ]
+  10 base ! ;
 : intro ( -- ) '.intro @ execute ;
 \ "Cold" start, loading interactive mode.
-: cold  ( -- ) boot intro QUIT ;
+: cold  ( -- ) boot intro   QUIT ;
 
 host   T' COLD   entry-point tcode!
-
-\ XXX: START HERE - Port the DCPU-16 family to the new unified model-target.

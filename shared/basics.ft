@@ -39,4 +39,7 @@ target : ALLOT ( n -- ) dp +! ;
 target : HERE dp @ ;
   host acts: data-space @ ;
 
+\ Does nothing! It's useful as an xt in various places.
+target : NOOP ( -- ) ;
+
 target : WITHIN ( x lo hi -- ? ) over - >R   - R> U< ;

@@ -29,5 +29,10 @@ host REQUIRE serial.ft
 host REQUIRE terminal.ft
 host REQUIRE ../shared/output.ft
 host REQUIRE ../shared/error-messages.ft
+host REQUIRE timers.ft
+
+host config structures?   @ [IF] REQUIRE ../shared/structs.ft host [THEN]
+host config multitasking? @ [IF] REQUIRE ../shared/tasks.ft   host [THEN]
+
 host REQUIRE intro.ft
 host REQUIRE ../shared/init.ft         \ Shared init code.

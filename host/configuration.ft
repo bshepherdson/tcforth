@@ -5,10 +5,15 @@
 REQUIRE vocabularies.ft
 host definitions
 
+\ TODO: This ended up being global, so I think it'd be a lot easier to use if
+\ it were a bunch of HOST VALUEs instead. Low priority.
+
 begin-structure configuration
   \ Including or excluding parts of the code.
-  field: keyboard-input?
-  field: keyboard-output?
+  field: keyboard-input?   \ Defaults to on.
+  field: keyboard-output?  \ Defaults to on.
+  field: structures?       \ Defaults to on.
+  field: multitasking?     \ Defaults to off.
 
   \ Nature of the target system:
   \ - If it includes the dictionary and Forth text interpreters
@@ -22,19 +27,27 @@ begin-structure configuration
   field: cell-width      \ In target address units
   field: instr-width
   field: /codeword       \ In target address units
+  field: /exit           \ The width of an EXIT call in a Forth thread
   field: alignment       \ Alignment of a target cell, in target address units.
   field: little-endian?
   field: threaded?       \ True for threaded code, ie. DTC and ITC.
+  field: tos-in-reg?     \ True if TOS is in a register. (Needed for tasks.)
+  field: tasks-desc?     \ True if the task area grows towards lower addresses.
 end-structure
 
 configuration allocate drop CONSTANT config
 
-: interactive-forth! ( -- )
-  config has-dictionary?  ON
+: config-defaults! ( -- )
   config keyboard-input?  ON
-  config keyboard-output? ON ;
+  config keyboard-output? ON
+  config structures?      ON ;
+
+: interactive-forth! ( -- )
+  config-defaults!
+  config has-dictionary?  ON ;
 
 : standalone! ( -- )
+  config-defaults!
   config has-dictionary?  OFF
   config names-indirect?  ON ;
 

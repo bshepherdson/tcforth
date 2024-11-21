@@ -17,3 +17,10 @@ target definitions
     dup $7f = IF drop R@ backspace ELSE accept-char THEN
   REPEAT ( end newline   R: start ) drop R> - ( len ) ;
 
+
+\ ANSI escape codes ==========================================================
+\ : ESC   $1b emit ;
+\ : ESC[  esc   [char] [ emit ;
+\
+\ : AT-XY ( x y -- ) esc[   0 .R   [char] ; emit   0 .R   [char] H emit ;
+\ : PAGE  ( -- ) 0 0 at-xy   esc[ S" 0J" type ;

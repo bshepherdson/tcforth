@@ -130,6 +130,34 @@ target : VARIABLE ( "name" --     X: -- addr ) CREATE 0 , ;
 target : CONSTANT ( x "name" --    X: -- x ) CREATE , DOES> @ ;
   host acts: create tdata, DOES> tdata@ ;
 
+target : VALUE ( x "name" --    X: -- x ) CREATE , DOES> @ ;
+  host acts: create tdata, DOES> tdata@ ;
+
+target : DEFER ( "name" --    X: ... -- ... ) CREATE ['] noop , DOES> @ execute ;
+  host acts: create [T'] noop tdata, DOES> tdata@ execute ;
+
+target : DEFER@ ( xt1 -- xt2 ) >body @ ;
+  host acts: t>body tdata@ ;
+
+target : DEFER! ( xt1 xt2 -- ) >body ! ;
+  host acts: t>body tdata! ;
+
+target : IS ( I: xt "name" --    C: "name" --   X: xt -- )
+    state @ IF
+      ' postpone literal postpone defer! ELSE ' defer! THEN ; IMMEDIATE
+  host acts:
+    T' t>body tliteral [tcompile] defer! ; IMPERATIVE
+
+target : ACTION-OF ( "name" -- xt )
+  state @ IF ' postpone literal defer@ ELSE ' defer@ THEN ; IMMEDIATE
+
+target : TO ( I: xt "name" --    C: "name" --   X: xt -- )
+    state @ IF
+      ' >body postpone literal postpone ! ELSE ' >body ! THEN ; IMMEDIATE
+  host acts:
+    state @ IF T' t>body tliteral [tcompile] ! ELSE
+      T' t>body tdata! THEN ; IMPERATIVE-BOTH
+
 \ host cr cr hex
 \ .s cr
 \ (T') CONSTANT

@@ -7,8 +7,12 @@ target definitions
 
 $101f1000 CONSTANT UART0DR    \ Data register
 $101f1018 CONSTANT UART0FR    \ Flags register
+$101f1024 CONSTANT UART0IBRD  \ Integral baud rate
+$101f1028 CONSTANT UART0FBRD  \ Fractional baud rate
 $101f102c CONSTANT UART0LCR_H \ Data frame format
 $101f1030 CONSTANT UART0CR    \ Control register
+$101f1038 CONSTANT UART0IMSC  \ Interrupt mask
+$101f1048 CONSTANT UART0DMACR \ DMA control
 
 $80 CONSTANT TXFE \ Transmit FIFO empty
 $40 CONSTANT RXFF \ Receive  FIFO full
@@ -27,9 +31,12 @@ $01 CONSTANT CTS  \ Receive  FIFO empty
 : CR   ( -- )    10 emit ;
 
 
-
 \ Configuration: no parity, no sticky. 8 bits, FIFOs on, 1 stop bit.
 \ LCR_H gets %01110000 = $70
 \ CR gets read out, and then set bits 9 and 8 (RXE, TXE) and 1 (enable)
+\ Mask all interrupts (for now) with $7ff into IMSC.
+\ Divisors for the baud rate: D = F_clk / (16*B), where F is the clock frequency
+\ and B is the baud rate (115200). With 1MHz....
+\ XXX: START HERE with baud rates
 : init-serial ( -- )
-  $70 UART0LCR_H c!   UART0CR @   $301 or UART0CR ! ;
+  $70 UART0LCR_H c!   UART0CR @   $301 or UART0CR !   $7ff UART0IMSC ! ;

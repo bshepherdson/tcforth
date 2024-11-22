@@ -39,29 +39,56 @@
 \ For a prompt PAUSE we can hijack the codeword of EXIT to a new word that
 \ does an EXIT and a (PAUSE) right after.
 
-label 'task0   task0     asm,
-label timer-intclr $101e200c asm, \ Set to 1 to clear the interrupt flag.
+label 'kernel-task kernel-task asm,
+label timer-intclr $101e200c   asm, \ Set to 1 to clear the interrupt flag.
 
 TVARIABLE ticks
 label 'ticks ticks asm,
 
+TVARIABLE kernel-task
+
+label interrupt-return
+  {{ r0 r1 r2 r3 r4   r9 r10 r11 r12 lr }} pop,
+  4 # lr  pc  S sub,       \ LR is 4 bytes too far for hardware reasons.
+
 \ TODO: Currently this assumes the only interrupt source is the timer.
 label interrupt-handler
-  {{ r0 r1 }} push,        \ Make some space for working in
-  timer-intclr  r0 ldr-pc,
-  1 #           r1 mov,
-  r0 []         r1 str,
-  'ticks        r0 ldr-pc, \ Pointer to address to ticks cell
-  r0 []         r1 ldr,    \ Load the tick count
-  1 #   r1      r1 add,    \ Increment it
-  r0 []         r1 str,    \ And write back
-  {{ r0 r1 }} pop,         \ Restore the registers
-  4 # lr  pc  S sub,       \ LR is 4 bytes too far for hardware reasons.
+  \ Push all the used registers - r0-r4, r9-r12. (r13 and r14 are banked.)
+  \ That includes saving the original UP, so we can just overwrite it.
+  {{ r0 r1 r2 r3 r4   r9 r10 r11 r12 lr }} push, \ LR too just in case.
+  'kernel-task   up ldr-pc,   \ Kernel Task -> UP
+  \ At its SP is the IP, which we should change to its own code area.
+  var_handler    r0 nearby,   \ Get the address of the HANDLER var.
+  r0 []          r0 ldr,      \ xt for interrupt handling -> r0
+
+  ttask-code # up [+] r1 ldr, \ thread -> r1
+  r1              []  r0 str, \ xt -> thread[0]
+  interrupt-return r0 nearby,
+  4 # r1          [+] r0 str, \ int-ret -> thread[1]
+
+  tsp   # up [+] sp str,      \ Store the task's SP to the SP slot.
+  sp         []  r1 str,      \ Store the thread into the IP slot.
+  trp0  # up [+] r1 ldr,      \ RP0 -> r1
+  4     # sp [+] r1 str,      \ RP0 -> rsp slot
+
+  \ Now the thread is ready, so we can unpause it!
+  inner-pause       b,
+
+
+  \ timer-intclr  r0 ldr-pc,
+  \ 1 #           r1 mov,
+  \ r0 []         r1 str,
+  \ 'ticks        r0 ldr-pc, \ Pointer to address to ticks cell
+  \ r0 []         r1 ldr,    \ Load the tick count
+  \ 1 #   r1      r1 add,    \ Increment it
+  \ r0 []         r1 str,    \ And write back
+  \ {{ r0 r1 }} pop,         \ Restore the registers
+  \ 4 # lr  pc  S sub,       \ LR is 4 bytes too far for hardware reasons.
 
 
 \ Main =======================================================================
-label 'sp0     task0-sp0 asm,
-label 'rp0     task0-rp0 asm,
+label 'sp0     0 asm, \ These get filled in by arm/finalize.ft
+label 'rp0     0 asm,
 
 \ IF01 mmmm
 \ These have the modes, plus IRQ + FIQ masking and the res1 bit.
@@ -71,7 +98,6 @@ $00d2 CONSTANT cpsr-mode-irq
 $00d3 CONSTANT cpsr-mode-svc
 $00df CONSTANT cpsr-mode-sys
 
-$0080 CONSTANT cpsr-int-mask
 : cpsr-int-enable  ( cpsr -- cpsr' ) cpsr-int-mask invert and ;
 : cpsr-int-disable ( cpsr -- cpsr' ) cpsr-int-mask or ;
 
@@ -80,21 +106,22 @@ label main
   \ Starts with interrupts disabled.
   \ We need to set up a Forth "kernel" task for interrupt handling.
   \ Each ARM mode has its own SP, so we have to set them up ahead of time.
-  'task0         up ldr-pc,   \ Main Task -> UP
+  'kernel-task   up ldr-pc,   \ Main Task -> UP
 
-  \ We use task0 as the IRQ stack pointer too; set that up now.
+  \ We use kernel-task as the IRQ stack pointer too; set that up now.
   cpsr-mode-irq # cpsr msr,   \ Now in IRQ mode
   up              sp   mov,   \ Setting its SP
   cpsr-mode-sys # cpsr msr,   \ Now to System, (ie. User + privileges)
 
-  \ - Each target defines: task0, default/rs, default/ds, sp0 and rp0.
+  \ - Each target defines: kernel-task, kernel/rs, and kernel/ds.
+  \ - 'sp0 and 'rp0 will be filled in by finalize.ft, after all USER vars.
   \ - The stack pointers are set here in main so we can execute Forth code.
   \ - COLD calls INIT-MULTI on multitasking configs
   \ - INIT-MULTI sets the stack sizes and LINK field.
-  'rp0          rsp ldr-pc,   \ Main RP0  -> rsp
-  trp0 # up [+] rsp str,      \           -> RP0 field
-  'sp0           sp ldr-pc,   \ Main SP0  -> sp:
-  tsp0 # up [+]  sp str,      \           -> SP0 field
+  'rp0             rsp ldr-pc,   \ Main RP0  -> rsp
+  trp0  # up [+]   rsp str,      \           -> RP0 field
+  'sp0              sp ldr-pc,   \ Main SP0  -> sp:
+  tsp0  # up [+]    sp str,      \           -> SP0 field
 
   \ We need to pretend to do SP! which pops the new TOS off the stack.
   {{ tos }} pop,
@@ -102,7 +129,8 @@ label main
   \ top of the stack is.
   'deadbeef  tos ldr-pc, \ Marker for debugging the stack.
 
-  cpsr-mode-sys cpsr-int-enable # r0 mov, \ System mode, interrupts on
+  \ XXX: START HERE - Set up the main task in the init code!
+  cpsr-mode-sys # r0 mov, \ System mode, interrupts off
   r0 cpsr msr,
 
   entry-point r0 ldr-pc, \ entry-point is a variable holding an xt; xt -> r0

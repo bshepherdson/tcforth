@@ -536,26 +536,43 @@ code UP!
   {{ tos }} pop,
 end-code
 
-\ Enters a task, whose address should already be in UP.
-\ The data stack begins with ( user-tos rsp ip ) loaded.
+\ Enters a task, whose address is already in UP.
+\ The data stack has ( user-tos rsp ip ) on it.
 code (RESTART)
-label inner-restart
+label inner-restart \ <--- Inner restart for when UP is already set.
   tsp   # up [+] sp ldr, \ Load the task's SP.
   {{ ip  }} pop,         \ Load the IP first.
   {{ rsp }} pop,         \ Next the RSP.
   {{ tos }} pop,         \ And finally the user TOS.
 end-code \ NEXT into the IP.
 
-\ Leaves a task, saving its values.
+\ Internal implementation of PAUSE - the next task is in TOS.
+\ The user's TOS is already saved.
 code (PAUSE)
 label inner-pause
-  {{ tos }} push,        \ Save the user TOS first.
+  tos   r0  mov,
   {{ rsp }} push,        \ Save the RSP next.
   {{ ip  }} push,        \ Save the IP on top.
   tsp   # up [+] sp str, \ Store the task's SP to the SP slot.
-  tlink # up [+] up ldr, \ Load the linked task into UP.
+  r0    up  mov,
   inner-restart b,       \ Jump to (RESTART) with the new thread.
 end-code-bare
+
+
+\ Interrupt masking ==========================================================
+$00c0 CONSTANT cpsr-int-mask
+
+code IRQ+ ( -- )
+  cpsr               r0 mrs,
+  cpsr-int-mask # r0 r0 orr,
+  r0               cpsr msr,
+end-code
+
+code IRQ- ( -- )
+  cpsr               r0 mrs,
+  cpsr-int-mask # r0 r0 bic,
+  r0               cpsr msr,
+end-code
 
 [THEN]
 

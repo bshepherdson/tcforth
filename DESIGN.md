@@ -493,3 +493,36 @@ These words store an offset from `UP`, and add it to `UP` when executed.
 They are powered by `UALLOT`.
 
 `User' FOO` returns the offset of `FOO`; it is implemented as `: USER' ' >body @ ;`
+
+## Interrupt handling
+
+Native code handling of them is up to each target.
+
+Forth handlers support relies on multitasking, in this way:
+
+- The initial task is a "kernel task" with relatively small stacks
+  (eg. 32 cells each)
+- It starts by initializing hardware, then creates the main task and starts it.
+    - For an interactive Forth system, that main task runs a `QUIT` loop.
+    - For an embedded application, it calls the user entry point.
+- After starting the user task, the kernel task does the following:
+    - `SLEEP`s itself - not `STOP` since we don't want to `PAUSE` yet.
+        - Now it's out of the task round-robin ring.
+    - Set its `LINK` to itself, so it's a party of one.
+    - Call `INTERRUPTED`, then `EXIT`.
+
+Interrupt handling process:
+- Native code handler runs. It should:
+    - Save registers etc., including `UP` and the current task state.
+    - Optionally pass it some interrupt info, in a global or on a stack?
+    - Put the kernel task into `UP`
+    - Set its `IP` to the interrupt handler whose `xt` is in the `HANDLER` var.
+- When the kernel task runs, it does the following:
+    - Deez nuts
+
+When an interrupt arrives, it calls a native code handler. This does whatever
+setup is necessary (eg. saving registers) and then rigs up the kernel task to
+run.
+
+This is a pretty normal task start, except for two things:
+- The TORS for the kernel task is overwritten to put the interrupt handler

@@ -63,7 +63,13 @@ al?
 \ - Special regs are represented as ( sreg 2 )
 \ - Labels are represented as immediates, usually.
 
-: reg CREATE , DOES> @ 0 ;
+\ A bitmap by register number.
+VARIABLE regs-used
+0 regs-used !
+
+: use-reg! ( reg-number -- ) 1 swap lshift   regs-used @ or   regs-used ! ;
+
+: reg CREATE , DOES> @   dup use-reg!   0 ;
  0 reg r0   1 reg r1   2 reg r2   3 reg r3
  4 reg r4   5 reg r5   6 reg r6   7 reg r7
  8 reg r8   9 reg r9  10 reg r10 11 reg r11
@@ -179,6 +185,7 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
 
 \ MSR and MRS ================================================================
 : cpsr ( -- 0 2 ) 0 2 ;
+: spsr ( -- 1 2 ) 1 2 ;
 
 \ MSR - Move register to special
 \ MRS - Move special to register
@@ -190,10 +197,20 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
 \ RRRR is ROR in steps of 2 for the immediate
 \ i is the immediate
 \ For our purposes here, MSR is I=1, c=1,
+: spec-reg ( spec 2 -- opcode-slice )
+  ?spec 0<> $00400000 and ;
+
 : msr, ( imm 1 spec 2 )
-  ?spec 0<> $00400000 and >R
+  spec-reg >R
   drop dup ?u8   $ff and
   $0321f000 or R> or +cond asm, ;
+
+\ MRS only applies for CPSR into a register.
+\ cccc 0001 0S00 1111 dddd 0000 0000 0000
+\ S is 0 for CPSR, 1 for SPSR_current
+: mrs, ( spec 2 reg 0 )
+  ?reg 12 lshift >R   spec-reg R> or
+  $010f0000 or +cond asm, ;
 
 
 \ Multiply ===================================================================

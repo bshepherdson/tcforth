@@ -88,8 +88,12 @@ target : stacksize* ( -- u-data u-return ) /stack @   /rstack @ ;
 target DEFER pause
 ' noop ' pause defer!
 
+\ High-level PAUSE implementation - which calls (PAUSE) with the task as TOS.
+target : <PAUSE> ( -- )
+  up@ (PAUSE) ;
+
 target : MULTI  ( -- )
-  ['] (pause) ['] pause defer! ;
+  ['] <pause> ['] pause defer! ;
 target : SINGLE ( -- )
   ['] noop    ['] pause defer! ;
 
@@ -222,17 +226,17 @@ target : ACTIVATE ( C: colon-sys1 -- colon-sys2    X: task -- )
 \ PASS compiles (PASS) then does ACTIVATE.
 
 target : INIT-MULTI ( -- )
-  [ host default/ds tliteral   default/rs tliteral   target ] ( /ds /rs )
-  /rstack !   /stack ! ( )
-  [ host /task0 tliteral target ] ( /task0 )
+  [ host kernel/ds tliteral   kernel/rs tliteral   target ] ( /ds /rs )
+  over /stack !   dup /rstack !
+  /user + + ( /kernel-task )
 
-  \ Initialize the task area: with descending tasks, it points at task0;
+  \ Initialize the task area: with descending tasks, it points at kernel-task;
   \ with ascending tasks, it points just after.
-  [ host task0 tliteral target ]   ( /task0 task0 )
+  [ host kernel-task tliteral target ]   ( /task task )
   [ host config tasks-desc? @ [IF] target ] nip [ host [ELSE] target ] + [ host [THEN] target ]
   task-area !
 
-  up@ link ! ;  \ Link task0 to itself, since it's the only running task.
+  up@ link ! ;  \ Link kernel to itself, since it's the only running task.
 
 
 \ Shelved idea: Smarter linked lists

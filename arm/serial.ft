@@ -37,6 +37,5 @@ $01 CONSTANT CTS  \ Receive  FIFO empty
 \ Mask all interrupts (for now) with $7ff into IMSC.
 \ Divisors for the baud rate: D = F_clk / (16*B), where F is the clock frequency
 \ and B is the baud rate (115200). With 1MHz....
-\ XXX: START HERE with baud rates
 : init-serial ( -- )
   $70 UART0LCR_H c!   UART0CR @   $301 or UART0CR !   $7ff UART0IMSC ! ;

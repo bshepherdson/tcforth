@@ -526,3 +526,47 @@ run.
 
 This is a pretty normal task start, except for two things:
 - The TORS for the kernel task is overwritten to put the interrupt handler
+
+### Update process
+
+- If handling interrupts in Forth:
+    - Determine what set of registers need to be saved.
+        - Maybe make a pass over the kernel to
+    - Consider enforcing that no "safe" registers are used later!
+        - See ARM; this can be done fairly easily in the assembler.
+        - Watch out for instructions that implicitly modify registers!
+- Decide where to keep `UP`, the user space pointer.
+    - Ideally this is a hardware register, but it can be a global variable.
+- Add code to set up interrupt handling on this machine
+    - Either in machine code in `main`
+    - Or in Forth under `BOOT`
+- Add code to `$machine/finalize.ft` to set `'sp0` and `'rp0`
+- Updates to kernel code:
+    - Adjust `DEPTH` to use the new, per-task `sp0`
+    - `BASE` is now a `USER` variable; remove it from the kernel
+    - `PAD` can also be dropped from the kernel
+- Add new kernel code behind the `multitasking?` config flag:
+    - `UP@` and `UP!`
+    - `(RESTART)` to start running in the task in `UP`
+    - `(PAUSE)` which suspends the current task in `UP` and `(RESTART)`s the
+      task in TOS. (**Not** the `LINK` field, to enable some jugglery.)
+    - Probably `IRQ+` and `IRQ-` to control interrupts.
+- In the `model.ft`:
+    - Drop the `sp0` and `rp0` constants.
+    - Add a new `kernel-task` constant: the address for the kernel task.
+        - Also add its stack sizes: `kernel/rs` and `kernel/ds`.
+    - Add `default/rs` and `default/ds`: stack sizes for the main task.
+    - *All these stack sizes should be `VALUE`s so applications can override
+      them as needed.*
+- In the `preamble.ft`, set some new configuration values:
+    - Set `multitasking? ON` of course.
+    - Set the new `tos-in-reg?` flag appropriately.
+    - Set `/exit` to the size of the `EXIT` in a thread.
+        - This is 1 cell in DTC and ITC, but might be 1 byte in STC.
+- Update the `main` entry point:
+    - Add new code to set up an interrupt handling entry point.
+    - Set up the kernel task to run initially, rather than setting the
+      global stack pointers.
+    - Configure any interrupts (eg. timers) but leave interrupts disabled
+      for the time being.
+    - You can probably jump to `(RESTART)` to kick off the Forth code.

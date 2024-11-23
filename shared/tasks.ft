@@ -1,7 +1,7 @@
 \ Multitasking code!
 \ Only REQUIREd:
 \ (1) on targets that support it, and
-\ (2) when config multitasking? is true.
+\ (2) when multitasking? is true.
 target definitions
 
 \ XXX: The current definition is not safe for preemptive schemes!
@@ -11,46 +11,11 @@ target definitions
 \ TODO: Consider task alignment - eg. on machines with caches it would be good
 \ to have the stacks aligned on eg. 64- or 256-byte boundaries for speed.
 
-\ User area ==================================================================
-
-\ Size of the user area. User updatable via UALLOT
-host t/user @   target VALUE /USER
-
-target : UALLOT ( delta -- offset ) /USER   tuck +   TO /USER ;
-  host acts: t/user @   tuck t/user +! ;
-
-target : USER ( "name" --    X: -- addr )
-    CREATE   1 cells uallot ,   DOES> @ up@ + ;
-  host acts: CREATE 1 tcells uallot tdata, ; \ No DOES> - can't call these on the host.
-
-\ XXX: This list has to be mirrored in host/mirrors.ft
-\ TODO: That sucks and I'm sure I can find a better approach.
-target : link      ( -- addr ) [ host tlink      tliteral target ] up@ + ;
-target : task-sp   ( -- addr ) [ host tsp        tliteral target ] up@ + ;
-target : /stack    ( -- addr ) [ host t/stack    tliteral target ] up@ + ;
-target : /rstack   ( -- addr ) [ host t/rstack   tliteral target ] up@ + ;
-target : /task     ( -- addr ) [ host t/task     tliteral target ] up@ + ;
-target : sp0       ( -- addr ) [ host tsp0       tliteral target ] up@ + ;
-target : rp0       ( -- addr ) [ host trp0       tliteral target ] up@ + ;
-target : task-code ( -- addr ) [ host ttask-code tliteral target ] up@ + ;
-target : pad       ( -- addr ) [ host tpad       tliteral target ] up@ + ;
-
-
-\ TODO: Implement UVALUE and UDEFER; currently not possible because there's no
-\ indirection of `TO`. Multiple codewords for CREATEd words?
-
-\ Gets the offset of a USER variable.
-target : USER' ( "name" -- offset ) ' >body @ ;
-
-\ Given an address in this task's user area, return the same address in
-\ another task's user area.
-target : 'S ( addr1 task -- addr2 ) up@ - + ;
-
 \ Task area ==================================================================
 target VARIABLE task-area
 
 \ Allots u address units in the task area; returning the address at the start.
-host config tasks-desc? @ [IF]
+host tasks-desc? [IF]
   \ Downward-growing task area: task-area points at the most recent task.
   target : task-allot ( u -- task ) negate task-area +!   task-area @ ;
 host [ELSE]
@@ -155,7 +120,7 @@ target : >task ( x task -- )
   -1 cells over +! \ Decrement the stack pointer ( x 'sp )
   @ ! ;
 
-host config tos-in-reg? @ [IF]
+host tos-in-reg? [IF]
   target : tos>task ( task -- ) $deadbeef swap >task ;
 host [ELSE]
   target : tos>task ( task -- ) drop ;
@@ -200,7 +165,7 @@ target : initiate ( xt task -- )
 \ We already have the pieces of this since it resembles (DOES>).
 target : (ACTIVATE) ( task -- )
   \ Get the implied xt. The TORS points at EXIT in the thread.
-  R@ [ host config /exit @ tliteral target ] + swap initiate ;
+  R@ [ host /exit tliteral target ] + swap initiate ;
 
 
 target : ACTIVATE ( C: colon-sys1 -- colon-sys2    X: task -- )
@@ -233,7 +198,7 @@ target : INIT-MULTI ( -- )
   \ Initialize the task area: with descending tasks, it points at kernel-task;
   \ with ascending tasks, it points just after.
   [ host kernel-task tliteral target ]   ( /task task )
-  [ host config tasks-desc? @ [IF] target ] nip [ host [ELSE] target ] + [ host [THEN] target ]
+  [ host tasks-desc? [IF] target ] nip [ host [ELSE] target ] + [ host [THEN] target ]
   task-area !
 
   up@ link ! ;  \ Link kernel to itself, since it's the only running task.

@@ -2,7 +2,7 @@
 \ This sets Target's LATEST and DP properly.
 host definitions
 
-config data-indirect? @ [IF] prepare-data-initializers [THEN]
+data-indirect? [IF] prepare-data-initializers [THEN]
 
 \ By this point all the USER variables should be defined. Write the base size
 \ into code space since the kernel code needs them.

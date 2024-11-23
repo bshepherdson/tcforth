@@ -24,7 +24,7 @@ VARIABLE max-out
 
 : asm,  ( w -- ) there @ tc!   1 there +! ;
 
-1   config instr-width !
+1 CONSTANT instr-width
 
 \ Handling the extra words after the opcode.
 \ These are 4 cells in case of long-word arguments.

@@ -520,7 +520,7 @@ end-code
 
 
 \ Optional: Multitasking =====================================================
-config multitasking? @ [IF]
+multitasking? [IF]
 
 \ Linked list of ready tasks, with end pointer.
 data-space @   2 tcells tdata-allot   CONSTANT ready-tasks ( tail head )

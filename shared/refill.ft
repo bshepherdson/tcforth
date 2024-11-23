@@ -8,8 +8,8 @@ target  0 CONSTANT SRC-KEYBOARD
 \ There's room for -2 through +5.
 host definitions
 
-1 tcellbits  1- lshift                 CONSTANT top-bit
-1 tcellbits  lshift 1- invert   -1 and CONSTANT signed-mask
+1 bits/tcell  1- lshift                 CONSTANT top-bit
+1 bits/tcell  lshift 1- invert   -1 and CONSTANT signed-mask
 
 \ Properly sign-extends a target signed number into a host signed number,
 \ should the host's integers be wider than the target's.

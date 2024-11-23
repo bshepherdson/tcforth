@@ -1,0 +1,9 @@
+\ Default intro, if there isn't a customized one defined.
+target '.intro   host t>body tdata@ 0= [IF]
+  target definitions
+  :noname ." TC-Forth version 7" cr ; '.intro !
+host [THEN]
+
+host definitions
+
+data-indirect? [IF] prepare-data-initializers [THEN]

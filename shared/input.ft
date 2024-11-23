@@ -98,13 +98,6 @@ host REQUIRE strings.ft
 
 target definitions
 
-
-host config multitasking? @ [IF]
-  target : BASE ( -- addr ) [ host tbase tliteral target ] up@ + ;
-host [ELSE]
-  target : BASE ( -- addr ) [ host data-space @   10 tdata,   tliteral target ] ;
-host [THEN]
-
 \ Basic, unsigned number parsing.
 \ Tries to parse as many digits according to BASE as possible.
 target : >NUMBER ( ud1 c-addr1 u1 -- ud2 c-addr2 u2 )

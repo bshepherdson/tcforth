@@ -93,9 +93,6 @@ These are captured by two configuration flags:
 - `keyboard-input?`: true for interactive builds, or application builds that
   want to use Forth's input handling, eg. `ACCEPT`
 
-(Setting `config has-dictionary? ON` and `config keyboard-input? OFF` doesn't
-make sense, but it should work.)
-
 
 #### Included memory spaces
 

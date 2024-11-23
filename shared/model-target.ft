@@ -1,9 +1,18 @@
 target definitions
 
+\ If the target does not already define UP@ and UP!, we expect it to define
+\ UP as a variable.
+host <T'> UP@ 0= [IF]
+  target : UP@ ( -- up ) up @ ;
+  target : UP! ( up -- ) up ! ;
+host [THEN]
+
+target : BASE ( -- addr ) [ host tbase tliteral target ] up@ + ;
+
 \ TODO: Much of this is about compiling Forth code, and therefore not needed
 \ on non-interactive targets.
 
-host config data-indirect? @ [IF]
+host data-indirect? [IF]
   target : ,PFA ( -- ) here cell+ , ;
 host [ELSE]
   target : ,PFA ( -- ) ;
@@ -12,7 +21,7 @@ host [THEN]
 \ If LITERAL was not defined, assume we want the standard non-STC version.
 host <T'> LITERAL 0= [IF]
   \ Error: non-threaded code (eg. STC) should define a custom LITERAL!
-  config threaded? @ 0= [IF] 95 throw [THEN]
+  threaded? 0= [IF] 95 throw [THEN]
   target : LITERAL ( C: x --    X: -- x )
     [ host lit tliteral target ] compile, , ; IMMEDIATE
     host acts: tliteral ; IMPERATIVE
@@ -20,10 +29,10 @@ host [THEN]
 
 \ Alignment ==================================================================
 \ Only needed when the target alignment is > 1.
-host config alignment @ 1 > [IF]
+host alignment 1 > [IF]
   target : ALIGNED
-      [ host config alignment @ 1- tliteral target ] +
-      [ host config alignment @ 1- tliteral target ] invert and ;
+      [ host alignment 1- tliteral target ] +
+      [ host alignment 1- tliteral target ] invert and ;
     host acts:   taligned ;
   target : ALIGN     here aligned dp ! ;
     host acts:   data-space @   taligned   data-space ! ;
@@ -51,10 +60,10 @@ target : NAME>STRING ( nt -- c-addr u )
 
 target : >CFA ( nt -- xt )
   name>string + aligned
-  [ host config names-indirect? @ [IF] target ] @ [ host [THEN] target ] ;
+  [ host names-indirect? [IF] target ] @ [ host [THEN] target ] ;
 
 \ PORT: Portable
-host config names-indirect? @ [IF]
+host names-indirect? [IF]
 target : /NAME-FIELD ( -- u ) 1 cells ;
 host [ELSE]
 target : /NAME-FIELD ( -- u ) 0 ;
@@ -62,10 +71,10 @@ host [THEN]
 
 \ PORT: Machine-specific - but it could be a config/model parameter, eg. /CODEWORD
 \ TODO: Set the /codeword in all targets!
-host config data-indirect? @ [IF]
-target : >BODY ( xt -- addr ) [ host config /codeword @ tliteral target ] + @ ;
+host data-indirect? [IF]
+target : >BODY ( xt -- addr ) [ host /codeword tliteral target ] + @ ;
 host [ELSE]
-target : >BODY ( xt -- addr ) [ host config /codeword @ tliteral target ] + ;
+target : >BODY ( xt -- addr ) [ host /codeword tliteral target ] + ;
 host [THEN]
 
 
@@ -84,7 +93,7 @@ host [THEN]
 \ in ITC and DTC. In STC and TTC it doesn't work - we need a config field for it.
 \ Probably /EXIT, and defaulting to a cell.
 target : (DOES>)
-  R@   [ host config /exit @ tliteral target ] +    latest >cfa   !cf ;
+  R@   [ host /exit tliteral target ] +    latest >cfa   !cf ;
 
 host definitions
 T' (DOES>) '(DOES>) !

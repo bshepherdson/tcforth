@@ -1,0 +1,49 @@
+\ USER variables, UP handling, etc.
+target definitions
+
+\ With multitasking, each task has its own user area.
+\ Without multitasking, a single global area is allocated in data space.
+\ That global area's address is read and written with UP@ and UP! - it doesn't
+\ really matter whether that's a task or just a global.
+
+\ User area ==================================================================
+\ Size of the user area. User updatable via UALLOT
+host t/user @   target VALUE /USER
+
+target : UALLOT ( delta -- offset ) /USER   tuck +   TO /USER ;
+  host acts: t/user @   tuck t/user +! ;
+
+target : USER ( "name" --    X: -- addr )
+    CREATE   1 cells uallot ,   DOES> @ up@ + ;
+  host acts: CREATE 1 tcells uallot tdata, ; \ No DOES> - can't call these on the host.
+
+\ XXX: This list has to be mirrored in host/mirrors.ft
+\ TODO: That sucks and I'm sure I can find a better approach.
+
+\ These words are not needed without multitasking.
+\ NOTE: Their space is still allotted in the single big task!
+\ That's okay, and actually a good thing, since it makes some startup code easy.
+host multitasking? [IF]
+  target : link      ( -- addr ) [ host tlink      tliteral target ] up@ + ;
+  target : task-sp   ( -- addr ) [ host tsp        tliteral target ] up@ + ;
+  target : task-code ( -- addr ) [ host ttask-code tliteral target ] up@ + ;
+  target : /task     ( -- addr ) [ host t/task     tliteral target ] up@ + ;
+host [THEN]
+
+\ BASE is already defined elsewhere.
+target : /stack    ( -- addr ) [ host t/stack    tliteral target ] up@ + ;
+target : /rstack   ( -- addr ) [ host t/rstack   tliteral target ] up@ + ;
+target : sp0       ( -- addr ) [ host tsp0       tliteral target ] up@ + ;
+target : rp0       ( -- addr ) [ host trp0       tliteral target ] up@ + ;
+target : pad       ( -- addr ) [ host tpad       tliteral target ] up@ + ;
+
+
+\ TODO: Implement UVALUE and UDEFER; currently not possible because there's no
+\ indirection of `TO`. Multiple codewords for CREATEd words?
+
+\ Gets the offset of a USER variable.
+target : USER' ( "name" -- offset ) ' >body @ ;
+
+\ Given an address in this task's user area, return the same address in
+\ another task's user area.
+target : 'S ( addr1 task -- addr2 ) up@ - + ;

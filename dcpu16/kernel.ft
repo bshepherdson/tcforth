@@ -14,6 +14,7 @@
 \ - TOS on stack.
 \ - A B C X Y are free.
 \ - J is reserved. No STI/STD.
+\ - UP is a global var.
 
 \ These are HOST vocab words that define assembler words on the Target - their
 \ mirror words are regular.
@@ -135,9 +136,12 @@ code >R    pop  pushrsp,   end-code
 code R>    push poprsp,    end-code
 code R@    [z]  push set,  end-code
 
+TVARIABLE var_up
+
 code DEPTH
-  sp0 # ra set,
-  sp    ra sub,
+  var_up [#] ra set,
+  tsp0  [a+] ra set,
+  sp  ra   sub,
   ra  push set,
 end-code
 
@@ -205,7 +209,6 @@ label latest0   0 asm,
 
 TVARIABLE var_dp
 TVARIABLE var_latest
-TVARIABLE var_base
 TVARIABLE var_state
 TVARIABLE var_handler
 
@@ -216,10 +219,6 @@ TVARIABLE var_source_id
 
 data-space @ CONSTANT input-buf   128 tdata-allot
 
-
-code DP
-  var_dp # push set,
-end-code
 
 code ,
 label (compile)
@@ -232,10 +231,11 @@ end-code
 code C,         (compile) # pc set, end-code-bare
 code COMPILE,   (compile) # pc set, end-code-bare
 
+code DP           var_dp         # push set, end-code
 code HANDLER      var_handler    # push set, end-code
 code 'LATEST      var_latest     # push set, end-code
 code STATE        var_state      # push set, end-code
-code BASE         var_base       # push set, end-code
+code UP           var_up         # push set, end-code
 code 'SOURCE      var_source     # push set, end-code
 code 'SOURCE-ID   var_source_id  # push set, end-code
 code >IN          var_in_ptr     # push set, end-code
@@ -635,12 +635,22 @@ label interrupt_handler
   next,
 
 
+task-area0                         CONSTANT default-rp0
+task-area0  default/rs -           CONSTANT default-sp0
+\ Rounding UP down to make some extra user space.
+default-sp0 default/ds - $ff00 and CONSTANT default-up
+
 \ Machine code entry point, jumped to by the first instruction at $0000-1
 label main
-  1 # iaq,                 \ Queueing on for safety.
-  interrupt_handler # ias, \ Set up interrupt handler
-  rp0 # rz set,            \ Initial RSP
-  sp0 # sp set,            \ Initial SP
+  1 # iaq,                      \ Queueing on for safety.
+  interrupt_handler # ias,      \ Set up interrupt handler
+  default-up  # ra set,         \ Initial UP
+  ra    var_up [#] set,         \ Into the variable
+  default-rp0 # rz set,         \ Initial RSP
+  rz     trp0 [a+] set,         \ RSP -> RP0 variable
+  default-sp0 # sp set,         \ Initial SP
+  sp     tsp0 [a+] set,         \ RSP -> RP0 variable
+
   0 # iaq,                 \ Enable interrupts again
   entry-point [#] pc set,  \ Jump to the code field of the starter word COLD.
 

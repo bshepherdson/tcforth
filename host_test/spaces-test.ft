@@ -10,9 +10,7 @@ tspace IS current-space
 
 \ Test configuration helper
 : space-test ( address-unit-bits cell-width little-endian? -- )
-  config little-endian? !
-  config cell-width     !
-  config char-bits      ! ;
+  TO little-endian?   TO cell-width   TO char-bits ;
 
 : tmax ( -- max-host-address ) tspace space>max @ ;
 

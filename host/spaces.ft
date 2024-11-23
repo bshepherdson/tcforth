@@ -87,15 +87,15 @@ end-structure
   dup TO code-space
       TO data-space
 
-  config has-dictionary? @ IF code-space ELSE new-space THEN
+  has-dictionary? IF code-space ELSE new-space THEN
   TO name-space ;
 
 
 \ Basic split spaces, each one a separate large area on the host.
 \ Throws if the configuration doesn't match - it must have indirect names and data.
 : split-spaces! ( -- )
-  config names-indirect? @ 0= ABORT" Cannot do split spaces without names-indirect? ON"
-  config data-indirect?  @ 0= ABORT" Cannot do split spaces without data-indirect? ON"
+  names-indirect? 0= ABORT" Cannot do split spaces without names-indirect? true"
+  data-indirect?  0= ABORT" Cannot do split spaces without data-indirect? true"
 
   new-space THERE-PTR TO code-space
   new-space THERE-PTR TO name-space
@@ -207,15 +207,21 @@ DEFER <tc!*> ( tchar c-addr -- )
   R> 1 tcells <tchars!> ;
 
 
-: <t@*> ( c-addr -- tcell ) config little-endian? @ IF <le@> ELSE <be@> THEN ;
-: <t!*> ( tcell c-addr -- ) config little-endian? @ IF <le!> ELSE <be!> THEN ;
+: <t@*> ( c-addr -- tcell ) little-endian? IF <le@> ELSE <be@> THEN ;
+: <t!*> ( tcell c-addr -- ) little-endian? IF <le!> ELSE <be!> THEN ;
 
 \ API - Explicit space =======================================================
 : <tc@> ( target-addr space -- tchar ) dup TO current-space   >space <tc@*> ;
 : <tc!> ( tchar target-addr space -- ) dup TO current-space   >space <tc!*> ;
 
 : <t@>  ( target-addr space -- tcell ) dup TO current-space   >space <t@*>  ;
-: <t!>  ( tcell target-addr space -- ) dup TO current-space   >space <t!*>  ;
+
+VARIABLE hit-7
+hit-7 off
+
+: <t!>  ( tcell target-addr space -- )
+  over 7 = IF hit-7 @ IF 999 throw ELSE hit-7 on THEN THEN
+  dup TO current-space   >space <t!*>  ;
 
 \ Returns the host-addr for the current THERE position.
 : space>there ( space -- host-addr ) dup @ swap >space ;
@@ -312,14 +318,6 @@ DEFER <tc!*> ( tchar c-addr -- )
 
 : skip-space? ( space -- ? )
   space>offset @ -1 = ;
-  \ dup data-space =   config data-space-blank? @ and IF
-  \   ." Skipping the data space, it's uninitialized." cr
-  \   toss true EXIT THEN
-
-  \ name-space =   config has-dictionary? @ 0= and dup IF
-  \   name-space toss
-  \   ." Skipping the name space, no dictionary." cr
-  \ THEN ( ? ) ;
 
 : dump-space ( there-array file -- )
   \ Bail if this space is a blank data space, or the name-space.

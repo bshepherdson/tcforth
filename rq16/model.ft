@@ -65,7 +65,7 @@ label DOCOL
 \ the parameter field address. With colocated code and data, that needs to be
 \ moved to tos. With separate, it needs to be a memory read.
 \ See the DOES> design below for more details.
-config data-indirect? @ [IF]
+data-indirect? [IF]
 : pfa->tos, ( -- )
   {{ tos }} push,
   r0 [] tos ldr, ;

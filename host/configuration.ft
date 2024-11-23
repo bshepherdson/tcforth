@@ -5,72 +5,110 @@
 REQUIRE vocabularies.ft
 host definitions
 
-\ TODO: This ended up being global, so I think it'd be a lot easier to use if
-\ it were a bunch of HOST VALUEs instead. Low priority.
+\ Required target parameters =================================================
+\ These first few parameters *must* be configured.
+\ Their defaults are known to be silly and get checked by ?check-config.
+777 CONSTANT config-unset
+config-unset VALUE char-bits
+config-unset VALUE cell-width      \ In target address units
+config-unset VALUE little-endian?
+config-unset VALUE threaded?       \ True for threaded code, ie. DTC and ITC.
+config-unset VALUE tos-in-reg?     \ True if TOS is in a register.
 
-begin-structure configuration
-  \ Including or excluding parts of the code.
-  field: keyboard-input?   \ Defaults to on.
-  field: keyboard-output?  \ Defaults to on.
-  field: structures?       \ Defaults to on.
-  field: multitasking?     \ Defaults to off.
 
-  \ Nature of the target system:
-  \ - If it includes the dictionary and Forth text interpreters
-  \ - If the code is on a ROM and the data must be elsewhere.
-  field: has-dictionary?
-  field: names-indirect?
-  field: data-indirect?
+\ Further target parameters ==================================================
+\ Only required if multitasking is enabled, of course.
+0 VALUE tasks-desc?     \ True if the task area grows towards lower addresses.
 
-  \ Parameters of the target.
-  field: char-bits
-  field: cell-width      \ In target address units
-  field: instr-width
-  field: /codeword       \ In target address units
-  field: /exit           \ The width of an EXIT call in a Forth thread
-  field: alignment       \ Alignment of a target cell, in target address units.
-  field: little-endian?
-  field: threaded?       \ True for threaded code, ie. DTC and ITC.
-  field: tos-in-reg?     \ True if TOS is in a register. (Needed for tasks.)
-  field: tasks-desc?     \ True if the task area grows towards lower addresses.
-end-structure
 
-configuration allocate drop CONSTANT config
+\ Defaulting to cell size ====================================================
+\ Some targets need to override these values, but they are commonly the same
+\ as the cell size. Override these internal (parenthesized) versions, but call
+\ the public ones below to read them.
+\ TODO: This feels like a single defining word would do the job better, but I
+\ can't get it to work on Gforth 0.7.
+0 VALUE (/codeword)
+0 VALUE (/exit)
+0 VALUE (alignment)
 
-: config-defaults! ( -- )
-  config keyboard-input?  ON
-  config keyboard-output? ON
-  config structures?      ON ;
+: DEFAULT:CELLS ( addr "name" --   X: -- value )
+  CREATE , DOES> @ >body @ dup 0= IF drop cell-width THEN ;
+
+' (/codeword) DEFAULT:CELLS /codeword  \ In target address units
+' (/exit)     DEFAULT:CELLS /exit      \ Width of EXIT in a Forth thread
+' (alignment) DEFAULT:CELLS alignment  \ Target cell alignment in target address units
+
+
+\ Optional features ==========================================================
+\ Some of these default to on, and some off.
+true   VALUE keyboard-input?
+true   VALUE keyboard-output?
+true   VALUE has-dictionary? \ Have the dictionary and Forth text interpreter?
+true   VALUE structures?
+false  VALUE multitasking?
+
+
+\ Forth system internals =====================================================
+\ These are about the layout of eg. dictionary headers, and are needed when
+\ the dictionary is in ROM, so writable data values must be indirected rather
+\ than inlined in the dictionary.
+\ Default to an inline, writable dictionary, the common configuration.
+false  VALUE names-indirect?
+false  VALUE data-indirect?
+
+
+\ Setup helpers ==============================================================
+: config-terminal! ( -- )
+  true TO keyboard-input?
+  true TO keyboard-output? ;
 
 : interactive-forth! ( -- )
-  config-defaults!
-  config has-dictionary?  ON ;
+  config-terminal!
+  true TO has-dictionary? ;
 
 : standalone! ( -- )
-  config-defaults!
-  config has-dictionary?  OFF
-  config names-indirect?  ON ;
+  false TO has-dictionary?
+  true  TO names-indirect? ;
 
 : in-rom! ( -- )
-  config data-indirect?   ON ;
+  true TO data-indirect? ;
+
+
+\ Config checks ==============================================================
+: ?unset ( xt -- )
+  dup execute config-unset = IF
+    >name id. ." config value must be set" abort
+  ELSE drop THEN ;
+
+: ?check-config ( -- )
+  ['] char-bits      ?unset
+  ['] cell-width     ?unset
+  ['] little-endian? ?unset
+  ['] threaded?      ?unset
+  ['] tos-in-reg?    ?unset
+
+  \ If there's no dictionary on the target, then names-indirect? must be true.
+  \ So if both has-dictionary? and names-indirect? are false, there's a problem.
+  has-dictionary? names-indirect? or 0=
+  ABORT" Targets without the dictionary must have names-indirect? true" ;
 
 
 \ Helpers ====================================================================
 \ Typically 8 or 16, the number of bits per target address unit.
-: tcharbits ( -- u )     config char-bits @ ;
-: tcells    ( u1 -- u2 ) config cell-width @ * ;
-: tcellbits ( -- u )     tcharbits tcells ;
+: tcharbits ( -- u )     char-bits ;
+: tcells    ( u1 -- u2 ) cell-width * ;
 : tchars    ( u1 -- u2 ) ;
 : tchar+    ( u1 -- u2 ) 1+ ;
 : tcell+    ( u1 -- u2 ) 1 tcells + ;
 
 : taligned  ( tc-addr -- t-addr )
-  config alignment @ 1-   tuck +   swap invert and ;
+  alignment 1-   tuck +   swap invert and ;
 
-: bits/tcell   ( -- u ) config cell-width @   config char-bits @ * ;
+: bits/tcell   ( -- u ) tcharbits tcells ;
 : bytes/tcell  ( -- u ) bits/tcell   3 rshift ;
-: bytes/tchar  ( -- u ) config char-bits @   3 rshift ;
-: tchar-mask   ( -- u-mask ) 1   config char-bits @ lshift   1- ;
+: bytes/tchar  ( -- u ) char-bits    3 rshift ;
+: tchar-mask   ( -- u-mask ) 1 char-bits lshift   1- ;
+
 
 \ Output configuration =======================================================
 native definitions

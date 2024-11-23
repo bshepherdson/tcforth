@@ -63,7 +63,7 @@ label DOCOL
 \ DOVAR is at the very top of memory (circa $0007) it would fit inline, but this
 \ way the return address JSR pushes is the data field.
 \ See the DOES> design below for more details.
-config data-indirect? @ [IF]
+data-indirect? [IF]
   : pfa->tos, ( -- )
     pop ra set,
     [a] push set, ;
@@ -158,11 +158,21 @@ label DOSTRING
 \ cell [LIT|x] pattern.
 : tliteral ( x --    X: -- x ) lit tcompile,   tcode, ;
 
+\ TODO: I think this can be generic based on config flags now - /codeword
 : t>pfa ( target-xt -- target-body ) 2 tcells + ;
 
 
-0     CONSTANT rp0
-$ff80 CONSTANT sp0
+\ Stacks and tasks ===========================================================
+128 tcells CONSTANT default/rs
+256 tcells CONSTANT default/ds
+
+\ Tasks starting at the top of memory and growing down.
+0 CONSTANT task-area0
+
+multitasking? [IF]
+  32 tcells CONSTANT kernel/rs
+  32 tcells CONSTANT kernel/ds
+[THEN]
 
 label entry-point 0 asm,
 

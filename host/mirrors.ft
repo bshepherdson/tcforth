@@ -91,7 +91,6 @@ VARIABLE >mirror \ Holds the body address of the mirror currently executing.
 
 host definitions
 
-config multitasking? @ [IF]
 \ TODO: This should be moved to a new host-side file.
 
 VARIABLE t/user
@@ -114,5 +113,4 @@ TUSER tbase
 4   tcells tuser-allot CONSTANT ttask-code
 128 tchars tuser-allot CONSTANT tpad
 
-[THEN]
 \ All done.

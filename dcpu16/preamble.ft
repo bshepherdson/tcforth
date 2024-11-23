@@ -10,18 +10,14 @@ host definitions
 host REQUIRE ../host/configuration.ft \ Default interactive is fine.
 
 interactive-forth!
-16    config char-bits    !
-1     config cell-width   !
-2     config /codeword    ! \ JSR + address
-1     config instr-width  !
-1     config alignment    !
+16     TO char-bits
+1      TO cell-width
+2      TO (/codeword)    \ JSR + address
+1      TO (alignment)
 
-config little-endian?   OFF
-config threaded?        ON
+false  TO little-endian?
+true   TO threaded?
 
-\ XXX: Playing with separate spaces.
-\ separate-spaces!
-\ config data-space-blank?  ON
 
 \ Target spaces ==============================================================
 REQUIRE ../host/spaces.ft
@@ -36,8 +32,8 @@ REQUIRE ../host/spaces.ft
   $0 code-space ORG! ;
 
 : spaces::separate ( -- )
-  config data-indirect?  ON
-  config names-indirect? ON
+  true  TO data-indirect?
+  true  TO names-indirect?
 
   split-spaces!
   $0000 code-space ORG!   $0000 code-space space>offset !

@@ -11,7 +11,7 @@ target : ABORTED ( -- )
   R> rp0 @ rp! >R \ Drops everything but ABORTED's own return
   [ host T' [ tcompile, target ]
   0 'source-id !             \ Force a keyboard source.
-  task-sp @ sp! ;
+  sp0 @ sp! ;
 
 \ Fundamental multi-line interpreter loop.
 \ Separate from QUIT because it gets called by file readers as well.
@@ -40,7 +40,7 @@ target : INIT-DATA-PTRS ( -- )
   [ host dp0     tliteral target ] @ [ host var_dp     tliteral target ] ! ;
 
 
-host config data-indirect? @ [IF]
+host data-indirect? [IF]
 \ Copy initialized data ======================================================
 host definitions
 code-space @   0 tcode,   CONSTANT initializers
@@ -57,7 +57,7 @@ host
     tcode-c, LOOP 2drop ;
 
 : prepare-data-initializers ( -- )
-  config data-indirect? @ 0= ABORT" Copying data to RAM without data-indirect? flag is pointless"
+  data-indirect? 0= ABORT" Copying data to RAM without data-indirect? flag is pointless"
 
   all-spaces @ BEGIN ?dup WHILE
     dup space>init-copy? @ IF dup initializer, THEN
@@ -86,10 +86,10 @@ host [THEN] target definitions
 : boot  ( -- )
   init-data   init-hardware
   \ TODO: This phrasing keeps appearing - some helper for it would be good.
-  [ host config multitasking? @ [IF] target ] init-multi [ host [THEN] target ]
+  [ host multitasking? [IF] target ] init-multi [ host [THEN] target ]
   10 base ! ;
 
-host config multitasking? @ [IF]
+host multitasking? [IF]
   \ Note that we're deliberately in SINGLE state still, not MULTI.
   \ That's a user-time decision and separate from the interrupt handlers.
   \ Since it only affects whether PAUSE is a no-op we can still do this.
@@ -113,6 +113,6 @@ host [ELSE]
 host [THEN]
 
 \ "Cold" start, loading interactive mode by default.
-target : cold  ( -- ) boot 65 emit interactive ;
+target : cold  ( -- ) boot interactive ;
 
 host   T' COLD   entry-point tcode!

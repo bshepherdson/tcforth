@@ -12,17 +12,13 @@ host REQUIRE ../host/configuration.ft
 interactive-forth!
 
 \ 32-bit, byte addressable, little-endian.
-8    config char-bits    !
-4    config cell-width   !
-4    config /codeword    !
-4    config /exit        !
-4    config instr-width  !
-4    config alignment    !
+8      TO char-bits
+4      TO cell-width
 
-config little-endian?   ON
-config threaded?        ON
-config multitasking?    ON
-config tos-in-reg?      ON
+true   TO little-endian?
+true   TO threaded?
+true   TO multitasking?
+true   TO tos-in-reg?
 
 
 \ Target spaces ==============================================================
@@ -43,8 +39,8 @@ REQUIRE ../host/spaces.ft
   $10000   code-space ORG! ;
 
 : spaces::separate ( -- )
-  config data-indirect?  ON
-  config names-indirect? ON
+  true TO data-indirect?
+  true TO names-indirect?
 
   split-spaces!
   $10000 code-space ORG!   $0000           code-space space>offset !

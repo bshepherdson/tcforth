@@ -11,8 +11,6 @@ target : ,CF ( codeword-addr -- ) here 2 cells allot   !cf ;
 
 target : ,DOCOL ( -- ) [ host jsr_docol tcode@ tliteral target ] , ;
 
-target : PAD ( -- addr ) $fb00 ;
-
 host REQUIRE ../shared/model-target.ft
 
 \ DOES> ======================================================================

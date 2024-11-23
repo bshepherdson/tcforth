@@ -2,8 +2,8 @@
 \ application. (That is, one that's ROM-ready and does not contain an
 \ interactive Forth system.)
 \ Even without an interactive Forth system, you can choose whether to include:
-\ - input vocabulary (KEY, ACCEPT, etc.) with:       config input-vocabulary?
-\ - output vocabulary (EMIT, TYPE, CR, etc.) with:   config output-vocabulary?
+\ - input vocabulary (KEY, ACCEPT, etc.) with:       keyboard-input?
+\ - output vocabulary (EMIT, TYPE, CR, etc.) with:   keyboard-output?
 
 \ This sample uses both, which is the default for ROM-APPLICATION!
 \ You can save a fair bit of space by dropping these from apps which do not

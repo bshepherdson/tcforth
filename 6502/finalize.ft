@@ -4,7 +4,7 @@
 \ TODO: This file is (I think) identical across all the systems now?
 host definitions
 
-config data-indirect? @ [IF] prepare-data-initializers [THEN]
+data-indirect? [IF] prepare-data-initializers [THEN]
 
 \ This needs to be the last lines in the target compilation.
 host latest         latest0 tcode!

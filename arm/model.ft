@@ -29,7 +29,7 @@ code-space @ b,
 
 \ Some assembler macros
 ?stack-clear
-: next,    ( -- ) config instr-width @   # ip []+ pc ldr, ;
+: next,    ( -- ) instr-width # ip []+ pc ldr, ;
 : pushrsp, ( r 0 -- ) 2>R {{ 2R> }} rsp !stmdb, ;
 : poprsp,  ( r 0 -- ) 2>R {{ 2R> }} rsp !ldmia, ;
 
@@ -54,7 +54,7 @@ label DOCOL
 \ The address of the cell after DOVAR is in lr.
 \ With collocated names and data, that cell is the start of the parameter field.
 \ With separated names, there's a pointer to the parameter field there.
-config data-indirect? @ [IF]
+data-indirect? [IF]
   : pfa->tos, ( -- ) lr [] tos ldr, ;
 [ELSE]
   : pfa->tos, ( -- ) lr tos mov, ;
@@ -131,7 +131,8 @@ label DOSTRING
 \ Compiles the bl DOVAR.
 : ,dovar ( -- ) dovar bl, ;
 
-config data-indirect? @ [IF]
+\ TODO: I think this is in shared code dictionary now? It probably should be.
+data-indirect? [IF]
   : t,pfa ( -- ) data-space @ tcode, ;
 [ELSE]
   : t,pfa ( -- ) ;

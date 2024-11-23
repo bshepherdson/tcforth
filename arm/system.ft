@@ -21,6 +21,7 @@ host REQUIRE branches.ft               \ Target-specific branching helpers.
 host REQUIRE ../shared/control-structures.ft
 host REQUIRE ../shared/exceptions.ft
 host REQUIRE model-target.ft
+host REQUIRE ../shared/user-area.ft
 host REQUIRE ../shared/input.ft
 host REQUIRE ../shared/core2.ft
 host REQUIRE ../shared/refill.ft
@@ -31,8 +32,8 @@ host REQUIRE ../shared/output.ft
 host REQUIRE ../shared/error-messages.ft
 host REQUIRE timers.ft
 
-host config structures?   @ [IF] REQUIRE ../shared/structs.ft host [THEN]
-host config multitasking? @ [IF] REQUIRE ../shared/tasks.ft   host [THEN]
+host structures?   [IF] REQUIRE ../shared/structs.ft host [THEN]
+host multitasking? [IF] REQUIRE ../shared/tasks.ft   host [THEN]
 
 host REQUIRE intro.ft
 host REQUIRE ../shared/init.ft         \ Shared init code.

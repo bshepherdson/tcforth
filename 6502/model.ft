@@ -94,7 +94,7 @@ $0000 $ jmp,
 \ return addresses work on the 6502.
 \ So pop it from the return stack, add 1, and push it onto the data stack.
 \ Then the RTS at the end will return to the thread.
-config data-indirect? @ [IF]
+data-indirect? [IF]
 : pfa->tos, ( -- )
   dex, dex,
   pla,        \ lo -> A

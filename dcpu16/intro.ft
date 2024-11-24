@@ -7,3 +7,5 @@ target definitions
 '.intro !
 
 : init-hardware ( -- ) init-devices init-lem init-serial ;
+
+:noname ( ch -- ch ) $7f and (printable) ; IS printable

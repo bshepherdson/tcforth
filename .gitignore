@@ -1,1 +1,6 @@
 *.bin
+*.crt
+*.prg
+*.hex
+*.gba
+test.disk

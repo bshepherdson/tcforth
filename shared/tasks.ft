@@ -191,9 +191,9 @@ target : ACTIVATE ( C: colon-sys1 -- colon-sys2    X: task -- )
 \ PASS compiles (PASS) then does ACTIVATE.
 
 target : INIT-MULTI ( -- )
-  [ host kernel/ds tliteral   kernel/rs tliteral   target ] ( /ds /rs )
+  [ host default/ds tliteral   default/rs tliteral   target ] ( /ds /rs )
   over /stack !   dup /rstack !
-  /user + + ( /kernel-task )
+  /user + + ( /main-task )
 
   \ Initialize the task area.
   \ With tasks-desc? true,  points at the newest task; full-descending.

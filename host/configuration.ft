@@ -46,6 +46,7 @@ true   VALUE keyboard-output?
 true   VALUE has-dictionary? \ Have the dictionary and Forth text interpreter?
 true   VALUE structures?
 false  VALUE multitasking?
+false  VALUE debugging?
 
 
 \ Forth system internals =====================================================

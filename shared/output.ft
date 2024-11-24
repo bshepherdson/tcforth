@@ -1,8 +1,9 @@
 target definitions
 
 \ Basic output helpers =======================================================
-: SPACE  ( -- )   bl emit ;
-: SPACES ( u -- ) dup 0> IF 0 DO space LOOP ELSE drop THEN ;
+: SPACE  ( -- )      bl emit ;
+: PADDED ( u ch -- ) over 0> IF swap 0 DO dup emit LOOP 0 THEN 2drop ;
+: SPACES ( u -- )    bl padded ;
 
 : TYPE   ( c-addr u -- ) ?dup IF 0 DO ( c-addr ) dup c@ emit 1+ LOOP THEN drop ;
 
@@ -39,8 +40,14 @@ VARIABLE (picout)
     <# 0 #S [ host '-' tliteral target ] hold #>
   ELSE <# dup abs S>D #S rot sign #> THEN ;
 
-: .  ( n -- ) (#HOLD) type space ;
-: .R ( n width -- ) >R (#HOLD) R> over - spaces type ;
+: .   ( n -- ) (#HOLD) type space ;
+: .R  ( n width -- ) >R (#HOLD)  R> over - spaces type ;
+: 0.R ( n width -- )
+  swap (#UHOLD)   ( width c-addr u )
+  rot over -      ( c-addr u zeroes )
+  [char] 0 padded ( c-addr u )
+  type ;
+
 
 : HEX. ( u -- )
   base @ >R hex

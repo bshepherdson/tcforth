@@ -1,0 +1,59 @@
+\ Debugging utilities, eg. DUMP
+
+target definitions
+host <T'> dump-width 0= [IF]
+  \ Number of address units to dump per line. Defaults to 16.
+  \ Should be a power of 2!
+  target $10 CONSTANT dump-width
+host [THEN]
+
+\ By default, $20 and up are printable directly.
+target DEFER printable
+: (printable) ( ch -- ch ) dup $20 < IF drop [char] . THEN ;
+' (printable) IS printable
+
+\ Width of a target address in hex characters, ie. 1 for each 4 bits.
+host char-bits        2 rshift   target CONSTANT char-width
+host char-bits tcells 2 rshift   target CONSTANT addr-width
+\ Number of address units to a dump "group" - min of 16 bits or 1 address unit.
+host 16 char-bits /              target CONSTANT chars/group
+\ Number of groups per dump "column" - always 4.
+4                           CONSTANT groups/column
+chars/group groups/column * CONSTANT chars/column
+
+
+target
+
+\ 32 wide on the DCPU is the smallest screen we have to wrangle:
+\ 01234567890123456789012345678901
+\ aaaa: 1111 2222 3333 4444  cccc
+: DUMP-ADDR ( addr -- ) addr-width 0.R   [char] : emit ;
+
+: DUMP-GROUP ( addr -- )
+  space   dup chars/group + swap DO i c@   char-width 0.R LOOP ;
+
+: DUMP-COLUMN ( addr -- )
+  dup chars/column + swap DO   i dump-group   chars/group +LOOP ;
+
+\ Dumps an entire line of hex.
+\ Divides into 1 or more columns with wider spacing between.
+\ Each column has at least 1 address unit, and a maximum of 4 groups.
+\ A group is the smaller of 1 address unit or 4 hex chars = 16 bits.
+: DUMP-HEX  ( addr -- )
+  dup addr-width +   swap DO
+    i dump-column   space
+  chars/column +LOOP ;
+
+
+: DUMP-CHARS ( addr -- ) dump-width over + swap DO i c@ printable emit LOOP ;
+
+: DUMP-LINE ( addr -- )
+  cr   dup dump-addr   dup dump-hex   dump-chars ;
+
+
+: DUMP ( addr u -- )
+  base @ >R hex   over + >R      ( addr   R: base top )
+  dump-width 1- invert and   ( addr0 )
+  BEGIN dup R@ U< WHILE
+    dup dump-line   dump-width + REPEAT
+  R> 2drop   R> base ! ;

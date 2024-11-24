@@ -1,5 +1,6 @@
 ?stack-clear
 ?default-spaces
+?check-config
 REQUIRE assembler.ft      \ DCPU-16 assembler
 
 host REQUIRE model.ft                             \ Add the DCPU-16 model words
@@ -38,6 +39,10 @@ host REQUIRE ../shared/error-messages.ft
 
 host structures?   [IF] REQUIRE ../shared/structs.ft host [THEN]
 host multitasking? [IF] REQUIRE ../shared/tasks.ft   host [THEN]
+host debugging?    [IF]
+  target definitions   4 CONSTANT dump-width
+  host REQUIRE ../shared/debugging.ft
+host [THEN]
 
 host REQUIRE intro.ft                  \ DCPU-16/Risque-16 HW init; intro msg
 host REQUIRE ../shared/init.ft         \ Shared init code.

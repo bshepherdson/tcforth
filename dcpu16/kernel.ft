@@ -664,11 +664,13 @@ label interrupt_handler
   \ And NEXT into it!
   next,
 
-
 task-area0                         CONSTANT default-rp0
 task-area0  default/rs - $ffff and CONSTANT default-sp0
 \ Rounding UP down to make some extra user space.
-default-sp0 default/ds - $ff00 and CONSTANT default-up
+default-sp0 default/ds - t/user @ - $ff00 and CONSTANT default-up
+
+cr cr
+S" Default UP: " type default-up hex. cr
 
 \ Make sure to write into UP so it's part of the data copy for separate spaces.
 default-up var_up tdata!

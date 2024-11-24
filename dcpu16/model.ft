@@ -169,11 +169,6 @@ label DOSTRING
 \ Tasks starting at the top of memory and growing down.
 0 CONSTANT task-area0
 
-multitasking? [IF]
-  32 tcells CONSTANT kernel/rs
-  32 tcells CONSTANT kernel/ds
-[THEN]
-
 label entry-point 0 asm,
 
 \ Space for : and ; ==========================================================

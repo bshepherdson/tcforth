@@ -11,7 +11,8 @@ target definitions
 \ Don't touch the cursor directly!
 
 \ Variable dev-lem1802 holds the device number.
-$fc00 CONSTANT vram
+32 12 * CONSTANT /vram
+CREATE vram   /vram allot align
 
 VARIABLE (colours)
 

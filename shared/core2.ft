@@ -146,7 +146,7 @@ target : IS ( I: xt "name" --    C: "name" --   X: xt -- )
     state @ IF
       ' postpone literal postpone defer! ELSE ' defer! THEN ; IMMEDIATE
   host acts:
-    T' t>body tliteral [tcompile] defer! ; IMPERATIVE
+    T' state @ IF tliteral [tcompile] defer! ELSE t>body tdata! THEN ; IMPERATIVE-BOTH
 
 target : ACTION-OF ( "name" -- xt )
   state @ IF ' postpone literal defer@ ELSE ' defer@ THEN ; IMMEDIATE

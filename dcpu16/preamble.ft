@@ -15,9 +15,13 @@ interactive-forth!
 2      TO (/codeword)    \ JSR + address
 
 
+false  TO tos-in-reg?
 false  TO little-endian?
 true   TO threaded?
 true   TO multitasking?
+true   TO tasks-desc?
+
+true   TO debugging?
 
 
 \ Target spaces ==============================================================

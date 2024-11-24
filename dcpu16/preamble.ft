@@ -13,10 +13,11 @@ interactive-forth!
 16     TO char-bits
 1      TO cell-width
 2      TO (/codeword)    \ JSR + address
-1      TO (alignment)
+
 
 false  TO little-endian?
 true   TO threaded?
+true   TO multitasking?
 
 
 \ Target spaces ==============================================================

@@ -597,6 +597,33 @@ label (key-ssi)-loop
 end-code
 
 
+\ Multitasking ================================
+\ Enters a task whose address is already in UP.
+\ The stacks for that task are **not** set up yet!
+\ The data stack for that task has ( user-stack... rsp ip ) on it.
+code (RESTART)
+label inner-restart        \ <-- Used by (PAUSE) below to directly enter here.
+  \ UP is a global variable, so get its contents into X.
+  var_up [#]   rx  set,     \ UP -> X
+  tsp    [x+]  sp  set,     \ Task SP -> SP
+  pop          ip  set,     \ Pop IP
+  pop         rsp  set,     \ Pop RSP
+  \ The task's stacks are ready, so it's ready to run!
+end-code \ NEXT into the new task
+
+\ Internal implementation of PAUSE - next task is TOS, not the LINK field!
+\ That allows it to be called in "handoff" sorts of cases.
+code (PAUSE)
+  pop        rx set,        \ New UP -> X; stack now ready to save task state
+  rsp      push set,        \ Push old RSP
+  ip       push set,        \ Push old IP
+  var_up #   ry set,        \ 'UP -> Y
+  [y]        rc set,        \ Old UP -> C
+  sp   tsp [c+] set,        \ Save old task SP
+  rx        [y] set,        \ New task -> UP
+  inner-restart # pc set,   \ Jump to inner-restart; run the next task!
+
+
 \ Interrupts ==================================
 \ interrupt_handler is what actually gets IAS'd.
 \ It's a machine code routine that sets up a Forth thread with the high-level
@@ -604,6 +631,9 @@ end-code
 \ The interrupt message is in A and the old A was pushed onto the stack. Since
 \ we might be mid-routine elsewhere, we need to preserve that A!
 \ The stack effect of the user handler is ( msg -- )
+
+code IRQ+ ( -- ) 0 # iaq, end-code \ Interrupts on  = queueing disabled
+code IRQ- ( -- ) 1 # iaq, end-code \ Interrupts off = queueing enabled
 
 \ This is the tail-end routine that finishes the interrupt. It restores the old
 \ registers off the stack and then does RFI.

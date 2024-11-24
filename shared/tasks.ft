@@ -195,12 +195,11 @@ target : INIT-MULTI ( -- )
   over /stack !   dup /rstack !
   /user + + ( /kernel-task )
 
-  \ Initialize the task area: with descending tasks, it points at kernel-task;
-  \ with ascending tasks, it points just after.
-  [ host kernel-task tliteral target ]   ( /task task )
-  [ host tasks-desc? [IF] target ] nip [ host [ELSE] target ] + [ host [THEN] target ]
-  task-area !
-
+  \ Initialize the task area.
+  \ With tasks-desc? true,  points at the newest task; full-descending.
+  \ With tasks-desc? false, points at the next task slot; empty-ascending.
+  [ host task-area0 tliteral target ]   task-area ! ( /task )
+  task-allot drop ( ) \ We're already running it!
   up@ link ! ;  \ Link kernel to itself, since it's the only running task.
 
 

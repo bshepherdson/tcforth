@@ -560,6 +560,9 @@ This is a pretty normal task start, except for two things:
     - Set the new `tos-in-reg?` flag appropriately.
     - Set `/exit` to the size of the `EXIT` in a thread.
         - This is 1 cell in DTC and ITC, but might be 1 byte in STC.
+- Conditionally include the `shared/tasks.ft` file in the `system.ft`
+    - Before `intro.ft` if you have it, certainly before `shared/init.ft`.
+    - Like `host multitasking? [IF] REQUIRE ../shared/tasks.ft host [THEN]`
 - Update the `main` entry point:
     - Add new code to set up an interrupt handling entry point.
     - Set up the kernel task to run initially, rather than setting the

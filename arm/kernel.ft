@@ -551,6 +551,7 @@ end-code \ NEXT into the IP.
 code (PAUSE)
 label inner-pause
   tos   r0  mov,
+  \ TODO: If those are ordered in the right direction, they can be one instr.
   {{ rsp }} push,        \ Save the RSP next.
   {{ ip  }} push,        \ Save the IP on top.
   tsp   # up [+] sp str, \ Store the task's SP to the SP slot.

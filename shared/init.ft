@@ -90,28 +90,7 @@ host [THEN] target definitions
   [ host multitasking? [IF] target ] init-multi [ host [THEN] target ]
   10 base ! ;
 
-host multitasking? [IF]
-  \ Note that we're deliberately in SINGLE state still, not MULTI.
-  \ That's a user-time decision and separate from the interrupt handlers.
-  \ Since it only affects whether PAUSE is a no-op we can still do this.
-  target
-  : (interactive) ( -- )
-    \ Put the kernel task to SLEEP, removing it from the task ring.
-    \ Then enable interrupts.
-    [ host kernel-task tliteral target ] sleep   irq+
-    '.intro @ execute   QUIT ;
-
-  target 0 VALUE terminal
-
-  : interactive ( -- )
-    [ host default/ds tliteral default/rs tliteral target ] newtask* ( task )
-    dup TO terminal
-    ['] (interactive) swap
-    initiate ; \ Never returns - (interactive) takes over.
-
-host [ELSE]
-  target : interactive ( -- ) '.intro @ execute   QUIT ;
-host [THEN]
+target : interactive ( -- ) irq+   '.intro @ execute   QUIT ;
 
 \ "Cold" start, loading interactive mode by default.
 target : cold  ( -- ) boot interactive ;

@@ -47,3 +47,7 @@ target : USER' ( "name" -- offset ) ' >body @ ;
 \ Given an address in this task's user area, return the same address in
 \ another task's user area.
 target : 'S ( addr1 task -- addr2 ) up@ - + ;
+
+
+\ Multitasking shell =========================================================
+target DEFER pause

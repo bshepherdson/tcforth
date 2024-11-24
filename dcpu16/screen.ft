@@ -156,7 +156,7 @@ VARIABLE <scroll-delta> \ Always positive!
 : DISPLAY   ( screen-ch -- ) vacate   (DISPLAY)   1 +cursor   arrive ;
 
 \ Emits the given ASCII character at the current cursor.
-: EMIT ( ascii-ch -- ) coloured display ;
+: EMIT ( ascii-ch -- ) coloured display pause ;
 
 : CR ( -- ) vacate   cursor @ /row 1- and   /row swap -   +cursor   arrive ;
 
@@ -180,7 +180,8 @@ VARIABLE <scroll-delta> \ Always positive!
 \   dup 10 = IF drop $11 THEN   \ Newline
 \   dup  8 = IF drop $10 THEN ; \ Backspace
 
-: (KEY-KB)     ( -- key ) dev-keyboard @ (key) ;
+: (KEY-KB) ( -- key )
+  BEGIN pause   dev-keyboard @ (key)   ?dup UNTIL ;
 
 VARIABLE key-xt
 

@@ -50,12 +50,11 @@ target : stacksize* ( -- u-data u-return ) /stack @   /rstack @ ;
 \ Technically the multitasker starts disabled, and must be enabled with MULTI.
 \ It can be disabled with SINGLE.
 \ This is implemented by toggling whether PAUSE is the real (PAUSE) or NOOP.
-target DEFER pause
-' noop ' pause defer!
+target   ' noop ' pause defer!
 
 \ High-level PAUSE implementation - which calls (PAUSE) with the task as TOS.
 target : <PAUSE> ( -- )
-  up@ (PAUSE) ;
+  link @ (PAUSE) ;
 
 target : MULTI  ( -- )
   ['] <pause> ['] pause defer! ;
@@ -191,16 +190,9 @@ target : ACTIVATE ( C: colon-sys1 -- colon-sys2    X: task -- )
 \ PASS compiles (PASS) then does ACTIVATE.
 
 target : INIT-MULTI ( -- )
-  [ host default/ds tliteral   default/rs tliteral   target ] ( /ds /rs )
-  over /stack !   dup /rstack !
-  /user + + ( /main-task )
-
-  \ Initialize the task area.
-  \ With tasks-desc? true,  points at the newest task; full-descending.
-  \ With tasks-desc? false, points at the next task slot; empty-ascending.
-  [ host task-area0 tliteral target ]   task-area ! ( /task )
-  task-allot drop ( ) \ We're already running it!
-  up@ link ! ;  \ Link kernel to itself, since it's the only running task.
+  [ host task-area0 tliteral target ]   dup task-area !
+  up@ - abs   task-allot drop \ Making space for the startup task.
+  up@ link ! ; \ Link kernel task to itself, since it's the only one running.
 
 
 \ Shelved idea: Smarter linked lists

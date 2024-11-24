@@ -49,8 +49,9 @@ S" Initializers at: " type initializers hex. cr
 
 host
 : initializer, ( space -- )
-  code-space @   initializers tcode@
-  tcode,   initializers tcode!
+  code-space @
+  initializers tcode@   tcode,
+  initializers tcode!
   dup space>target-span ( space t-addr u-tchars )
   over tcode,   dup tcode,   0 ?DO   ( space t-addr )
     2dup i + swap <tc@> ( space t-addr tchar )

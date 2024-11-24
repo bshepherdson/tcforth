@@ -2,6 +2,8 @@
 \ This sets Target's LATEST and DP properly.
 host REQUIRE ../shared/finalizing.ft
 
+host definitions
+
 \ This needs to be the last lines in the target compilation.
 host latest        latest0 tcode!
 host data-space @      dp0 tcode!

@@ -636,9 +636,12 @@ label interrupt_handler
 
 
 task-area0                         CONSTANT default-rp0
-task-area0  default/rs -           CONSTANT default-sp0
+task-area0  default/rs - $ffff and CONSTANT default-sp0
 \ Rounding UP down to make some extra user space.
 default-sp0 default/ds - $ff00 and CONSTANT default-up
+
+\ Make sure to write into UP so it's part of the data copy for separate spaces.
+default-up var_up tdata!
 
 \ Machine code entry point, jumped to by the first instruction at $0000-1
 label main
@@ -649,7 +652,10 @@ label main
   default-rp0 # rz set,         \ Initial RSP
   rz     trp0 [a+] set,         \ RSP -> RP0 variable
   default-sp0 # sp set,         \ Initial SP
-  sp     tsp0 [a+] set,         \ RSP -> RP0 variable
+  sp     tsp0 [a+] set,         \ SP -> SP0 variable
+
+  default/rs # t/rstack [a+] set,
+  default/ds # t/stack  [a+] set,
 
   0 # iaq,                 \ Enable interrupts again
   entry-point [#] pc set,  \ Jump to the code field of the starter word COLD.

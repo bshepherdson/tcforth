@@ -10,8 +10,8 @@ DCPU_DISK ?= /dev/null
 
 
 ARM_QEMU ?= qemu-system-arm -M versatilepb -m 128M -nographic
-#ARM_QEMU_FLAGS ?=
-ARM_QEMU_FLAGS ?= -D log.txt -d exec,cpu,int
+ARM_QEMU_FLAGS ?=
+#ARM_QEMU_FLAGS ?= -D log.txt -d exec,cpu,int
 ARM_PREFIX ?= arm-none-eabi-
 
 VICE_C64 ?= x64sc
@@ -46,7 +46,11 @@ forth-dcpu16-copying.bin: host/*.ft dcpu16/*.ft shared/*.ft
 
 dcpu16: forth-dcpu16.bin
 run-dcpu16: forth-dcpu16.bin
-	$(EMULATOR) -disk $(DCPU_DISK) forth-dcpu16.bin
+	$(EMULATOR) -disk $(DCPU_DISK) $<
+run-dcpu16-separate: forth-dcpu16-separate.bin
+	$(EMULATOR) -disk $(DCPU_DISK) $<
+run-dcpu16-copying: forth-dcpu16-copying.bin
+	$(EMULATOR) -disk $(DCPU_DISK) $<
 
 test.disk: test/*.ft
 	cat test/harness.ft test/basics.ft test/comparisons.ft test/arithmetic.ft \

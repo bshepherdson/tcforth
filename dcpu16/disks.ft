@@ -67,7 +67,7 @@ VARIABLE loaded-block \ Block number currently loaded
 :noname ( -- ? )
   0 >IN !
   BEGIN
-    disk@ dup 0= IF false EXIT THEN
+    disk@ dup 0= IF EXIT THEN
     dup 10 <>
   WHILE +byte REPEAT drop
   \ At end of line, set the source length. Then reset >IN to 0.

@@ -33,12 +33,14 @@ host REQUIRE ../shared/user-area.ft
 host REQUIRE ../shared/refill.ft
 host REQUIRE lib.ft                    \ Division etc. helpers
 host REQUIRE hardware.ft               \ Hardware handling
-host REQUIRE screen.ft
 host REQUIRE ../shared/output.ft
 host REQUIRE ../shared/error-messages.ft
 
 host structures?   [IF] REQUIRE ../shared/structs.ft host [THEN]
 host multitasking? [IF] REQUIRE ../shared/tasks.ft   host [THEN]
+
+host REQUIRE screen.ft
+
 host debugging?    [IF]
   target definitions   4 CONSTANT dump-width
   host REQUIRE ../shared/debugging.ft

@@ -49,7 +49,8 @@ target : -SRC ( -- )
 target : EVALUATE   ( ... c-addr u -- ... )
   src-evaluate +SRC   'source 2!   0 >IN !   interpret -SRC ;
 
-host presume (quit)
+host presume (quit) presume hex.s
 
 \ Begins with REFILL, so doesn't expect an existing string.
-target : (EVALMANY) ( ... src-id -- ... ) +SRC (quit) -SRC ;
+target : (EVALMANY) ( ... src-id -- ... )
+  +SRC (quit) -SRC ;

@@ -291,16 +291,29 @@ target : ABS ( n -- u ) dup 0< IF negate THEN ;
 target : FALSE ( -- false? )  0 ;
 target : TRUE  ( -- true? )  -1 ;
 
+\ Setting variables to TRUE and FALSE.
+target : ON    ( addr -- ) true  swap ! ;
+target : OFF   ( addr -- ) false swap ! ;
+
+host presume CLAIM presume RELEASE
+
+target
+0 VALUE termlock
 
 \ Colon definitions ==========================================================
 \ Target : and ; are empty placeholders right now. These need to be filled in
 \ properly now that all the necessary words are defined.
 \ : is   (CREATE) ,docol smudge ] EXIT
-\ ; is   LIT EXIT   COMPILE,   smudge   postpone [   EXIT
+\ ; is   LIT EXIT   COMPILE,   reveal   postpone [   EXIT
 
 target : SMUDGE ( -- )
   latest cell+ dup c@
-  [ host f_hidden tliteral target ] xor
+  [ host f_hidden tliteral target ] or
+  swap c! ;
+
+target : REVEAL ( -- )
+  latest cell+ dup c@
+  [ host f_hidden invert tliteral target ] and
   swap c! ;
 
 
@@ -320,7 +333,7 @@ T' ;
 ( old-dp t-xt ) code-space !    \ Pretend we're compiling at semicolon
 ,docol
 EXIT-compile,
-T' smudge   tcompile,
+T' reveal   tcompile,
 T' [        tcompile,
 exit,
 \ That's 7 cells with a 1-cell DOCOL.

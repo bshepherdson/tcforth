@@ -5,7 +5,10 @@ target definitions
 : PADDED ( u ch -- ) over 0> IF swap 0 DO dup emit LOOP 0 THEN 2drop ;
 : SPACES ( u -- )    bl padded ;
 
-: TYPE   ( c-addr u -- ) ?dup IF 0 DO ( c-addr ) dup c@ emit 1+ LOOP THEN drop ;
+: TYPE   ( c-addr u -- )
+  termlock claim
+  ?dup IF 0 DO ( c-addr ) dup c@ emit 1+ LOOP THEN drop
+  termlock release ;
 
 \ Pictured numeric ouput =====================================================
 VARIABLE (picout)

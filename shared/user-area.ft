@@ -15,7 +15,7 @@ target : UALLOT ( delta -- offset ) /USER   tuck +   TO /USER ;
 
 target : USER ( "name" --    X: -- addr )
     CREATE   1 cells uallot ,   DOES> @ up@ + ;
-  host acts: CREATE 1 tcells uallot tdata, ; \ No DOES> - can't call these on the host.
+  host acts: CREATE 1 tcells uallot ." USER offset " dup hex. ." at " data-space @ hex. cr tdata, ; \ No DOES> - can't call these on the host.
 
 \ XXX: This list has to be mirrored in host/mirrors.ft
 \ TODO: That sucks and I'm sure I can find a better approach.
@@ -27,7 +27,8 @@ host multitasking? [IF]
   target : link      ( -- addr ) [ host tlink      tliteral target ] up@ + ;
   target : task-sp   ( -- addr ) [ host tsp        tliteral target ] up@ + ;
   target : task-code ( -- addr ) [ host ttask-code tliteral target ] up@ + ;
-  target : /task     ( -- addr ) [ host t/task     tliteral target ] up@ + ;
+  target : sender    ( -- addr ) [ host tsender    tliteral target ] up@ + ;
+  target : message   ( -- addr ) [ host tmessage   tliteral target ] up@ + ;
 host [THEN]
 
 \ BASE is already defined elsewhere.

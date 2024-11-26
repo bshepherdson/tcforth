@@ -102,15 +102,22 @@ VARIABLE t/user
 
 \ XXX: This list has to be mirrored in shared/tasks.ft
 \ TODO: That sucks and I'm sure I can find a better approach.
-TUSER tlink
-TUSER tsp
+multitasking? [IF]
+  TUSER tlink
+  TUSER tsp
+  4   tcells tuser-allot CONSTANT ttask-code
+  TUSER tsender
+  TUSER tmessage
+[THEN]
+
 TUSER t/stack
 TUSER t/rstack
-TUSER t/task   \ TODO: This one is actually redundant, can use rp0.
 TUSER tsp0
 TUSER trp0
 TUSER tbase
-4   tcells tuser-allot CONSTANT ttask-code
+
+\ TODO: The PAD is pretty big on a small machine, probably better to just keep
+\ it global.
 128 tchars tuser-allot CONSTANT tpad
 
 \ All done.

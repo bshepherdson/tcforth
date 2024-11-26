@@ -64,12 +64,19 @@ target : SINGLE ( -- )
 
 \ Given a task, find the task which points to it as its LINK.
 target : PREV-TASK ( task -- task )
-  dup BEGIN 2dup link @ <> UNTIL ( target prev ) nip ;
+  dup >R
+  BEGIN
+    link over 's @   ( current next   R: target )
+    dup R@ <>
+  WHILE nip REPEAT   ( prev   R: target )
+  R> 2drop ;
 
 \ Removes a target task from the round-robin ring of tasks.
 target : SLEEP ( task -- )
   \ Detail: STOP needs SLEEP to preserve the LINK field of the target task.
-  dup link @   swap prev-task link ! ;
+  link over 's @   ( sleeper linked )
+  swap prev-task   ( linked prev )
+  link swap 's ! ;
 
 \ SLEEPs the current task so it will not run again.
 \ Hands off to the next ready task like PAUSE.
@@ -127,13 +134,13 @@ host [THEN]
 
 
 target : (initiate) ( xt task -- task )
-  ." Top of (initiate) " hex.s cr
+  \ ." Top of (initiate) " hex.s cr
   >R
-  sp0 R@ 's @   task-sp R@ 's ." sp0 -> sp: " hex.s cr ! \ Set the task's SP to its SP0.
-  link @        link    R@ 's ." link -> new link: " hex.s cr ! \ Current LINK becomes the new thread's LINK.
-  R@ link ." new link -> link: " hex.s cr !                     \ The LINK of the current task is the new one
+  sp0 R@ 's @   task-sp R@ 's ! \ Set the task's SP to its SP0.
+  link @        link    R@ 's ! \ Current LINK becomes the new thread's LINK.
+  R@ link !                     \ The LINK of the current task is the new one
   R@ tos>task                   \ This is a no-op if TOS is not in a register
-  rp0 R@ 's @   R@ ." Pushing rp0 to task: " hex.s cr >task        \ Push RP0 into the task's stack
+  rp0 R@ 's @   R@ >task        \ Push RP0 into the task's stack
   dp @                          \ Save DP so we can compile
   task-code R@ 's   dp !        \ DP points to pseudothread
   here R@ >task  ( xt dp )      \ It's also the starting IP
@@ -147,7 +154,7 @@ target : (initiate) ( xt task -- task )
 \ 2. Push those 2 (or 3) values.
 \ 3. Compile the xt and kill-task into the pseudothread in the user area.
 target : initiate ( xt task -- )
-  (initiate) .task
+  (initiate) drop \ .task
   pause ;
 
 
@@ -169,11 +176,10 @@ target : (ACTIVATE) ( task -- )
 
 target : ACTIVATE ( C: colon-sys1 -- colon-sys2    X: task -- )
     \ NOTE: Runs during a : definition likes DOES> !
-    postpone (activate)
+    ['] (activate) compile,
     [ host EXIT-compile, target ]
-    postpone smudge
-    \ NOT switching back to compilation state.
-
+    reveal
+    \ NOT switching back to interpreter state.
     ,docol       \ Compile a docol code field.
     \ Keep compiling the rest.
   ; IMMEDIATE
@@ -182,7 +188,14 @@ target : ACTIVATE ( C: colon-sys1 -- colon-sys2    X: task -- )
     [T'] (activate) tliteral   [T'] compile, tcompile,
     exit,   ,docol
   ; IMPERATIVE
+target
 
+\ XXX: START HERE - Keep debugging ACTIVATE, it's handy for tests.
+\ Check out the "ring" message passing tests in tests/multitasking.ft
+
+
+: (PASS) ( xn ... x1 n task -- task )
+  >R BEGIN ?dup WHILE dup pick R@ >task   1- REPEAT R> ;
 
 \ TODO: Write (PASS) and PASS.
 \ (PASS) copies the stack values to the task, preserving the task in TOS; it
@@ -194,6 +207,16 @@ target : INIT-MULTI ( -- )
   up@ - abs   task-allot drop \ Making space for the startup task.
   up@ link ! ; \ Link kernel task to itself, since it's the only one running.
 
+
+\ Like WORDS, prints out the current state of all the running tasks.
+target : TASKS ( -- )
+  \ ['] pause defer@ >R   single
+  cr up@ hex. ."    <-- running"
+  link @ BEGIN up@ over <> WHILE
+    cr dup hex.
+    link swap 's @
+  REPEAT
+  drop   ; \ R> ['] pause defer! ;
 
 \ Shelved idea: Smarter linked lists
 \ - Ready tasks form a circular queue.
@@ -251,15 +274,50 @@ host [THEN]
 \ These details are not internals, but a public interface!
 \ Perhaps an interrupt handler should SIGNAL something from machine code.
 
-\ TODO: Interrupts on/off toggling for isolation with preemptive tasks?
-target : semaphore ( "name" --    X: -- semaphore ) CREATE 1 , ;
+target : SEMAPHORE ( "name" --    X: -- semaphore ) CREATE 1 , DOES> ;
+  host acts: CREATE host 0 tdata,   DOES> ;
 
 \ This can wait for any cell to become nonzero; it needn't be a semaphore.
 target : wait ( addr -- )
   BEGIN pause dup @ UNTIL
-  -1 swap +! ;
+  irq-   -1 swap +!   irq+ ;
 
 \ SIGNAL increments a cell so anyone waiting for a semaphore can continue.
-target : signal  ( addr -- ) 1 swap +! ;
+target : signal  ( addr -- ) irq-   1 swap +!   irq+ ;
 \ SIGNAL> is "signal and go"; it PAUSEs to allow anyone waiting to run first.
-target : signal> ( addr -- ) 1 swap +! pause ;
+target : signal> ( addr -- ) signal pause ;
+
+
+\ Nestable mutexes ===========================================================
+\ These are "free" if they're 0 and if nonzero only the claiming task can
+\ nest it further. Two cells [ nesting | task ].
+target : MUTEX ( "name" --    X: -- mutex ) CREATE 0 , 0 , DOES> ;
+  host acts: CREATE 0 tdata, 0 tdata, DOES> ;
+
+\ Waits until the mutex is free, then claims it.
+\ If this task has already claimed it, increases the nesting level.
+target : CLAIM   ( mutex -- )
+  dup cell+ @ up@ = IF 1 swap +! EXIT THEN
+  ( mutex ) BEGIN pause dup @ 0= UNTIL
+  up@ 1 rot 2! ;
+
+target : RELEASE ( mutex -- ) -1 swap +! ;
+
+\ Core locks =================================================================
+target here   2 cells allot   IS termlock
+
+
+\ Message passing ============================================================
+: SEND ( msg task -- )
+  sender over 's   BEGIN pause dup @ 0= UNTIL   ( msg task 'sender )
+  single
+  up@ swap !    ( msg task )
+  message swap 's ! ( )
+  multi ;
+
+: RECEIVE ( -- message task )
+  BEGIN pause   sender @ UNTIL
+  single
+  message @ sender @
+  0 sender !
+  multi ;

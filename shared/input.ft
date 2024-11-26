@@ -165,5 +165,5 @@ target : INTERP1   ( c-addr u -- )
 target : INTERPRET ( -- )
   BEGIN parse-name dup WHILE interp1 REPEAT 2drop ;
 
-host presume ACCEPT presume EMIT presume REVERSE
+host presume ACCEPT presume EMIT presume REVERSE presume CR
 target

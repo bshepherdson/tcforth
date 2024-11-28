@@ -1,0 +1,14 @@
+host definitions
+data-space @   0 tdata,   CONSTANT ttimer
+
+target definitions
+
+: TIME( ( -- )
+  \ [ host char ( tliteral target ] log
+  [ host ttimer tliteral target ] @ (time-start) ;
+: )TIME ( -- ud-ticks )
+  [ host ttimer tliteral target ] @ (time-end)
+;
+
+: runtime0 ( accumulator -- ) 0 0 rot 2! ;
+: runtime+ ( ud-ticks accumulator -- ) dup >R   2@ d+   R> 2! ;

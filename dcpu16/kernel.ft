@@ -217,6 +217,8 @@ data-space @ CONSTANT var_source       2 tcells tdata-allot
 TVARIABLE var_in_ptr
 TVARIABLE var_source_id
 
+var_source cr cr ." var_source " hex. cr cr
+
 data-space @ CONSTANT input-buf   128 tdata-allot
 
 
@@ -505,6 +507,93 @@ code J ( -- index1   R: index1 limit2 index2 -- index1 limit2 index2 )
 end-code
 
 
+\ Parsing in native code for speed ===========================================
+\ [var_source] is the input area length and, [var_source+1] the input address.
+label SKIPPER ( -- )
+  var_source    [#] rc set,  \ len        -> C
+  var_source 1+ [#] rb set,  \ start_addr -> B
+  rb                rx set,  \ start_addr -> X also
+  rb                rc add,  \ overrun    -> C
+  var_in_ptr    [#] rx add,  \ current    -> X
+\ Current offset in X, overrun address in C.
+\ If they're equal, just bail out.
+  rx rc ife,
+    fwd pc set,
+label skipper-loop
+  bl # [x] ifn,
+    fwd pc set,
+  1 # rx add,
+  rx rc ifn,
+    skipper-loop # pc set,
+
+  \ If we're still here, X == C so we've run out of input area.
+  \ Two fwd addresses on the stack: finding a non-space and initial overrun.
+  \ All of these cases are the same: no more spaces to skip.
+  resolve resolve
+  \ >IN is an offset; B holds the origin, so X-B is our new offset.
+  rb             rx sub,  \ X-B -> X
+  rx var_in_ptr [#] set,  \ X   -> >IN
+next,
+
+\ Instructions for jumping out of the skipper-loop on finding the *wrong* thing.
+$7d73 CONSTANT skip-spaces-branch       \ IFN [x], lit
+$7d72 CONSTANT skip-non-spaces-branch   \ IFE [x], lit
+
+code SKIP-SPACES
+  SKIP-SPACES-BRANCH     #   skipper-loop [#] set,
+  skipper # pc set,
+end-code-bare
+
+code SKIP-NON-SPACES
+  SKIP-NON-SPACES-BRANCH #   skipper-loop [#] set,
+  skipper # pc set,
+end-code-bare
+
+
+code ISTR= ( addr1 u1 addr2 u2 -- ? )
+  pop rb   set,    \ len2  -> B
+  pop rj   set,    \ addr2 -> J
+  pop ra   set,    \ len1  -> A
+  pop rx   set,    \ addr1 -> X for now
+  ri  push set,    \ Save the old IP.
+  rx  ri   set,    \ addr1 -> I now.
+
+  ra rb ifn,       \ Length mismatch: instant fail
+    fwd pc set,    ( len-<> )
+
+label istr=-loop
+  0 # ra ife,      \ A = 0: at the end!
+    fwd pc set,    ( len-<> len-0 )
+  1 # ra  sub,     \ A - 1 -> A
+  [i] rx  set,     \ [I] = ch1 -> X
+  [j] ry  sti,     \ [J] = ch1 -> Y,      I++, J++!
+
+  \ Lower case -> Upper case
+  'z' 1+ # rx ifl,         \ If X < 'z'+1
+    'a' 1- # rx ifg,       \ And X > 'a'-1
+      $20 invert # rx and, \ Drop the lower-case bit!
+  'z' 1+ # ry ifl,         \ If X < 'z'+1
+    'a' 1- # ry ifg,       \ And X > 'a'-1
+      $20 invert # ry and, \ Drop the lower-case bit!
+
+  rx ry ife,       \ X = Y: matched, so keep looping. (Length in A already decremented)
+    istr=-loop # pc set,
+
+  ( len-<>   len-0 )
+  \ Fall through: Character mismatch
+  swap resolve \ And Length mismatch  ( len-0 )
+  0 # ra set,  \ False flag -> A
+  fwd pc set,  ( len-0   done )
+
+  swap resolve \ Matched strings!
+  -1 # ra set, \ True -> A
+
+  resolve      \ Done either way: fix I, push A, return.
+  pop ri set,
+  ra push set,
+end-code
+
+
 \ Wrappers for the fundamental DCPU-family hardware instructions.
 \ This allows the hardware interfaces to be written in high-level Forth.
 code #DEVICES ( -- n )
@@ -529,9 +618,9 @@ end-code
 \ mask are included on either side.
 \ The mask is JIZYXCBAjizyxcba, with the low bits being inputs and high ones
 \ outputs.
-label >DEVICE-saved-i 0 asm,
-label >DEVICE-saved-z 0 asm,
-label >DEVICE-dev     0 asm,
+TVARIABLE >DEVICE-saved-i
+TVARIABLE >DEVICE-saved-z
+TVARIABLE >DEVICE-dev
 
 code >DEVICE
   pop   >DEVICE-dev [#] set,
@@ -594,6 +683,18 @@ label (key-ssi)-loop
   ra peek set,
 end-code
 
+
+code (TIME-START) ( dev# -- )
+  1 # ra set,
+  pop    hwi,
+end-code
+
+code (TIME-END) ( dev# -- ud-ticks )
+  1 # ra   set,
+  pop      hwi, ( lo -> C, hi -> X )
+  rc  push set,
+  rx  push set,
+end-code
 
 \ Multitasking ================================
 \ Enters a task whose address is already in UP.

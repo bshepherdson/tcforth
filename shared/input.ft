@@ -17,6 +17,7 @@ target : SOURCE-ID 'SOURCE-ID  @ ;
 target : >UPPER ( ch1 -- ch2 )
   dup [ host 'a' tliteral 'z' 1+ tliteral target ] within IF 32 - THEN ;
 
+host <T'> istr= 0= [IF]
 target : istr= ( ca1 u1 ca2 u2 -- ? )
   rot over <> IF drop 2drop 0 EXIT THEN \ Length mismatch
   ( ca1 ca2 u ) BEGIN ?dup WHILE
@@ -25,20 +26,40 @@ target : istr= ( ca1 u1 ca2 u2 -- ? )
       2drop R> drop 0 EXIT THEN \ Character mismatch
     1+ >R 1+ R> R> 1- ( ca1' ca2' u' )
   REPEAT 2drop -1 ;
+host [THEN]
+
+host definitions
+data-space @   0 tdata, 0 tdata,   CONSTANT find-time
+data-space @   0 tdata, 0 tdata,   CONSTANT parse-time
+
+cr cr
+S" find-time   " type find-time  hex. cr
+S" parse-time  " type parse-time hex. cr
+cr
+
+target definitions
+target : find-time   ( -- accumulator ) [ host find-time  tliteral target ] ;
+target : parse-time  ( -- accumulator ) [ host parse-time tliteral target ] ;
+target : find-time+  ( ud-ticks -- )    find-time  runtime+ ;
+target : parse-time+ ( ud-ticks -- )    parse-time runtime+ ;
 
 \ Internal formulation of FIND with a stacked string, not a counted string.
 \ Returns 1 for IMMEDIATE words, -1 for regular words, 0 for not found.
 target : (FIND) ( c-addr u -- 0 | xt 1 | xt -1 )
+  time(
   latest >R BEGIN R@ WHILE ( c-addr u   R: nt )
     R@ cell+ dup char+ swap c@
     [ host mask_len_hidden tliteral target ] and ( ta tu wa wu )
     2over istr= ( ta tu eq? ) IF \ Found the match!
       2drop R@ >cfa   R> cell+ c@
-      [ host f_immed tliteral target ] and IF 1 ELSE -1 THEN EXIT
+      [ host f_immed tliteral target ] and IF 1 ELSE -1 THEN
+      )time find-time+
+      EXIT
     ELSE \ No match, so continue
       R> @ >R
     THEN
-  REPEAT 2drop R> drop 0 ;
+  REPEAT 2drop R> drop 0
+  )time find-time+ ;
 
 target : FIND ( c-addr -- c-addr 0 | xt 1 | xt -1 )
   dup >R   count (find)   dup IF R> drop ELSE drop R> 0 THEN ;
@@ -58,17 +79,21 @@ target : PARSE ( delim "...<delim>" -- c-addr u )
   REPEAT ( c-addr 0   R: start delim )
   1000 >IN +! R> R> 2drop ;
 
+host <T'> skip-spaces 0= [IF]
 target : SKIP-SPACES ( -- )
   BEGIN source >in @ /string WHILE \ Not empty  ( c-addr )
     c@ bl <> IF EXIT THEN
     1 >IN +!
   REPEAT drop ;
+host [THEN]
 
+host <T'> skip-non-spaces 0= [IF]
 target : SKIP-NON-SPACES ( -- )
   BEGIN source >in @ /string WHILE \ Not empty  ( c-addr )
     c@ bl = IF EXIT THEN
     1 >IN +!
   REPEAT drop ;
+host [THEN]
 
 target : PARSE-NAME ( "<spaces>name<space>" -- c-addr u )
   skip-spaces

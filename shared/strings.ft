@@ -16,8 +16,9 @@ target definitions
 
 target : S" ( "ccc"" --     X: -- c-addr u )
     [ host '"' tliteral target ]
-    parse ( c-addr u ) ,dostring ; IMMEDIATE
-  host acts: (S") ; IMPERATIVE
+    parse ( c-addr u )   state @ IF ,dostring ELSE
+      2dup here swap move   nip here swap THEN ; IMMEDIATE
+  host acts: state @ IF (S") ELSE native postpone S" host THEN ; IMPERATIVE
 
 \ Forward reference to TYPE, resolved later.
 presume type

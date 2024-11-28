@@ -1,0 +1,19 @@
+target definitions
+
+: ?.time  ( amount unit-ch width -- )
+  rot dup IF swap 0.R emit ELSE 2drop drop THEN ;
+: ?.days  ( days  -- ) [char] d   0 ?.time ;
+: ?.hours ( hours -- ) [char] h   0 ?.time ;
+: ?.mins  ( mins  -- ) [char] m   2 ?.time ;
+
+: .run-time ( -- )
+  run-time   termlock claim
+  ?.days ?.hours ?.mins
+  2 0.R [char] . emit   3 0.R space
+  termlock release ;
+
+\ Sets the clock tick rate, from 60Hz to 1Hz
+: HZ ( rate-hz -- )
+  \ Want A=0 (SET_SPEED) with B as the input; no outputs; mask = 3
+  60 *    3600 /
+  0 swap   3 dev-timer @   >device ;

@@ -27,6 +27,7 @@ host REQUIRE branches.ft               \ Target-specific branching helpers.
 host REQUIRE ../shared/control-structures.ft
 host REQUIRE ../shared/exceptions.ft
 host REQUIRE model-target.ft
+host REQUIRE perf.ft
 host REQUIRE ../shared/input.ft
 host REQUIRE ../shared/core2.ft
 host REQUIRE ../shared/user-area.ft
@@ -44,6 +45,7 @@ host REQUIRE screen.ft
 host debugging?    [IF]
   target definitions   4 CONSTANT dump-width
   host REQUIRE ../shared/debugging.ft
+  host REQUIRE debugging.ft
 host [THEN]
 
 host REQUIRE intro.ft                  \ DCPU-16/Risque-16 HW init; intro msg

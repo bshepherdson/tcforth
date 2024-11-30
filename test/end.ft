@@ -1,6 +1,2 @@
-: done cr cr ." Tests complete"
-  cr ." Parse time: " parse-time dup hex. 2@ 2dup . . [char] P log log log
-  cr ." Find time:  " find-time  dup hex. 2@ 2dup . . [char] F log log log
-  cr cr
-; done
+: done cr cr ." Tests complete" ; done
 bye

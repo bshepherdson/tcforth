@@ -145,11 +145,13 @@ host definitions
 (T') or    'mirror !   act or
 (T') and   'mirror !   act and
 
-\ TODO: Is code space the right place to be sending these?
-\ I wonder if they're really used.
+\ TODO: Perhaps the below should not be hard-coded? GBA wants this too -
+\ compiling into ROM data or different RAM spaces. Maybe a core system for it
+\ in the metacompiler? I think data space is the right default, though, since
+\ these (1) are generally mutable and (2) nearly always follow a CREATE.
 
-(T') ,     'mirror !   act tcode,
-(T') c,    'mirror !   act tcode-c,
+(T') ,     'mirror !   act tdata,
+(T') c,    'mirror !   act tdata-c,
 
 (T') cells 'mirror !   act tcells
 (T') chars 'mirror !   act tchars

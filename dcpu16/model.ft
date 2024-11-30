@@ -43,10 +43,6 @@ $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
 : tcompile,  ( xt -- )      tcode, ;
 : tdecompile ( slot -- xt ) tcode@ ;
 
-VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
-: LATEST ( -- nt ) 'latest @ ;
-0 'latest !
-
 
 \ DOCOL and DODOES right at the top so they can be JSR DOCOL'd with the inline
 \ literal from the code fields!

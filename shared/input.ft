@@ -28,38 +28,24 @@ target : istr= ( ca1 u1 ca2 u2 -- ? )
   REPEAT 2drop -1 ;
 host [THEN]
 
-host definitions
-data-space @   0 tdata, 0 tdata,   CONSTANT find-time
-data-space @   0 tdata, 0 tdata,   CONSTANT parse-time
+target : DICT-HASH ( c-addr u -- index )
+  [ host dict-hash-len-mask  tliteral target ] and
+  [ host /dict-hash-char     tliteral target ] lshift
+  swap c@
+  [ host dict-hash-char-mask tliteral target ] and or ;
 
-cr cr
-S" find-time   " type find-time  hex. cr
-S" parse-time  " type parse-time hex. cr
-cr
-
-target definitions
-target : find-time   ( -- accumulator ) [ host find-time  tliteral target ] ;
-target : parse-time  ( -- accumulator ) [ host parse-time tliteral target ] ;
-target : find-time+  ( ud-ticks -- )    find-time  runtime+ ;
-target : parse-time+ ( ud-ticks -- )    parse-time runtime+ ;
+target : >BUCKET ( index -- 'nt )
+  cells [ host dict-buckets tliteral target ] + ;
 
 \ Internal formulation of FIND with a stacked string, not a counted string.
 \ Returns 1 for IMMEDIATE words, -1 for regular words, 0 for not found.
 target : (FIND) ( c-addr u -- 0 | xt 1 | xt -1 )
-  time(
-  latest >R BEGIN R@ WHILE ( c-addr u   R: nt )
-    R@ cell+ dup char+ swap c@
-    [ host mask_len_hidden tliteral target ] and ( ta tu wa wu )
-    2over istr= ( ta tu eq? ) IF \ Found the match!
-      2drop R@ >cfa   R> cell+ c@
-      [ host f_immed tliteral target ] and IF 1 ELSE -1 THEN
-      )time find-time+
-      EXIT
-    ELSE \ No match, so continue
-      R> @ >R
-    THEN
-  REPEAT 2drop R> drop 0
-  )time find-time+ ;
+  2dup dict-hash >bucket @   <FIND> ( nt|0 )
+  dup IF \ Found something! ( nt )
+    dup >cfa swap        ( xt nt )
+    cell+ c@ [ host f_immed tliteral target ] and
+    ( xt immed? ) IF 1 ELSE -1 THEN
+  THEN ;
 
 target : FIND ( c-addr -- c-addr 0 | xt 1 | xt -1 )
   dup >R   count (find)   dup IF R> drop ELSE drop R> 0 THEN ;
@@ -125,6 +111,8 @@ target definitions
 
 \ Basic, unsigned number parsing.
 \ Tries to parse as many digits according to BASE as possible.
+\ TODO: Reword this into a state machine or otherwise optimize it? Unclear how
+\ much time is spent here in evaluating a typical file.
 target : >NUMBER ( ud1 c-addr1 u1 -- ud2 c-addr2 u2 )
   BEGIN
     >R dup >R c@ ( ud1 ch )
@@ -184,7 +172,8 @@ target : INTERP1   ( c-addr u -- )
       \ Really undefined. Emit an error message.
       err-undefined throw
     THEN
-  THEN ;
+  THEN
+  depth 0< IF err-underflow throw THEN ;
 
 \ Fundamental single-line interpreter loop.
 target : INTERPRET ( -- )

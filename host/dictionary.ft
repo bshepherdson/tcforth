@@ -25,6 +25,44 @@ host definitions
 \ On a machine with 16-bit address units and cells, like DCPU-16, every field
 \ is a 16-bit word and no alignment is needed.
 
+
+\ Hashing into multiple lists ================================================
+\ As a simple hash function, the 1s bit of the length and the 1s bit of the
+\ first character are used as a hash function. That splits the dictionary into
+\ four more-or-less equal parts. These are each searched newest-first for a
+\ matching word.
+\ NOTE: It's an important property that neither the HIDDEN bit nor upper/lower
+\ case impacts the bits used for this hash!
+1 CONSTANT /dict-hash-len
+2 CONSTANT /dict-hash-char
+
+1 /dict-hash-len /dict-hash-char + lshift CONSTANT #dict-buckets
+
+: hash-mask ( bits -- mask ) 1 swap lshift 1- ;
+
+/dict-hash-len  hash-mask CONSTANT dict-hash-len-mask
+/dict-hash-char hash-mask CONSTANT dict-hash-char-mask
+
+: DICT-HASH ( c-addr u -- index )
+  \ 2dup type
+  dict-hash-len-mask and   /dict-hash-char lshift
+  swap c@   dict-hash-char-mask and   or
+  \ 3 spaces dup . cr
+;
+
+\ Holds several Target nts, with the most recently defined word in each bucket first.
+name-space @ CONSTANT dict-buckets
+#dict-buckets tcells tname-allot
+
+: >BUCKET ( index -- 'nt ) tcells dict-buckets + ;
+
+\ Holds the Target nt of the most recently defined word (whichever bucket it
+\ falls under).
+VARIABLE 'latest
+: LATEST ( -- nt ) 'latest @ ;
+0 'latest !
+
+
 \ Flags and masks ============================================================
 \ The top bit of the length field is used as the IMMEDIATE flag, the next bit
 \ for the "smudge" or "hidden" flag. That leaves 6 bits at least for the length
@@ -55,20 +93,32 @@ f_hidden 1-             CONSTANT mask_len
 : (mk-header) ( c-addr u -- target-xt )
   \ ." (mk-header) " 2dup type   4 spaces .s cr
   \ ."     nt: " name-space @ hex. cr
-  name-space @   latest tname,   'latest !
+  2dup dict-hash >bucket ( c-addr u bucket )
+  \ Get the current name-space address (the new nt) and link it into its bucket.
+  name-space @ 'latest !                 \ Write 'latest     ( c-addr u bucket )
+  name-space @   over tname@ tname,   swap tname!  \ Chain into bucket ( c-addr u )
   dup tname-c, \ Length byte
   0 DO ( c-addr )
     dup i + c@ >upper tname-c, LOOP drop ( )
   tname-align
   code-space @    ( target-xt )
+  \ ."     xt: " dup hex. cr
   ,tcfa ;
 
-\ Looking up the name corresponding to an xt.
-: T>NAME ( target-xt -- target-nt|0 )
-  'latest @ BEGIN dup WHILE ( target-xt target-nt )
+\ Target nts =================================================================
+\ Inner linked-list search.
+: (T>NAME) ( target-xt target-nt -- target-nt|0 )
+  BEGIN dup WHILE ( target-xt target-nt )
     2dup tname>int = IF nip EXIT THEN
     tname@
   REPEAT nip ;
+
+: T>NAME ( target-xt -- target-nt|0 )
+  #dict-buckets 0 DO
+    i >bucket tname@   (T>NAME)
+    dup IF LEAVE THEN
+  LOOP ( target-xt target-nt|0 )
+  nip ;
 
 \ Printing target word names on the host.
 : TTYPE ( tc-addr u -- ) over + swap ?DO i tname-c@ emit LOOP ;

@@ -9,6 +9,7 @@ host [THEN]
 
 target : BASE ( -- addr ) [ host tbase tliteral target ] up@ + ;
 
+
 \ TODO: Much of this is about compiling Forth code, and therefore not needed
 \ on non-interactive targets.
 
@@ -62,14 +63,12 @@ target : >CFA ( nt -- xt )
   name>string + aligned
   [ host names-indirect? [IF] target ] @ [ host [THEN] target ] ;
 
-\ PORT: Portable
 host names-indirect? [IF]
 target : /NAME-FIELD ( -- u ) 1 cells ;
 host [ELSE]
 target : /NAME-FIELD ( -- u ) 0 ;
 host [THEN]
 
-\ PORT: Machine-specific - but it could be a config/model parameter, eg. /CODEWORD
 \ TODO: Set the /codeword in all targets!
 host data-indirect? [IF]
 target : >BODY ( xt -- addr ) [ host /codeword tliteral target ] + @ ;

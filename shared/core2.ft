@@ -8,8 +8,12 @@ target definitions
 \ But there's a pointer to the code field if the code and name spaces are
 \ separated.
 \ link | len | name... | padding... | (slot)
-target : (CREATE) ( "name" -- ) here latest ,   'latest !
-    parse-name dup c,
+target : (CREATE) ( "name" -- )
+    here 'latest !
+    parse-name                   ( c-addr u )
+    2dup dict-hash >bucket dup @ ( c-addr u bucket prev-nt )
+    here rot !   \ Set bucket    ( c-addr u prev-nt )
+    ,   dup c,   \ Compile the link pointer and length
     here swap ( src dst u )
     dup >R move> R> ( len )
     allot align

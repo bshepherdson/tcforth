@@ -6,9 +6,6 @@ target definitions
   default-colours cr ;
 '.intro !
 
-: init-hardware ( -- )
-  init-devices init-lem init-serial   60 hz
-  [ host find-time  tliteral target ] 2@ hex. hex. cr
-  [ host parse-time tliteral target ] 2@ hex. hex. cr ;
+: init-hardware ( -- ) init-devices init-lem init-serial   60 hz ;
 
 :noname ( ch -- ch ) $7f and (printable) ; IS printable

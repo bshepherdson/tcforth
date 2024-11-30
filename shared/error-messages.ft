@@ -19,17 +19,28 @@ target : .ERROR ( exc# -- )
   err-undefined      OF ." Undefined word: " last-parse 2@ type ENDOF
   err-?comp          OF ." Comp word outside colon defn" ENDOF
   err-unexpected-EOF OF ." Disk unexpectedly ended or ejected" ENDOF
+  err-underflow      OF ." Stack underflow" ENDOF
   ( exc# ) ." Exception " .
   0 ENDCASE ;
 
 \ Extra debugging utilities and things.
 
 \ Prints the name of a word given its nt (name token).
-: id. ( nt -- )
+: name>string ( nt -- c-addr u )
   cell+
   dup char+ swap
-  c@ [ host mask_len tliteral target ] and ( c-addr u )
-  type space ;
+  c@ [ host mask_len tliteral target ] and ;
 
-\ Prints the names of all words, from LATEST back to the end.
-: words ( -- ) latest BEGIN ?dup WHILE ( nt ) dup id. cr @ REPEAT ;
+: id. ( nt -- ) name>string type space ;
+
+\ Word listings ==============================================================
+host #dict-buckets target CONSTANT #dict-buckets
+host dict-buckets  target CONSTANT dict-buckets
+
+: per-word ( nt xt:[ nt -- ] -- )
+  >R BEGIN ?dup WHILE dup R@ execute   @ REPEAT R> ;
+
+: words. ( nt -- ) ['] id. per-word ;
+
+: words ( -- )
+  #dict-buckets 0 DO i >bucket @ words. LOOP ;

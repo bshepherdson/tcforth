@@ -217,8 +217,6 @@ data-space @ CONSTANT var_source       2 tcells tdata-allot
 TVARIABLE var_in_ptr
 TVARIABLE var_source_id
 
-var_source cr cr ." var_source " hex. cr cr
-
 data-space @ CONSTANT input-buf   128 tdata-allot
 
 
@@ -550,14 +548,9 @@ code SKIP-NON-SPACES
 end-code-bare
 
 
-code ISTR= ( addr1 u1 addr2 u2 -- ? )
-  pop rb   set,    \ len2  -> B
-  pop rj   set,    \ addr2 -> J
-  pop ra   set,    \ len1  -> A
-  pop rx   set,    \ addr1 -> X for now
-  ri  push set,    \ Save the old IP.
-  rx  ri   set,    \ addr1 -> I now.
-
+\ Call point for CODE usage; registers already set up.
+\ NOTE: <FIND> below relies on this preserving C!
+label istr=-inner
   ra rb ifn,       \ Length mismatch: instant fail
     fwd pc set,    ( len-<> )
 
@@ -588,10 +581,57 @@ label istr=-loop
   swap resolve \ Matched strings!
   -1 # ra set, \ True -> A
 
-  resolve      \ Done either way: fix I, push A, return.
-  pop ri set,
-  ra push set,
+  resolve      \ Done either way, so return. A has the flag.
+  pop pc set,
+
+
+code ISTR= ( addr1 u1 addr2 u2 -- ? )
+  pop rb   set,    \ len2  -> B
+  pop rj   set,    \ addr2 -> J
+  pop ra   set,    \ len1  -> A
+  pop rx   set,    \ addr1 -> X for now
+  ri  push set,    \ Save the old IP.
+  rx  ri   set,    \ addr1 -> I now.
+  istr=-inner # jsr, \ A has the flag on the return.
+  pop ri   set,    \ Fix IP
+  ra push  set,    \ Push the flag
 end-code
+
+
+TVARIABLE find-addr
+TVARIABLE find-len
+
+code <FIND> ( c-addr u nt1 -- nt2|0 )
+  pop           rc  set, \ Keeping nt in C.
+  pop find-len  [#] set,
+  pop find-addr [#] set,
+  ri           push set, \ Save I
+
+label FIND-loop
+  0 # rc ife,
+    fwd pc set,          \ Bail if nt is zero
+  1 tcells 1 tchars +
+               # rj set,    \ off   -> J
+  rc             rj add,    \ addr  -> J
+  -1 tchars [j+] rb set,    \ len+bits -> B
+  mask_len_hidden # rb and, \ len+hidden
+
+  find-addr [#]  ri set, \ addr2 -> I
+  find-len  [#]  ra set, \ len2  -> A
+  istr=-inner # jsr,     \ A has the flag, 0 or -1
+
+  rc  ra and,            \ A is 0 for no match, or the nt to return!
+  [c] rc set,            \ C is the *next* nt now.
+  0 # ra ife,
+    FIND-loop # pc set,
+
+  \ Still here - we found the match; it's in A.
+  ra   rc   set, \ Unifying on the return value in C.
+
+resolve
+  pop  ri   set, \ Restore IP
+  rc   push set, \ Push the return value
+end-code         \ And done!
 
 
 \ Wrappers for the fundamental DCPU-family hardware instructions.

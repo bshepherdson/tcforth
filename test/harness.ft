@@ -3,7 +3,6 @@
 VARIABLE actual-depth
 CREATE actual-results 32 cells allot
 VARIABLE start-depth
-VARIABLE xcursor
 VARIABLE error-xt
 
 \ Error handlers
@@ -21,7 +20,7 @@ VARIABLE error-xt
 ' error1 error-xt !
 
 \ Test words
-: T{ depth start-depth !   0 xcursor ! ;
+: T{ depth start-depth ! ;
 
 : -> depth dup actual-depth !
   start-depth @ > IF
@@ -39,4 +38,3 @@ VARIABLE error-xt
   ELSE
     S" WRONG NUMBER OF RESULTS: " error
   THEN $2e emit ;
-

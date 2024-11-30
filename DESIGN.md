@@ -570,3 +570,60 @@ This is a pretty normal task start, except for two things:
     - Configure any interrupts (eg. timers) but leave interrupts disabled
       for the time being.
     - You can probably jump to `(RESTART)` to kick off the Forth code.
+
+
+## Alternative dictionaries
+
+One basic option is to only support the fancy dictionary on the host, and have the target
+use a straightforward one.
+
+But that makes for janky wordlists, so it's not ideal. Better to have a
+sufficiently simple approach that I'm fine implementing it on the target.
+
+### Idea 1: Trees
+
+Current thought: chunky trees, call it 32 cells wide. First cell has the xt for
+searching in each child, second has the count of entries in this node.
+
+There are two xts for searching: internal tree nodes and leaf definitions.
+... But insertion is tricky too, lots to implement.
+
+### Idea 2: Sorted chunks
+
+Could also do chained inserts rather than a tree structure proper. 32 cells,
+with 30 being pointers directly to words. Maintain it in sorted order, and if
+we need to split a node to insert more they can be split neatly into two.
+
+To search, we would walk a chunk at a time checking the last word in each, and
+skip rapidly to the end. Asymptotically, that's still O(n), but in practice it's
+n/32/2 + log(32) comparisons. n=600 for the core dictionary, so that's ~15 for
+this scheme compared to ~60 for a match with the 4-way hashing and ~120 for a
+failed match.
+
+### Idea 3: Hashing by length masks
+
+| Range | Count |
+| :--   | :-- |
+| 0-1   | 22 |
+| 2-3   | 90 |
+| 4-7   | 225 |
+| 8-15  | 150 |
+| 16-31 | 6   |
+
+That splits it into one more group than the 4-way hashing, but achieves worse division.
+It also makes the long linked lists more expensive, since different lengths is
+a really fast way to skip! The more randomized lists are much faster to search.
+
+### Idea 4: 8-way hashing?
+
+1 bit of the length and 2 of the first character. Doubles the pointer count,
+but perhaps it improves this a lot?
+
+I can just try it fairly easily; it's abstracted. It halved the time! That seems
+like a win on all but the lowest-memory machines. The dictionary hashing can be
+turned into config parameters easily, just the number of bits.
+
+### Idea 5: Machine code search
+
+This really sucks; it's a complex routine. But perhaps it's the best approach.
+I should at least try it once and see what the impact is.

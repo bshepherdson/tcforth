@@ -1,8 +1,8 @@
 \ Final file that goes last in the process.
 \ This sets Target's LATEST and DP properly.
 host REQUIRE ../shared/finalizing.ft
-
 host definitions
+
 
 \ This needs to be the last lines in the target compilation.
 host latest        latest0 tcode!

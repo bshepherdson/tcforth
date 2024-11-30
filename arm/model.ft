@@ -4,10 +4,10 @@
 \ r12 is IP, r11 is RSP, r10 is tos, r9 is UP.
 HOST DEFINITIONS
 
-: ip  r12 ;
-: rsp r11 ;
-: tos r10 ;
-: up  r9  ;
+: ip  r12 ; \ IP in ARM disassemblers (cool)
+: rsp r11 ; \ FP in ARM disassemblers
+: tos r10 ; \ SL in ARM disassemblers
+: up  r9  ; \ Occasionally SB in ARM disassemblers
 
 4 CONSTANT instr-width
 
@@ -39,13 +39,8 @@ code-space @ b,
 : tdecompile ( slot -- xt ) tcode@ ;
 
 
-VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
-: LATEST ( -- nt ) 'latest @ ;
-0 'latest !
-
 \ This is called with BL, so lr holds the address after the code field, which is
 \ the thread.
-
 label DOCOL
   ip pushrsp,
   lr ip mov,

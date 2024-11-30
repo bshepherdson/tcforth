@@ -564,15 +564,17 @@ end-code-bare
 $00c0 CONSTANT cpsr-int-mask
 
 code IRQ+ ( -- )
-  cpsr               r0 mrs,
-  cpsr-int-mask # r0 r0 orr,
-  r0               cpsr msr,
+\ TODO: Interrupt handling is off
+  \ cpsr               r0 mrs,
+  \ cpsr-int-mask # r0 r0 orr,
+  \ r0               cpsr msr,
 end-code
 
 code IRQ- ( -- )
-  cpsr               r0 mrs,
-  cpsr-int-mask # r0 r0 bic,
-  r0               cpsr msr,
+\ TODO: Interrupt handling is off
+  \ cpsr               r0 mrs,
+  \ cpsr-int-mask # r0 r0 bic,
+  \ r0               cpsr msr,
 end-code
 
 [THEN]

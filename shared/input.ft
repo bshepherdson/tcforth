@@ -35,7 +35,7 @@ target : <FIND> ( c-addr u nt -- nt|0 )
   BEGIN dup WHILE
     dup >R name>string   2over istr= IF 2drop R> EXIT THEN
     R> @
-  REPEAT 2drop drop ;
+  REPEAT ( c-addr u 0 ) 2drop drop 0 ;
 host [THEN]
 
 target : DICT-HASH ( c-addr u -- index )
@@ -163,7 +163,6 @@ target : ?NUMBER ( c-addr u -- n true | false )
   THEN ;
 
 host presume .
-host presume hex.
 
 \ Interprets a single parsed word or number.
 target : INTERP1   ( c-addr u -- )

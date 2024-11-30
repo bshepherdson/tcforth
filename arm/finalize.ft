@@ -1,5 +1,6 @@
 \ Final file that goes last in the process.
 \ This sets Target's LATEST and DP properly.
+host REQUIRE ../shared/finalizing.ft
 host definitions
 
 data-indirect? [IF] prepare-data-initializers [THEN]
@@ -7,7 +8,7 @@ data-indirect? [IF] prepare-data-initializers [THEN]
 \ By this point all the USER variables should be defined. Write the base size
 \ into code space since the startup code needs them.
 host
-t/user $100 cells +   task-area0 +
+t/user @   $100 cells +   task-area0 +
 default/ds +   dup 'sp0 tcode!
 default/rs +       'rp0 tcode!
 

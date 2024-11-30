@@ -18,6 +18,7 @@ target : >UPPER ( ch1 -- ch2 )
   dup [ host 'a' tliteral 'z' 1+ tliteral target ] within IF 32 - THEN ;
 
 host <T'> istr= 0= [IF]
+\ Implementing ISTR= in code gave a 2x speedup on DCPU-16.
 target : istr= ( ca1 u1 ca2 u2 -- ? )
   rot over <> IF drop 2drop 0 EXIT THEN \ Length mismatch
   ( ca1 ca2 u ) BEGIN ?dup WHILE
@@ -26,6 +27,15 @@ target : istr= ( ca1 u1 ca2 u2 -- ? )
       2drop R> drop 0 EXIT THEN \ Character mismatch
     1+ >R 1+ R> R> 1- ( ca1' ca2' u' )
   REPEAT 2drop -1 ;
+host [THEN]
+
+host <T'> <find> 0= [IF]
+\ Implementing <FIND> in code gave a 2x speedup on DCPU-16.
+target : <FIND> ( c-addr u nt -- nt|0 )
+  BEGIN dup WHILE
+    dup >R name>string   2over istr= IF 2drop R> EXIT THEN
+    R> @
+  REPEAT 2drop drop ;
 host [THEN]
 
 target : DICT-HASH ( c-addr u -- index )

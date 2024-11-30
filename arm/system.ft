@@ -21,9 +21,9 @@ host REQUIRE branches.ft               \ Target-specific branching helpers.
 host REQUIRE ../shared/control-structures.ft
 host REQUIRE ../shared/exceptions.ft
 host REQUIRE model-target.ft
-host REQUIRE ../shared/user-area.ft
 host REQUIRE ../shared/input.ft
 host REQUIRE ../shared/core2.ft
+host REQUIRE ../shared/user-area.ft
 host REQUIRE ../shared/refill.ft
 host REQUIRE lib.ft                    \ Division etc. helpers
 host REQUIRE serial.ft

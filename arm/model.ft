@@ -9,6 +9,8 @@ HOST DEFINITIONS
 : tos r10 ;
 : up  r9  ;
 
+4 CONSTANT instr-width
+
 \ bl docol, bl dovar, bl dodoes-code can fit into one cell.
 
 
@@ -162,11 +164,7 @@ data-indirect? [IF]
 : t>pfa ( t-xt -- pf-slot ) tcell+ ;
 
 \ Entry point at 64KB, dictionary follows, and tasks start at 8MB.
-$00800000 CONSTANT kernel-task
-
-\ 32 cells each for the kernel task's stacks - it generally doesn't do much work.
-32 tcells CONSTANT kernel/rs
-32 tcells CONSTANT kernel/ds
+$00800000 CONSTANT task-area0
 
 \ For the main task, 256 cells of return stack and 512 cells of data stack.
 256 tcells CONSTANT default/rs

@@ -5,8 +5,11 @@ host definitions
 data-indirect? [IF] prepare-data-initializers [THEN]
 
 \ By this point all the USER variables should be defined. Write the base size
-\ into code space since the kernel code needs them.
-host kernel-task t/user + kernel/ds +   dup 'sp0 tcode!   kernel/rs + 'rp0 tcode!
+\ into code space since the startup code needs them.
+host
+t/user $100 cells +   task-area0 +
+default/ds +   dup 'sp0 tcode!
+default/rs +       'rp0 tcode!
 
 \ This needs to be the last lines in the target compilation.
 host latest         latest0 tcode!

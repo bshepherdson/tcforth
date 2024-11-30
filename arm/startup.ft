@@ -39,7 +39,7 @@
 \ For a prompt PAUSE we can hijack the codeword of EXIT to a new word that
 \ does an EXIT and a (PAUSE) right after.
 
-label 'kernel-task kernel-task asm,
+label 'main-task   task-area0  asm,
 label timer-intclr $101e200c   asm, \ Set to 1 to clear the interrupt flag.
 
 TVARIABLE ticks
@@ -56,7 +56,7 @@ label interrupt-handler
   \ Push all the used registers - r0-r4, r9-r12. (r13 and r14 are banked.)
   \ That includes saving the original UP, so we can just overwrite it.
   {{ r0 r1 r2 r3 r4   r9 r10 r11 r12 lr }} push, \ LR too just in case.
-  'kernel-task   up ldr-pc,   \ Kernel Task -> UP
+  'main-task     up ldr-pc,   \ Kernel Task -> UP
   \ At its SP is the IP, which we should change to its own code area.
   var_handler    r0 nearby,   \ Get the address of the HANDLER var.
   r0 []          r0 ldr,      \ xt for interrupt handling -> r0
@@ -106,11 +106,12 @@ label main
   \ Starts with interrupts disabled.
   \ We need to set up a Forth "kernel" task for interrupt handling.
   \ Each ARM mode has its own SP, so we have to set them up ahead of time.
-  'kernel-task   up ldr-pc,   \ Main Task -> UP
+  'main-task     up ldr-pc,   \ Main Task -> UP
 
-  \ We use kernel-task as the IRQ stack pointer too; set that up now.
+  \ We use task-area0 as the IRQ stack pointer, growing downward just below
+  \ the tasks.
   cpsr-mode-irq # cpsr msr,   \ Now in IRQ mode
-  up              sp   mov,   \ Setting its SP
+  up              sp   mov,   \ Setting its SP - just below the task area
   cpsr-mode-sys # cpsr msr,   \ Now to System, (ie. User + privileges)
 
   \ - Each target defines: kernel-task, kernel/rs, and kernel/ds.
@@ -129,7 +130,6 @@ label main
   \ top of the stack is.
   'deadbeef  tos ldr-pc, \ Marker for debugging the stack.
 
-  \ XXX: START HERE - Set up the main task in the init code!
   cpsr-mode-sys # r0 mov, \ System mode, interrupts off
   r0 cpsr msr,
 

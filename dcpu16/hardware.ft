@@ -16,7 +16,13 @@ VARIABLE dev-keyboard
 VARIABLE dev-m35fd
 VARIABLE dev-serial
 
-: dev-timer   [ host ttimer tliteral target ] ;
+host [IFDEF] ttimer
+  target : dev-timer   [ host ttimer tliteral target ] ;
+host [ELSE]
+  target VARIABLE dev-timer
+host [THEN]
+
+target
 
 : lem? ( dev-num -- lem? )
   devinfo ( version d-maker d-ID )

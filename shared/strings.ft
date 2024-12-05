@@ -25,7 +25,7 @@ presume type
 
 \ Indirection so this word can be compiled directly and its contents are the
 \ forward reference.
-\ TODO This kinda sucks - it's a metacompiler weakness with target-side impact.
+\ TODO: This kinda sucks - it's a metacompiler weakness with target-side impact.
 \ Fix it so that forward references can work for values pushed as literals.
 \ Doing that portably between ITC/DTC and STC is hard, though, since literals
 \ are not just in the thread in that case.

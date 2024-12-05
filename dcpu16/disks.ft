@@ -45,11 +45,8 @@ $fa00 CONSTANT rawbuf
 VARIABLE disk-offset  \ Offset in *bytes* from the start of the current block.
 VARIABLE loaded-block \ Block number currently loaded
 
-CREATE disk-time 0 , 0 ,
-: disk-time+ ( ud-ticks -- ) disk-time 2@ d+   disk-time 2! ;
-
 : load-block ( blk# -- )
-  time( dup read-disk   loaded-block !   0 disk-offset ! )time disk-time+ ;
+  dup read-disk   loaded-block !   0 disk-offset ! ;
 
 
 : ?next-block ( -- )

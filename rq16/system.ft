@@ -23,11 +23,23 @@ host REQUIRE ../shared/exceptions.ft
 host REQUIRE model-target.ft
 host REQUIRE ../shared/input.ft
 host REQUIRE ../shared/core2.ft
+host REQUIRE ../shared/user-area.ft
 host REQUIRE ../shared/refill.ft
 host REQUIRE lib.ft                    \ Division etc. helpers
 host REQUIRE ../dcpu16/hardware.ft     \ DCPU-16 files, but the same HW.
-host REQUIRE ../dcpu16/screen.ft
 host REQUIRE ../shared/output.ft
 host REQUIRE ../shared/error-messages.ft
+
+host structures?   [IF] REQUIRE ../shared/structs.ft host [THEN]
+host multitasking? [IF] REQUIRE ../shared/tasks.ft   host [THEN]
+
+host REQUIRE ../dcpu16/screen.ft
+
+host debugging?    [IF]
+  target definitions   4 CONSTANT dump-width
+  host REQUIRE ../shared/debugging.ft
+  host REQUIRE ../dcpu16/debugging.ft
+host [THEN]
+
 host REQUIRE ../dcpu16/intro.ft        \ DCPU-16/Risque-16 HW init; intro msg
 host REQUIRE ../shared/init.ft         \ Shared init code.

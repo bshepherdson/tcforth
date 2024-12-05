@@ -154,6 +154,8 @@ code R@
   rsp [] tos ldr,
 end-code
 
+TVARIABLE var_up
+
 \ This is a bit weird with TOS in register. The bottom value in memory is
 \ actually whatever dummy value was in the TOS register when the first real
 \ value was pushed.
@@ -161,10 +163,12 @@ end-code
 \ so DEPTH actually pushes TOS early to move SP one notch "too far", then
 \ measures the depth from $ff7f, rather than the real empty SP of $ff80.
 code DEPTH
-  sp0 r0 load,
-  {{ tos }} push, \ Make sure TOS is counted as an extra level of depth!
-  0 # sp r1 add,  \ SP -> r1
-  r1 r0 tos sub,  \ Subtract current sp from sp0, into TOS.
+  var_up        r0 load, \ 'up -> r0
+  r0        []  r0 ldr,  \  up -> r0
+  tsp0 # r0 [+] r0 ldr,  \ sp0 -> r0
+  {{ tos }}       push,  \ Make sure TOS is counted as an extra level of depth!
+  0 #       sp  r1 add,  \ SP -> r1
+  r1        r0 tos sub,  \ Subtract current sp from sp0, into TOS.
 end-code
 
 
@@ -241,7 +245,6 @@ label latest0   0 asm,
 
 TVARIABLE var_dp
 TVARIABLE var_latest
-TVARIABLE var_base
 TVARIABLE var_state
 TVARIABLE var_handler
 
@@ -272,7 +275,7 @@ code COMPILE, (compile) b, end-code-bare
 code HANDLER      var_handler    lit, end-code
 code 'LATEST      var_latest     lit, end-code
 code STATE        var_state      lit, end-code
-code BASE         var_base       lit, end-code
+code UP           var_up         lit, end-code
 code 'SOURCE      var_source     lit, end-code
 code 'SOURCE-ID   var_source_id  lit, end-code
 code >IN          var_in_ptr     lit, end-code
@@ -646,22 +649,73 @@ label (key)-loop
   r2 tos mov,     \ Put the key from r2 into TOS.
 end-code
 
+
+\ Multitasking ===============================================================
+\ Enters a task whose address is already in UP.
+\ The stacks for that task are **not** set up yet!
+\ The data stack for that task has ( user-stack... rsp ip ) on it.
+code (RESTART)
+label inner-restart        \ <-- Used by (PAUSE) below to directly enter here.
+  \ UP is a global variable, so get its contents into X.
+  var_up        r0 load,  \ 'up -> r0
+  r0        []  r0  ldr,  \  up -> r0
+  tsp0 # r0 [+] r1  ldr,  \ Task SP -> r1
+  {{ r1 }}         push,  \ Push the new SP
+  popsp,                  \ -> SP
+  {{ ip  }}        push,
+  {{ rsp }}        push,
+  \ The task's stacks are ready, so it's ready to run!
+end-code \ NEXT into the new task
+
+\ Internal implementation of PAUSE - next task is TOS, not the LINK field!
+\ That allows it to be called in "handoff" sorts of cases.
+code (PAUSE)
+  \ New UP is in TOS, 'UP in r0.
+  {{ rsp }}        push,  \ Push old RSP
+  {{ ip  }}        push,  \ Push old IP
+  var_up        r0 load,  \ 'up -> r0
+  r0        []  r1 ldr,   \ Old up -> r1
+  r0        [] tos str,   \ New task -> UP
+  0 # sp        r2 add,   \ Old SP   -> r2
+  tsp0 # r0 [+] r2 str,   \ Save old SP
+  inner-restart b,
+
+
+\ Interrupts ==================================
 \ TODO interrupt handling? The current system doesn't actually use them.
 label interrupt-handler
   brk, \ Just a brk, we're not really handling these.
+
+code IRQ+   ifs,   end-code
+code IRQ-   ifc,   end-code
 
 interrupt-handler 9 tcode! \ Overwrite the branch target in the interrupt vector.
 
 
 \ Main =======================================================================
 \ Machine code entry point, jumped to be the first instructions.
+
+task-area0                         CONSTANT default-rp0
+task-area0  default/rs - $ffff and CONSTANT default-sp0
+\ Rounding UP down to make some extra user space.
+default-sp0 default/ds - t/user @ - $ff00 and CONSTANT default-up
+
+
 label main
   ifc,
-  rp0 rsp load,
-  sp0 r0  load,
-  {{ r0 }} push, \ This sequence...
-  popsp,         \ is pretending...
-  {{ tos }} pop, \ it's sp! - which pops the TOS register from the stack!
+  default-up     r2  load,
+  var_up         r1  load,
+  r1 []          r2  str,    \ Default UP into the variable.
+  default-rp0    rsp load,
+  default-sp0 1- r0  load,   \ Default stacks are partially loaded.
+  trp0 # r2 [+]  rsp str,    \ Write RP0 into main task's user var.
+  tsp0 # r2 [+]  r0  str,    \ Write SP0 into main task's user var.
+
+  $cafe          r2  load,   \ Marker for the bottom TOS, ie. empty stack.
+  r0 []          r2  str,    \ Store it at the sp0 pointer.
+  {{ r0 }} push,
+  popsp,                     \ Get the default-sp0 into SP (eg. $ff7f)
+  {{ tos }} pop,             \ And pop TOS from it! SP=$ff80, TOS populated.
 
   entry-point r0 load, \ entry-point is a variable holding an xt.
   r0 [] r0 ldr,        \ the xt itself is now in r0.

@@ -148,7 +148,7 @@ code R@    {{ tos }} push,   rsp [] tos ldr,   end-code
 \ DEPTH is a bit weird with TOS in register. The bottom value in memory is
 \ actually whatever dummy value was in the TOS register when the first real
 \ value was pushed.
-\ BUT! sp0 if $...7f and not $..80, because that's the right value to  sp0 sp!
+\ BUT! sp0 is $...7f and not $..80, because that's the right value to  sp0 sp!
 \ in ABORT. So DEPTH actually pushes TOS early to move SP one notch "too far",
 \ then measures the depth from sp0, rather than the real empty SP.
 code DEPTH

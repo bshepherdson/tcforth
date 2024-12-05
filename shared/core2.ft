@@ -299,10 +299,15 @@ target : TRUE  ( -- true? )  -1 ;
 target : ON    ( addr -- ) true  swap ! ;
 target : OFF   ( addr -- ) false swap ! ;
 
-host presume CLAIM presume RELEASE
-
 target
+DEFER claim
+DEFER release
 0 VALUE termlock
+
+\ Default, non-multitasking CLAIM and RELEASE are simply drop.
+' drop IS CLAIM
+' drop IS RELEASE
+
 
 \ Colon definitions ==========================================================
 \ Target : and ; are empty placeholders right now. These need to be filled in

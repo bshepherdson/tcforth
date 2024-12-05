@@ -4,10 +4,6 @@
 
 host definitions
 
-\ Some basic constants
-0     CONSTANT rp0
-$ff7f CONSTANT sp0 \ This is the value to literally write to SP for an empty stack.
-
 : HERE ( -- ) 99 throw ;
 : DP   ( -- ) 98 throw ;
 
@@ -39,11 +35,6 @@ $ff7f CONSTANT sp0 \ This is the value to literally write to SP for an empty sta
 
 : tcompile,  ( xt -- )      tcode, ;
 : tdecompile ( slot -- xt ) tcode@ ;
-
-
-VARIABLE 'latest
-: LATEST ( -- nt ) 'latest @ ;
-0 'latest !
 
 
 \ Starting the assembly ======================================================
@@ -167,8 +158,15 @@ VARIABLE 'EXIT   \ These get populated later.
 
 : t>pfa ( target-xt -- target-body ) tcell+ ;
 
-label entry-point 0 asm,
 
+\ Stacks and tasks ===========================================================
+128 tcells CONSTANT default/rs
+256 tcells CONSTANT default/ds
+
+\ Tasks starting at the top of memory and growing down.
+0 CONSTANT task-area0
+
+label entry-point 0 asm,
 
 \ Space for : and ; ==========================================================
 \ : :   (CREATE) ,docol smudge ] exit    5 cells and the codeword

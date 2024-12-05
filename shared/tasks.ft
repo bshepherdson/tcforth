@@ -296,12 +296,14 @@ target : MUTEX ( "name" --    X: -- mutex ) CREATE 0 , 0 , DOES> ;
 
 \ Waits until the mutex is free, then claims it.
 \ If this task has already claimed it, increases the nesting level.
-target : CLAIM   ( mutex -- )
+target : <CLAIM>   ( mutex -- )
   dup cell+ @ up@ = IF 1 swap +! EXIT THEN
   ( mutex ) BEGIN pause dup @ 0= UNTIL
   up@ 1 rot 2! ;
+' <CLAIM> IS CLAIM
 
-target : RELEASE ( mutex -- ) -1 swap +! ;
+target : <RELEASE> ( mutex -- ) -1 swap +! ;
+' <RELEASE> IS RELEASE
 
 \ Core locks =================================================================
 target here   2 cells allot   IS termlock

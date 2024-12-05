@@ -4,6 +4,8 @@ host   T' '.intro   t>body tdata@ 0= [IF]
   :noname ." TC-Forth version 7" cr ; '.intro !
 host [THEN]
 
+\ For systems without multitasking, we want to have dummy CLAIM, RELEASE, PAUSE, etc.
+
 host definitions
 
 data-indirect? [IF] prepare-data-initializers [THEN]

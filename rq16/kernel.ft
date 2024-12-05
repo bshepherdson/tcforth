@@ -699,6 +699,7 @@ task-area0                         CONSTANT default-rp0
 task-area0  default/rs - $ffff and CONSTANT default-sp0
 \ Rounding UP down to make some extra user space.
 default-sp0 default/ds - t/user @ - $ff00 and CONSTANT default-up
+default-up var_up tdata!
 
 
 label main

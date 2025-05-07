@@ -315,7 +315,26 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
   2R> ldr, ;
 
 
-\ TODO Halfwords and signed bytes if needed.
+\ Halfwords ==================================================================
+\ I=0  shifted reg offset cccc 000P UIWL nnnn dddd 0000 1oo1 mmmm
+\ I=1  immediate offset   cccc 000P UIWL nnnn dddd iiii 1oo1 iiii
+
+\ L=0 (str):
+\ oo=00        (reserved)
+\ oo=01        STRH  Rd,<addr>
+\ oo=10        LDRD  Rd,<addr>
+\ oo=11        STRD  Rd,<addr>
+\ L=1 (ldr):
+\ oo=00        (reserved)
+\ oo=01        LDRH  Rd,<addr> (zero-extended)
+\ oo=10        LDRSB Rd,<addr> (sign-extended)
+\ oo=11        STRSH Rd,<addr> (sign-extended)
+: (ldrh) ( encoded-addr rd 0 flags -- )
+  >R ?reg 12 lshift R> or or $00000090 or +cond asm, ;
+
+\ TODO: These don't work - the I=0 logic is inverted from ldr.
+\ : ldrh,  ( encoded-addr rd 0 -- ) $00100020 (ldrh) ;
+\ : strh,  ( encoded-addr rd 0 -- ) $00000020 (ldrh) ;
 
 \ Block Data Transfer ========================================================
 \ cccc 100P USWL nnnn rrrr rrrr rrrr rrrr

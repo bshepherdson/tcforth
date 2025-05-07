@@ -1,0 +1,39 @@
+\ Final file that goes last in the process.
+\ This sets Target's LATEST and DP properly.
+host REQUIRE ../shared/finalizing.ft
+host definitions
+
+data-indirect? [IF] prepare-data-initializers [THEN]
+
+\ By this point all the USER variables should be defined. Write the base size
+\ into code space since the startup code needs them.
+\ TODO: This will need adjusting the get multitasking working.
+host
+
+\ For now, just putting the stacks and user variables at the top of IWRAM.
+\ The interrupt handler stack is at $03007F00 and up; the Forth stacks go below.
+$03007F00 CONSTANT game-iwram-top
+game-iwram-top              'rp0 tcode!
+game-iwram-top default/rs - 'sp0 tcode!
+
+\ This needs to be the last lines in the target compilation.
+host latest         latest0 tcode!
+host data-space @   dp0     tcode!
+
+\ Ensuring that we haven't used any registers that aren't getting saved in the
+\ interrupt handler!
+\ We're expecting r9 through r15, r0 through r4. r5 through r8 are not touched.
+$fe1f CONSTANT exp-regs
+
+regs-used @   exp-regs <> [IF]
+  cr cr
+  S" Unexpected register use: " type cr
+  S" 111111          " type cr
+  S" 5432109876543210" type cr
+  regs-used @ exp-regs invert and native 2 base !   #16 .R cr
+  decimal 12 throw
+[THEN]
+
+\ At this point the assembler's output region should be complete.
+\ Dump the binary!
+host tcforth-output dump-forth

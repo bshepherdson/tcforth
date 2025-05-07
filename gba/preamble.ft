@@ -1,0 +1,68 @@
+\ GBA notes
+\ 32-bit ARM v7 TDMI, 16.78MHz (roughly 60ns each) (Thumb support)
+\ Little-endian
+
+\ Not targeting an interactive system on the GBA; rather this is using the
+\ metacompiler to target the GBA with a game.
+
+\ See gba/DESIGN.md for most of the details!
+
+\ Initial setup for TC-Forth on Gameboy Advance.
+: tc-machine S" gba" ;
+
+REQUIRE ../host/vocabularies.ft
+REQUIRE ../host/helpers.ft
+
+host definitions
+
+\ Metacompiler configuration =================================================
+host REQUIRE ../host/configuration.ft
+
+rom-application! \ No dictionary (+ names indirected); data indirect.
+\ Then borrowing the ARM configuration of cell widths etc.
+host REQUIRE ../arm/config.ft
+headless!
+
+\ TODO: Probably support multitasking in GBA? But for now it's extra setup
+\ complexity we can avoid.
+false TO multitasking?
+
+?stack-clear
+
+\ Target spaces ==============================================================
+REQUIRE ../host/spaces.ft
+split-spaces!
+
+\ For the GBA, the name space is not present on the target.
+\ The data space is separate and starts empty, because it's in a separate RAM.
+REQUIRE header.ft
+
+?stack-clear
+\ The header goes at the start of the file and the start of ROM at $08000000.
+\ It's 192 bytes long, so the code section can start right after it.
+
+\ The 256B at the top of IWRAM ($03007f00 to $03007fff) are reserved for the
+\ interrupt vector, interrupt stack and BIOS call stack.
+\ There's 32KB of IWRAM, and I want a handful of tasks to fit into it.
+\ Reserving 2KB for the interrupt bits, global VARIABLEs and miscellany, that
+\ leaves 30KB for tasks. 30KB would give:
+\ - 40 tasks 192 cells
+\ - 32 tasks 240 cells
+\ - 16 tasks 480 cells
+
+\ We'll allow for variable-sized tasks in any case.
+
+\ Make the generic Forth data space be the fast one and track how big it gets.
+?stack-clear
+\ EWRAM
+$40000 allocate throw THERE-PTR CONSTANT ewram \ 256KiB
+$02000000 ewram ORG!                           \ Memory map
+ewram blank-space!                             \ Not in the ROM.
+
+\ IWRAM
+$8000  allocate throw THERE-PTR CONSTANT iwram \ 32KiB
+$03000000 iwram ORG!                           \ Memory map
+iwram blank-space!                             \ Not in the ROM.
+
+\ Use IWRAM as the default Forth data space.
+iwram TO data-space

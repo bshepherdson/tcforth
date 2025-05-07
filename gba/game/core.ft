@@ -1,0 +1,25 @@
+\ Entry point for the GBA game parts!
+\ No COLD on a non-interactive system, we need to set up the entry point.
+host REQUIRE display.ft
+
+target definitions
+
+\ Colours (both palettes and 16-bit bitmaps) are _bbb bbgg gggr rrrr.
+\ Painting the frame sky blue: $1f, $10, $10 = 0111 1110 0001 0000 = $7e10.
+: the-frame ( -- ) 240 160 * 0 DO $7e10   i 2* vram + h! LOOP ;
+
+\ Never returns!
+: main-loop ( -- ) BEGIN AGAIN ;
+
+: game-start ( -- )
+  boot
+  io-dispcnt spin
+  init-display
+  the-frame
+  expose
+  main-loop ;
+
+\ XXX: START HERE: It doesn't look like my edits to the registers are sticking?
+\ Not sure what's up with that. See if my edits to DISPCNT etc. are working.
+
+host T' game-start entry-point tcode!

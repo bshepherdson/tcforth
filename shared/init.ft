@@ -1,12 +1,25 @@
 \ Last file for the topmost words like QUIT
 target definitions
 
-target : \   source >in ! drop ; IMMEDIATE
-  host acts: native postpone \ host ; IMPERATIVE-BOTH
+host keyboard-input? [IF]
+  \ Real target versions.
+  target : \   source >in ! drop ; IMMEDIATE
+    host acts: native postpone \ host ; IMPERATIVE-BOTH
 
-target : (   41 parse 2drop ; IMMEDIATE
-  host acts: native 41 parse 2drop host ; IMPERATIVE-BOTH
+  target : (   41 parse 2drop ; IMMEDIATE
+    host acts: native 41 parse 2drop host ; IMPERATIVE-BOTH
+host [ELSE]
+  \ Empty target versions, but they need to exist so we can metacompile comments
+  \ in TARGET mode.
+  target : \   ; IMMEDIATE
+    host acts: native postpone \ host ; IMPERATIVE-BOTH
 
+  target : (   ; IMMEDIATE
+    host acts: native 41 parse 2drop host ; IMPERATIVE-BOTH
+host [THEN]
+
+
+host keyboard-input? [IF]
 target : ABORTED ( -- )
   R> rp0 @ rp! >R \ Drops everything but ABORTED's own return
   [ host T' [ tcompile, target ]
@@ -34,6 +47,11 @@ target : QUIT ( -- )
   src-keyboard 'source-id !
   (QUIT) ( TODO: BYE ) ;
 
+host [THEN]
+
+cr cr
+host .( Latest0: ) latest0 hex. .( -> ) var_latest hex. cr
+host .( DP0:     ) dp0     hex. .( -> ) var_dp     hex. cr
 
 target : INIT-DATA-PTRS ( -- )
   [ host latest0 tliteral target ] @ [ host var_latest tliteral target ] !
@@ -90,9 +108,16 @@ host [THEN] target definitions
   [ host multitasking? [IF] target ] init-multi [ host [THEN] target ]
   10 base ! ;
 
-target : interactive ( -- ) irq+   '.intro @ execute   QUIT ;
+\ Interactive start: COLD calls boot, prints the intro, and QUITs.
+host keyboard-input? [IF]
+  target : interactive ( -- ) irq+   '.intro @ execute   QUIT ;
 
-\ "Cold" start, loading interactive mode by default.
-target : cold  ( -- ) boot interactive ;
+  \ "Cold" start, loading interactive mode by default.
+  target : cold  ( -- ) boot interactive ;
 
-host   T' COLD   entry-point tcode!
+  host   T' COLD   entry-point tcode!
+host [THEN]
+
+\ NOTE: For a non-interactive system (eg. GBA game) set your own starting xt
+\ into entry-point, and don't forget to call BOOT first thing to set up
+\ hardware and populate the data area.

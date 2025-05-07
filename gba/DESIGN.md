@@ -7,12 +7,12 @@ It's a fairly powerful machine, and it's nice to have a big address space with
 no confusing remapping.
 
 However there are a few constraints:
-- Most importantly, the code lives in ROM, so any mutable cells need to live in
-  a separate space.
+- Most importantly, the code lives in ROM, so we need separate spaces and
+  indirect data. The metacompiler now supports this nicely.
 - The system is not interactive, so dictionaries can be excluded from the final
-  build. The metacompiler does not currently support this.
-- We may want to build a multi-tasking variant of the Forth system, cooperative
-  or even pre-empting, to better support background processes in games.
+  build. This is also supported.
+- Multi-tasking is useful, and it's now supported. Can use timer interrupts to
+  get more beans.
 - We need to hook into interrupts on the platform, as well as a highly custom
   set of memory-mapped registers for controlling the hardware.
 
@@ -56,6 +56,7 @@ doesn't work on GBA Micro or DS, only classic and SP) lowers it to 2/2/4.
 
 There is just under 4KB of native code in the kernel currently (which includes
 some bits like input handling which could be scrapped on the GBA).
+**These values are likely outdated; they predate native loops!**
 
 With a few native code helpers for speed on the GBA, for things like interrupt
 handling, call it 8KB at the very most, probably more like 5-6KB in practice.

@@ -1,0 +1,93 @@
+\ Fundamental vocab for working with the GBA display.
+
+target definitions
+
+\ Utilities ==================================================================
+\ Toggles the given mask in a halfword.
+: h^ ( mask addr -- ) tuck h@ xor swap h! ;
+
+\ Set and clear a mask in a halfword.
+: h+ ( mask addr -- ) tuck h@   or                swap h! ;
+: h- ( mask addr -- ) tuck h@   swap invert and   swap h! ;
+
+
+\ DISPCNT - H R/W ============================================================
+$04000000 CONSTANT io-dispcnt
+
+$0010 CONSTANT dispcnt-frame-flip
+$0080 CONSTANT dispcnt-force-blank
+$0100 CONSTANT dispcnt-bg0?
+$1000 CONSTANT dispcnt-obj?
+$2000 CONSTANT dispcnt-win0?
+$8000 CONSTANT dispcnt-obj-win?
+
+: bg-mode       ( 0-3 -- dispcnt ) ;
+: th-bg?        ( 0-3 -- dispcnt ) dispcnt-bg0? swap lshift ;
+
+: flip-frames   ( -- ) dispcnt-frame-flip  io-dispcnt h^ ;
+: obscure       ( -- ) dispcnt-force-blank io-dispcnt h+ ;
+: expose        ( -- ) dispcnt-force-blank io-dispcnt h- ;
+
+\ DISPSTAT - H R/W ===========================================================
+$04000004 CONSTANT io-dispstat
+
+$0001 CONSTANT dispstat-vblank?
+$0002 CONSTANT dispstat-hblank?
+$0004 CONSTANT dispstat-vcount-match?
+$0008 CONSTANT dispstat-vblank-irq?
+$0010 CONSTANT dispstat-hblank-irq?
+$ff00 CONSTANT dispstat-lyc
+
+\ VCOUNT - B RO ==============================================================
+$04000006 CONSTANT io-vcount
+
+
+\ BGxCNT - H R/W =============================================================
+$04000008 CONSTANT io-bg0cnt
+: th-bgcnt ( 0-3 -- h-addr ) 2* io-bg0cnt + ;
+
+$0040 CONSTANT bgcnt-mosaic?
+$0080 CONSTANT bgcnt-big-palette?
+$2000 CONSTANT bgcnt-display-overflow?
+
+\ Screen sizes - text modes
+$0000 CONSTANT bgcnt-size-text-256x256
+$4000 CONSTANT bgcnt-size-text-512x256
+$8000 CONSTANT bgcnt-size-text-256x512
+$c000 CONSTANT bgcnt-size-text-512x512
+\ Screen sizes - rotation/scaling modes
+$0000 CONSTANT bgcnt-size-graphic-128x128
+$4000 CONSTANT bgcnt-size-graphic-256x256
+$8000 CONSTANT bgcnt-size-graphic-512x512
+$c000 CONSTANT bgcnt-size-graphic-1024x1024
+
+: bgcnt-priority    ( 0-3 -- bgcnt ) ;
+
+\ Units of 16K = $4000, shift of 14, but 2 leftwards as well.
+: bgcnt-tile-base   ( addr -- bgcnt ) 12 rshift $c and ;
+\ Units of 2K  = $800, shift of 11, then 8 leftwards.
+: bgcnt-tilemap     ( addr -- bgcnt ) 3 rshift $1f00 and ;
+
+$06000000 dup CONSTANT vram
+$4000 +   dup CONSTANT vram+16k
+$4000 +   dup CONSTANT vram+32k
+$4000 +       CONSTANT vram+48k
+
+
+\ Initialization =============================================================
+\ Base setup for initial testing: Simple bitmap.
+: init-display ( -- )
+  3 bg-mode                    \ BG mode 3 (One 240x160 16-bit direct bitmap)
+  dispcnt-force-blank or       \ Force blank for now
+  2 th-bg? or                  \ BG0 on; others off
+  io-dispcnt h!
+
+  0 io-dispstat h!
+
+  \ BG0CNT - not needed in bitmap modes.
+  \ 0 bgcnt-priority             \ Top priority
+  \ vram bgcnt-tile-base or      \ Tile data at the top of VRAM.
+  \ vram+16k bgcnt-tilemap or    \ Tilemap after them
+  \ bgcnt-size-text-256x256 or   \ Basic size
+  \ 0 th-bgcnt h!
+;

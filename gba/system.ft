@@ -1,0 +1,45 @@
+\ Metacompilation ============================================================
+?default-spaces
+
+?stack-clear
+REQUIRE ../arm/assembler.ft    ?stack-clear
+host REQUIRE ../arm/model.ft   ?stack-clear
+host REQUIRE ../host/dictionary.ft
+host REQUIRE ../host/mirrors.ft
+
+\ Now we have what we need to metacompile the CODE definitions at the heart of
+\ the new kernel.
+host definitions REQUIRE ../arm/kernel.ft   ?stack-clear
+
+host REQUIRE startup.ft  ?stack-clear
+
+\ The main part of the metacompiler
+host REQUIRE ../host/metacompiler.ft
+
+\ Now an interleaved dance of shared and target-specific metacompiled code.
+host REQUIRE ../shared/basics.ft
+host REQUIRE ../arm/branches.ft        \ Target-specific branching helpers.
+host REQUIRE ../shared/control-structures.ft
+host REQUIRE ../shared/exceptions.ft
+host REQUIRE ../arm/model-target.ft
+host REQUIRE ../shared/input.ft
+host REQUIRE ../shared/core2.ft
+host REQUIRE ../shared/user-area.ft
+host REQUIRE ../shared/refill.ft
+host REQUIRE ../arm/lib.ft             \ Division etc. helpers
+\ Hardware stuff
+\ host REQUIRE serial.ft
+\ host REQUIRE terminal.ft
+\ host REQUIRE ../shared/output.ft
+host REQUIRE ../shared/error-messages.ft
+\ More hardware stuff
+\ host REQUIRE timers.ft
+
+host structures?   [IF] REQUIRE ../shared/structs.ft host [THEN]
+host multitasking? [IF] REQUIRE ../shared/tasks.ft   host [THEN]
+
+\ XXX: START HERE: Check on the intro; make it fit the GBA.
+\ I'll want to like toggle the screen or something to prove it's working.
+\ Then bootstrap my way up from there.
+host REQUIRE intro.ft
+host REQUIRE ../shared/init.ft         \ Shared init code.

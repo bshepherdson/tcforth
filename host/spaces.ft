@@ -63,6 +63,18 @@ end-structure
 0 VALUE data-space   \ Initialized, writable data.
 
 
+\ Targets for compiled data ==================================================
+DEFER compiled-data-space
+
+\ Sends , and c, compiled data to code-space, because it is read-only.
+: r/o-data ( -- ) ['] code-space IS compiled-data-space ;
+
+\ Sends , and c, compiled data to data-space, because it is initialized but
+\ mutable.
+: r/w-data ( -- ) ['] data-space IS compiled-data-space ;
+
+r/w-data
+
 \ Configuring spaces =========================================================
 \ These steps are necessary for each space.
 
@@ -127,10 +139,6 @@ DEFER default-spaces! ( -- )
 
 
 : blank-space! ( there-array -- ) -1 swap space>offset ! ;
-
-config data-space-blank? @ [IF]
-  data-there blank-space!
-[THEN]
 
 
 \ Read and Write helpers =====================================================

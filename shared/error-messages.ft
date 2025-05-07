@@ -1,6 +1,9 @@
 \ Error message strings for the various errors.
 target definitions
 
+host keyboard-output? [IF]
+
+target
 CREATE (abortmsg) 0 , 0 ,
 
 : ABORT"
@@ -44,3 +47,5 @@ host dict-buckets  target CONSTANT dict-buckets
 
 : words ( -- )
   #dict-buckets 0 DO i >bucket @ words. LOOP ;
+
+host [THEN]

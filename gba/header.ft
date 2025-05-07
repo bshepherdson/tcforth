@@ -1,26 +1,46 @@
-192 allocate throw THERE-PTR cart-header-space
-$08000000 cart-header-space space>org !
-
-: read-header-template ( -- )
-  S" header.bin" R/O BIN OPEN-FILE throw >R
-  cart-header-space space>host-array @   192   R@ READ-FILE throw drop
-  R> CLOSE-FILE throw ;
+\ Cart header goes at the beginning of ROM, both in memory and in the file.
+\ We can use the code space.
+192 CONSTANT /gba-header
+$08000000 code-space ORG!
 
 $a0 CONSTANT hdr-game-title
 $ac CONSTANT hdr-game-code
 $b0 CONSTANT hdr-game-maker
+$b2 CONSTANT hdr-fixed-$96
 $bd CONSTANT hdr-complement-check
 
-: >hdr ( offset -- ) cart-header-space space>host-array @ + ;
+: >hdr ( offset -- ) code-space space>host-array @ + ;
 
+: read-header-template ( -- )
+  S" gba/header.bin" R/O BIN OPEN-FILE throw >R
+  0 >hdr   /gba-header   R@ READ-FILE throw drop
+  R> CLOSE-FILE throw ;
+
+.( Before: ) cr 0 >hdr 192 dump cr cr
+
+read-header-template
 hdr-game-title >hdr   16 erase
+
+.( After: ) cr 0 >hdr 192 dump cr cr
 
 S" CHEZZZZZ" hdr-game-title >hdr swap move
 S" BCZE"     hdr-game-code  >hdr swap move
 S" BS"       hdr-game-maker >hdr swap move
+\ S" GBAZELDA MC" hdr-game-title >hdr swap move
+\ S" BZME"        hdr-game-code  >hdr swap move
+\ S" 01"          hdr-game-maker >hdr swap move
+
+$96 hdr-fixed-$96 >hdr c!
 
 : checksum ( -- checksum )
-  0   hdr-complement-check hdr-game-title DO
-    i >hdr c@   $19 - $ff and LOOP ;
+  0   hdr-complement-check hdr-game-title DO i >hdr c@ dup hex. + dup hex. cr LOOP  ( sum )
+  $19 +   negate   $ff and ;
 
-checksum   hdr-complement-check >hdr c!
+?stack-clear
+checksum cr .( Complement check: ) dup hex. cr cr hdr-complement-check >hdr c!
+?stack-clear
+
+.( After: ) cr 0 >hdr 192 dump cr cr
+
+\ Move the THERE pointer after the header.
+/gba-header code-space +!

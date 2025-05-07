@@ -1,0 +1,19 @@
+\ Interrupts =================================================================
+\ GBA BIOS handles the hardware-level interrupts in IRQ mode.
+\ That uses the SP_irq shadow register, which uses the top 256B of IWRAM as the
+\ IRQ stack and miscellany.
+\ It does a fairly modest ISR:
+\ - Save r0 to r3, r12, r14    (r12=Forth ip)
+\ - Jump to user handler in ARM mode: its address must be in $03007FFC
+\ - LR_irq is the proper return address
+
+\ So it's a pretty standard ARM function call: r0-r3 and r12 are caller-saved.
+\ NOTE: Additional register saving is definitely needed to write ISRs in Forth.
+\ But I'm not sure that's worth doing - better to simply set flags for the main
+\ game loop to observe, I think.
+
+host definitions
+$03007ffc CONSTANT 'gba-isr
+
+label gba-isr
+  lr bx,        \ Just return, a no-op.

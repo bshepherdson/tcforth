@@ -180,6 +180,24 @@ code C!
   {{ tos }} pop,
 end-code
 
+
+code H@
+  \ tos [] tos ldrh,
+  $e1daa0b0 asm,
+end-code
+
+code H!
+  {{ r0 }}  pop,
+  \ tos [] r0 strh,
+  $e1ca00b0 asm,
+  {{ tos }} pop,
+end-code
+
+code SPIN
+  label spinner
+  spinner b,
+end-code
+
 \ These store hi, lo in memory, but push as ( lo hi ) double-words.
 code 2@
   \ hi goes in TOS, lo gets pushed.
@@ -214,6 +232,7 @@ end-code-bare \ The above BX never returns, of course.
 code BREAK ( n -- )
   \ TODO Is there any kind of system monitor I could use?
   \ This is a no-op for now, just DROP.
+  cr cr cr .( BREAK: ) code-space @ hex. cr cr
   {{ tos }} pop,
 end-code
 
@@ -520,12 +539,8 @@ end-code
 
 
 \ Optional: Multitasking =====================================================
-multitasking? [IF]
-
-\ Linked list of ready tasks, with end pointer.
-data-space @   2 tcells tdata-allot   CONSTANT ready-tasks ( tail head )
-
 \ Core words to juggle the user pointer in and out of its register.
+\ This are a core thing whether multitasking or not.
 code UP@
   {{ tos }} push,
   up  tos   mov,
@@ -535,6 +550,12 @@ code UP!
   tos  up   mov,
   {{ tos }} pop,
 end-code
+
+
+multitasking? [IF]
+
+\ Linked list of ready tasks, with end pointer.
+data-space @   2 tcells tdata-allot   CONSTANT ready-tasks ( tail head )
 
 \ Enters a task, whose address is already in UP.
 \ The data stack has ( user-tos rsp ip ) on it.
@@ -581,22 +602,22 @@ end-code
 
 
 \ Debugging helpers ==========================================================
-code H. ( x -- )
-  uart0dr r0 ldr-pc,
-
-  $24 # r1 mov,
-  r0 [] r1 str,
-
-  28 # r2 mov,
-
-  label H.-loop
-    tos r2 lsr r1 mov,
-    $f # r1    r1 and,
-    10 # r1 cmp,
-    cc? $30      # r1 r1 add, \ + '0' if < 10
-    cs? $41 10 - # r1 r1 add, \ + 'a' - 10 if >= 10
-    r0 [] r1 str,
-    4 # r2 r2 S sub,
-  pl? H.-loop b,
-  {{ tos }} pop,
-end-code
+\ code H. ( x -- )
+\   uart0dr r0 ldr-pc,
+\
+\   $24 # r1 mov,
+\   r0 [] r1 str,
+\
+\   28 # r2 mov,
+\
+\   label H.-loop
+\     tos r2 lsr r1 mov,
+\     $f # r1    r1 and,
+\     10 # r1 cmp,
+\     cc? $30      # r1 r1 add, \ + '0' if < 10
+\     cs? $41 10 - # r1 r1 add, \ + 'a' - 10 if >= 10
+\     r0 [] r1 str,
+\     4 # r2 r2 S sub,
+\   pl? H.-loop b,
+\   {{ tos }} pop,
+\ end-code

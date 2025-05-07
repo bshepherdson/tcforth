@@ -1,0 +1,8 @@
+\ 32-bit, byte addressable, little-endian.
+8      TO char-bits
+4      TO cell-width
+
+true   TO little-endian?
+true   TO threaded?
+true   TO multitasking?
+true   TO tos-in-reg?

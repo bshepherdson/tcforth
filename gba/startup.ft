@@ -1,0 +1,28 @@
+\ Main =======================================================================
+label 'sp0     0 asm, \ These get filled in by gba/finalize.ft
+label 'rp0     0 asm,
+
+label 'gba-ime $04000208 asm,
+label 'gba-ie  $04000200 asm,
+label 'gba-if  $04000202 asm,
+
+label main
+  'rp0           rsp ldr-pc,    \ Main RP0  -> rsp
+  trp0  # up [+] rsp str,       \           -> RP0 field
+  'sp0            sp ldr-pc,    \ Main SP0  -> sp
+  tsp0  # up [+]  sp str,       \           -> SP0 field
+
+  \ Setting 0 into IME to disable all interrupts for now.
+  'gba-ime        r0 ldr-pc,
+  0 #             r1 mov,
+  r0 []           r1 str,
+
+  entry-point r0 ldr-pc, \ entry-point is a variable holding an xt; xt -> r0
+  r0 bx,                 \ Jump right into that word's code field.
+
+\ Entry point to user code is the first word of ROM, in the header.
+\ Overwrite that here with the address of our main routine.
+code-space @
+$08000000 code-space !
+main b,
+code-space !

@@ -74,6 +74,12 @@ false  VALUE data-indirect?
 : in-rom! ( -- )
   true TO data-indirect? ;
 
+: rom-application! ( -- )
+  standalone! in-rom! ;
+
+: headless! ( -- )
+  false TO keyboard-input?
+  false TO keyboard-output? ;
 
 \ Config checks ==============================================================
 : ?unset ( xt -- )

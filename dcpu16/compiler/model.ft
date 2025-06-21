@@ -1,0 +1,146 @@
+\ ===================== MACHINE/MODEL DEPENDENT SECTION ======================
+\ Trying to keep the system as portable across both machines and Forth models
+\ as possible. model.ft implements a few key routines (eg. DOCOL) and assembler
+\ macros (eg. pushrsp,) to hide the details of the model as much as possible.
+
+\ Design:
+\ - Native code compilation
+\ - Return stack: RSP in Z; top 128 cells of memory, $ff80 to $ffff.
+\ - Data stack: PSP is SP; TOS on stack (PUSH, PEEK etc. are super fast)
+\ - Return addresses saved in I (like IP in threaded version).
+\ - A B C X Y are free; J is reserved (it gets clobbered by STI)
+\   - (No STI, STD aside from that use.)
+
+\ Standard dictionary headers: link, length+immediate+hidden word, len words of
+\ name, code field.
+
+\ This is a little surprising, but it makes sense when you think deeper:
+\ NATIVE HERE pushes the Host's dictionary pointer.
+\ HOST   HERE pushes the Target's dictionary pointer
+\ TARGET HERE is the mirror word that compiles the Target xt for HERE (!)
+HOST DEFINITIONS
+
+: HERE ( -- ) 99 throw ;
+: DP   ( -- ) 98 throw ;
+
+\ First line of code, the entry point. It'll be a jump to COLD eventually.
+$8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
+
+
+\ These are pseudooperands that hide what registers are used for what.
+: rsp     ( -- op ) rz  ;
+: [rsp]   ( -- op ) [z] ;
+
+\ Some assembler macros
+: pushrsp, ( rhs -- ) 1 # rsp sub,   ( rhs ) [rsp] set, ;
+: poprsp,  ( lhs -- ) [rsp] 2swap ( rhs lhs ) set,   1 # rsp add, ;
+
+\ Compile a JSR to the literal xt!
+: tcompile,   ( t-xt -- )    # jsr , ;
+\ To decompile the slot, take the arg from the next word.
+: tdecompile, ( slot -- t-xt ) 1+ tcode@ ;
+
+
+\ TODO: An alternative compilation scheme can make CREATEd words more efficient.
+\ They can be compiled as pushing a literal and then jumping straight to the
+\ DOES> code.
+
+\ DOES> design for native code ===============================================
+\ This is easier since it's HOST only with a non-interactive target.
+\ When the host executes the CONSTANT mirror, it creates a new name and records
+\ the value. When that CONSTANT word is compiled (on the host), it pushes code
+\ that just inlines the literal.
+
+\ VARIABLEs are CONSTANTs that push their address instead.
+\ Probably the simplest way to approach this is to make the metacompiled code
+\ more conditional - just skip the target side of immediates for an AOT-only
+\ target.
+\ Simple CREATEs are likewise just a constant. VALUEs are a constant address
+\ plus a store op.
+
+\ But for a (possibly user code) HOST DOES> - how to implement that in general?
+\ Sequence 1 (defining a defining word FOO) happens on the host:
+\   - Skipped: Target code for defining a FOO word
+\   - Required: Host code for defining a FOO word
+\   - Required: Target code for executing a FOO word
+\   - Optional: Host code for executing a FOO word
+\ Sequence 2 (executing FOO to define a word) happens on the host only.
+\   - Executes the host code for the LHS of the DOES>, just regular host Forth.
+\ Sequence 3 (executing a FOO word) happens in three ways:
+\   - Host, interpreting: executes the host RHS code if it exists.
+\   - Host, compiling: compiles code to execute the target RHS!
+\   - Target, executing compiled code: runs like anything else.
+
+\ The RHS of the DOES> is compiled like any target nonprimitive word. Then any
+\ calls of FOO-defined words are compiled as a two-part sequence:
+\ - Push the constant address of *this specific* FOO word.
+\ - Call the (nameless) nonprimitive implementing the RHS of DOES>
+
+\ This HOST word is invoked by Host-side DOES> to compile the necessary pieces.
+\ VARIABLE '(DOES>)
+\ VARIABLE 'EXIT   \ These get populated later.
+
+\ Compiles the exit from a nonprimitive: Pop RSP into a register, and return.
+: EXIT, ( -- )
+  ra poprsp,   \ TODO: Make poprsp, in the compiler version a one-liner?
+  ra pc set, ;
+
+\ The code calling eg. a VALUE does a JSR some-val.
+\ That pushes the return address, ie. the next bit of real code, to SP.
+\ The target code for each value is written by !dodoes. It does a JSR dodoes.
+\ The parameter field is in data space, and the parameter field address follows
+\ the JSR does-code in a CREATEd word's code.
+\ Runtime stack effect: ( ret-addr pfa -- parameter-field )
+: DOES, ( -- xt-does )
+  \ Nothing to compile.
+  code-space @   \ Capture the xt of the does code
+  pop ra   set,  \ Pop PFA into A
+  pop pushrsp,   \ Save the return address in RSP
+  [a] push set,  \ Push parameter field
+;
+
+
+\ Compiles the entry boilerplate for a nonprimitive's code.
+\ For threaded code, either the address of DOCOL/ENTER or a jump to it.
+\ For native code, any preamble that's required to handle the return address.
+\ The return address is pushed on the system stack, which is our data stack.
+\ So we pop it and push it to RSP.
+: ,docol ( -- ) pop pushrsp, ;
+
+\ Effectively the default does-code for CREATEd words without a DOES>.
+\ Called by a JSR dovar, so the
+label DOVAR ( ret-addr pfa -- parameter-field )
+  pop ra   set,  \ Pop PFA into A
+  pop rb   set,  \ Pop return address into B
+  [a] push set,  \ Push parameter field
+  b   pc   set,  \ And return to the original caller
+
+
+\ Compiles the code for a CREATEd word without a DOES> section. It should be
+\ two words long, and is followed by the PFA. JSR DOVAR, always using long form.
+\ TODO: It would be a lot more efficient to inline.
+: ,dovar ( -- ) $7c20 tcode, dovar tcode, ;
+
+\ No inline strings allowed - store them explicitly in code space.
+: ,dostring ( c-addr u -- ) 97 throw ;
+
+\ Overwrites the code field (address) of the word at word-xt to point to the
+\ ;CODE or DOES> at does-xt.
+\ On DTC DCPU-16, this compiles JSR does-xt as two words: $7c20 does-xt
+: !dodoes ( does-xt word-xt -- ) $7c20 over tcode!   tcell+ tcode! ;
+
+\ Compile a literal. Simply pushes the literal with one instruction.
+: tliteral ( x --    X: -- x ) # push set, ;
+
+\ TODO: I think this can be generic based on config flags now - /codeword
+: t>pfa ( target-xt -- target-body ) 2 tcells + ;
+
+
+\ Stacks and tasks ===========================================================
+128 tcells CONSTANT default/rs
+256 tcells CONSTANT default/ds
+
+\ Tasks starting at the top of memory and growing down.
+0 CONSTANT task-area0
+
+label entry-point 0 asm,

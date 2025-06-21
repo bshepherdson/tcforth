@@ -56,6 +56,7 @@ false  VALUE debugging?
 \ Default to an inline, writable dictionary, the common configuration.
 false  VALUE names-indirect?
 false  VALUE data-indirect?
+false  VALUE no-data-init?    \ When true, nonzero *writable* data is banned.
 
 
 \ Setup helpers ==============================================================

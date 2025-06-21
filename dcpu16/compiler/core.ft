@@ -1,0 +1,290 @@
+\ Compiler design constraints
+\ - Need not be bootstrapping - that is, the compiler is a HOST system that
+\   generates code for a target that does not have its own Forth compiler.
+\ - Must respect present vs. stripped names.
+\ - Must support separating read-only and mutable data, including *inlining*
+\   CONSTANTs.
+\ - Adds a new pair of words for use with CREATEd data: r/o-data and r/w-data;
+\   that indicates whether , or c, compiled data is ROM-friendly or not.
+
+\ Compilation workflow =======================================================
+\ In order to compile a regular word, say +, we need to hook into its
+\ metacompilation. That happens by *executing* the mirror words, which examine
+\ HOST STATE and executes either mirror>compile or mirror>interp accordingly.
+\ The default mirror>compile is mirror-compile, which reads mirror>txt and
+\ does a tcompile,.
+
+\ For the compiler, we want mirror>compile to be the compiling function itself.
+\ So the compiler will create mirror words with (TCREATE) and then override
+\ their mirror>compile actions with custom compiling logic.
+
+\ IMMEDIATE words ============================================================
+\ These are mirror words whose metacompilation action is overwritten with its
+\ HOST ACTS: ... ; block. For a non-interactive target, the target-side code of
+\ an IMMEDIATE word can be thrown away, since it will never be called.
+\ It can also just be ignored as dead code, if you're not concerned about space.
+
+\ XTs in a compiled app ======================================================
+\ One other concern is that a compiled word like + does not necessarily have
+\ a target xt. That's not usually very important for a directly compiled app,
+\ but there might be a use for eg. dynamic dispatch.
+\ It can be worked around by defining a high-level word and using its xt.
+
+
+\ Calling convention and register allocation =================================
+\ As a first pass, I'll adopt the following approach for the DCPU:
+\ - Same as original threaded code: TOS in memory, use the PUSH/POP operands.
+\ - DUP, SWAP, etc. are all reified directly onto the stack
+\ - This is slow and bulky, but it's simple. To be refined later.
+\ - No attempt to do anything fancy at control points, just push everything
+\   like a call site.
+
+\ JSR on DCPU will leave the return address in TOS, so we have to pop it into
+\ RSP and adjust RSP.
+\ TODO: That could be cached in I or J, since those are free in this scheme?
+\ Alternatively, could use I or J as RSP empty-descending, and STD/STI?
+\ Then RSP pushes and pops are 1 word, 2 cycles.
+
+\ Inlined native code ========================================================
+\ This word defines a new mirror with the given name, and makes the following
+\ (host) colon definition its mirror>compile.
+: :I ( "name" [code...] -- )
+  (TCREATE) :noname ;
+
+: ;I ( -- )
+  postpone ;   ( host-xt )
+  'mirror @ mirror>compile ! ; IMMEDIATE
+
+\ Arithmetic =================================================================
+:I +        pop peek add, ;I
+:I -        pop peek sub, ;I \ This is correct NOS - TOS order!
+:I *        pop peek mli, ;I
+:I /        pop peek dvi, ;I
+:I MOD      pop peek mdi, ;I
+:I U/       pop peek div, ;I
+:I UMOD     pop peek mod, ;I
+:I AND      pop peek and, ;I
+:I OR       pop peek bor, ;I
+:I XOR      pop peek xor, ;I
+:I LSHIFT   pop peek shl, ;I
+:I RSHIFT   pop peek shr, ;I
+:I ARSHIFT  pop peek asr, ;I
+:I 2*       1 # peek shl, ;I
+:I 2/       1 # peek asr, ;I
+
+:I INVERT   $ffff # peek xor, ;I
+:I NEGATE
+  0 # ra set,
+  pop ra sub,
+  ra push set,
+;I
+
+
+\ Comparisons ================================================================
+\ Compiles a Forth comparison, with a flexible comparator op.
+: COMPARISON, ( if-xt -- )
+  >R
+  0 # ra set,
+  pop pop   R> execute
+    -1 # ra set,
+  ra push set, ;
+
+:I =   ['] ife, comparison, ;I
+:I <   ['] ifu, comparison, ;I
+:I U<  ['] ifl, comparison, ;I
+
+
+\ Stack ops ==================================================================
+:I DUP     peek   push set, ;I
+:I DROP    1 #    sp   add, ;I
+:I OVER    1 picc push set, ;I
+
+:I SWAP
+  pop  ra   set,
+  pop  rb   set,
+  ra   push set,
+  rb   push set,
+;I
+
+:I ?DUP
+  0 # peek ifn,
+    peek push set,
+;I
+
+:I NIP ( y x -- x )
+  pop ra   set,
+  ra  peek set,
+;I
+
+:I SP@   sp  push set,   ;I
+:I SP!   pop sp   set,   ;I
+:I RP@   rz  push set,   ;I
+:I RP!   pop rz   set,   ;I
+
+:I >R    pop  pushrsp,   ;I
+:I R>    push poprsp,    ;I
+:I R@    [z]  push set,  ;I
+
+
+\ Memory access ==============================================================
+: fetch,
+  pop ra   set,
+  [a] push set, ;
+: store,
+  pop ra   set,
+  pop [a]  set, ;
+
+:I @   fetch, ;I
+:I C@  fetch, ;I
+:I !   store, ;I
+:I C!  store, ;I
+
+\ These store as hi, lo in memory, but push as ( lo hi ) double-words.
+:I 2@
+  pop    ra   set,
+  1 [a+] push set,
+  [a]    push set,
+;I
+
+:I 2!
+  pop    ra   set,
+  pop    [a]  set,
+  pop  1 [a+] set,
+;I
+
+:I +!
+  pop ra  set,
+  pop [a] add,
+;I
+
+
+\ Miscellany =================================================================
+
+\ EXECUTE on a native code machine is a nonprimitive call, a JSR.
+:I EXECUTE   pop jsr,   ;I
+
+\ Using the builtin DCPU-16 LOG and BRK instructions.
+:I LOG   ( x -- )   pop log,   ;I
+:I BREAK ( x -- )   pop brk,   ;I
+
+
+\ CODE words =================================================================
+\ CODE words are written in assembly, but are NOT inlined!
+\ These are called using JSR like nonprimitives.
+
+\ NOTE: It's vital to remember that the DCPU pushes the return address as TOS!
+\ That is visible to CODE words, since they might do different things with it.
+
+\ A CODE word gets compiled just like a nonprimitive: a JSR to its absolute
+\ address should be compiled. Therefore to create a CODE word, just (TCREATE)
+\ to get a mirror. The default mirror>compile calls TCOMPILE, with the t-xt,
+\ which is exactly what we want!
+
+: CODE-BARE     ( "name" -- ) (TCREATE) ;
+: END-CODE-BARE ( -- )        ; \ Does nothing by default.
+
+\ By default, CODE words use I as the scratch register for the return address.
+\ That's handy because the threaded version uses I for IP, so a few words that
+\ use STI and STD have logic to save I.
+
+\ Use CODE-BARE and END-CODE-BARE if you don't want to put the return address
+\ in I, and then return to it.
+: save-ret,   pop ri set, ;
+: return,     ri  pc set, ;
+
+: CODE ( "name" -- ) CODE-BARE save-ret, ;
+: END-CODE ( -- )    return, END-CODE-BARE ;
+
+
+TVARIABLE var_up
+
+
+
+\ Variables and core states ==================================================
+\ TODO: I've omitted a bunch of these, keeping only the ones that are needed
+\ for a compiled app (ie. no Forth interpreter).
+\ TODO: Things like BASE and number output are useful even in eg. a game
+\ without a terminal; that should become a more-specific config flag.
+
+TVARIABLE var_handler
+
+\ NOTE: Skipping a pile of words like , and STATE here that are only needed
+\ for a target-side Forth.
+:I HANDLER    var_handler # push set,   ;I
+:I UP         var_up      # push set,   ;I
+
+
+\ Bigger stack manipulations =================================================
+:I 2DUP
+  1 picc push set,
+  1 picc push set,
+;I
+
+:I 2OVER
+  3 picc push set,
+  3 picc push set,
+;I
+
+:I 2DROP   2 # sp add,   ;I
+
+
+\ All the shared implementations for CODE words!
+REQUIRE kernel/code_words.ft
+
+
+
+\ More arithmetic ============================================================
+:I 1+      1 # peek add,   ;I
+:I CELL+   1 # peek add,   ;I
+:I CHAR+   1 # peek add,   ;I
+:I 1-      1 # peek sub,   ;I
+:I CELL    1 # push set,   ;I
+
+\ No-ops on DCPU.
+:I CELLS   ;I
+:I CHARS   ;I
+
+
+\ Double-cell arithmetic =====================================================
+\ D>S is DROP
+:I D>S   1 # sp add,  ;I
+
+
+\ Branches ===================================================================
+\ Branches are abstracted, because they differ signficantly on STC systems,
+\ and even on others they might prefer relative or absolute branches.
+\ ,BRANCH ,DEST and !DEST handle that abstraction between the kernel and the
+\ shared high-level Forth control structures.
+
+\ For compiled code, these are inlined directly and no implementation is needed
+\ here.
+
+
+\ EXIT uses the exit, compiler defined by the model.
+:I EXIT ( --   R: addr -- ) exit, ;I
+
+
+\ DO LOOP helpers ============================================================
+:I UNLOOP ( --    R: limit index -- )
+  2 # rz add,
+;I
+
+:I I ( -- index    R: index -- index )
+  [z] push set,
+;I
+
+:I J ( -- index1   R: index1 limit2 index2 -- index1 limit2 index2 )
+  2 [z+] push set,
+;I
+
+\ TODO: I skipped the parsing helpers, since they're not needed here.
+\ Those could go in the shared code and be conditionally included.
+
+
+\ Interrupts =================================================================
+:I IRQ+ ( -- )   0 # iaq,   ;I \ Interrupts on  = queueing disabled
+:I IRQ- ( -- )   1 # iaq,   ;I \ Interrupts off = queueing enabled
+
+
+REQUIRE kernel/code_words.ft
+REQUIRE kernel/init.ft

@@ -49,9 +49,6 @@ target : QUIT ( -- )
 
 host [THEN]
 
-cr cr
-host .( Latest0: ) latest0 hex. .( -> ) var_latest hex. cr
-host .( DP0:     ) dp0     hex. .( -> ) var_dp     hex. cr
 
 target : INIT-DATA-PTRS ( -- )
   [ host latest0 tliteral target ] @ [ host var_latest tliteral target ] !

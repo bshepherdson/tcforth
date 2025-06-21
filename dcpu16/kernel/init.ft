@@ -1,0 +1,35 @@
+\ Main and init code from the bottom of the kernel.
+\ Should be portable to both the native compiling and threaded forms.
+
+task-area0                         CONSTANT default-rp0
+task-area0  default/rs - $ffff and CONSTANT default-sp0
+\ Rounding UP down to make some extra user space.
+default-sp0 default/ds - t/user @ - $ff00 and CONSTANT default-up
+
+cr cr
+S" Default UP: " type default-up hex. cr
+
+\ Make sure to write into UP so it's part of the data copy for separate spaces.
+default-up var_up tdata!
+
+\ Machine code entry point, jumped to by the first instruction at $0000-1
+label main
+  1 # iaq,                      \ Queueing on for safety.
+  interrupt_handler # ias,      \ Set up interrupt handler
+  default-up  # ra set,         \ Initial UP
+  ra    var_up [#] set,         \ Into the variable
+  default-rp0 # rz set,         \ Initial RSP
+  rz     trp0 [a+] set,         \ RSP -> RP0 variable
+  default-sp0 # sp set,         \ Initial SP
+  sp     tsp0 [a+] set,         \ SP -> SP0 variable
+
+  default/rs # t/rstack [a+] set,
+  default/ds # t/stack  [a+] set,
+
+  0 # iaq,                 \ Enable interrupts again
+  entry-point [#] pc set,  \ Jump to the code field of the starter word COLD.
+
+
+\ Overwrite the jump target of the entry code to be main.
+\ The instruction is at $0000 and its target argument at $0001.
+main 1 tcode!

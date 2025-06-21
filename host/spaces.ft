@@ -298,7 +298,7 @@ hit-7 off
 
 \ Extras =====================================================================
 : TVARIABLE ( "name" --    X: -- t-addr )
-  data-space @   0 tdata,   CONSTANT ;
+  data-space @   1 tcells tdata-allot   CONSTANT ;
 
 
 \ File output ================================================================

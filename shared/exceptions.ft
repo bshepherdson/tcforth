@@ -10,6 +10,9 @@ target : CATCH ( ...1 xt -- ...2  ex# | 0 )
 \ If the argument to throw is non-zero, it's as if the containing CATCH returned
 \ that exception number.
 \ Note that QUIT contains an exception handler, so there's always such a handler.
+\ TODO: That's only true for interactive systems with a QUIT!
+\ Non-interactive systems that want to use the exception handling should define
+\ a default handler.
 target : THROW ( ...1 n -- ...1 | ...2 n )
   ?dup IF \ 0 throw is a no-op
     handler @ rp!   R> handler !   R> swap >R ( saved-sp   R: exc# )
@@ -59,4 +62,7 @@ target : ERR-unexpected-EOF ( -- exc# ) -39 ;
 
 target : ABORT ( -- ) -1 throw ;
 
-target : ?COMP ( -- )   state @ 0= IF err-?comp throw THEN ;
+host has-dictionary? [IF]
+  \ This compile-time thing doesn't make sense for non-interactive targets.
+  target : ?COMP ( -- )   state @ 0= IF err-?comp throw THEN ;
+host [THEN]

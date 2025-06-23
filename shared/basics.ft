@@ -43,11 +43,6 @@ target : NOOP ( -- ) ;
 
 target : WITHIN ( x lo hi -- ? ) over - >R   - R> U< ;
 
-\ XXX: START HERE: Target compilation has reached this point... I think the
-\ basics are working! Hack up the finalize.ft logic so we can get to output
-\ and disassemble it to see how well it worked!
-\ - It's working! Colon and CODE words are compiled properly.
-
 \ TODO: :F still results in the preamble and postamble being written.
 \ TODO: There's a weird trailing portion that looks like the dictionary...
 \ that should be skipped because the names are excluded?

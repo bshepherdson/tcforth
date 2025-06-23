@@ -25,9 +25,18 @@ host REQUIRE ../../host/metacompiler.ft
 host REQUIRE ../../shared/basics.ft
 host REQUIRE branches.ft               \ Target-specific branching helpers.
 host REQUIRE ../../shared/control-structures.ft
-\ host REQUIRE ../../shared/exceptions.ft
-\ \ host REQUIRE model-target.ft
-\ host REQUIRE ../perf.ft
+host REQUIRE ../../shared/exceptions.ft
+\ host REQUIRE model-target.ft         \ No target compiler, no target model
+host REQUIRE ../perf.ft
+
+
+\ XXX: START HERE: Keep progressing down this list, marking compile-only words
+\ as :F and checking that it still builds.
+\ Lots of shared/input.ft and others should be wrapped with [IF] [THEN] for
+\ keyboard-input, keyboard-output, has-dictionary, and other config flags.
+\ Perhaps split up that file into three - common utils, input, sources and
+\ dictionary?
+
 \ host REQUIRE ../../shared/input.ft
 \ host REQUIRE ../../shared/core2.ft
 \ host REQUIRE ../../shared/user-area.ft

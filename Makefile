@@ -68,6 +68,15 @@ test-dcpu16-separate: forth-dcpu16-separate.bin test_multi.disk test.dcs FORCE
 test-dcpu16-copying: forth-dcpu16-copying.bin test_multi.disk test.dcs FORCE
 	$(EMULATOR) -turbo -disk test_multi.disk -script test.dcs $<
 
+
+# Native compiled DCPU-16 apps ===============================================
+app-dcpu16-nc.bin: host/*.ft dcpu16/**/*.ft shared/*.ft
+	$(FORTH) dcpu16/compiler/preamble.ft \
+		dcpu16/compiler/system.ft \
+		-e 'host definitions :noname S" $@" ; IS tcforth-output' \
+		dcpu16/compiler/finalize.ft -e 'bye'
+
+
 # Risque-16 ==================================================================
 # My RISC-style, Thumb-inspired "competitor" in the DCPU cinematic universe.
 forth-rq16.bin: host/*.ft rq16/*.ft shared/*.ft dcpu16/*.ft

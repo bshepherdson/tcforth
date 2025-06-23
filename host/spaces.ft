@@ -231,11 +231,7 @@ DEFER <tc!*> ( tchar c-addr -- )
 
 : <t@>  ( target-addr space -- tcell ) dup TO current-space   >space <t@*>  ;
 
-VARIABLE hit-7
-hit-7 off
-
 : <t!>  ( tcell target-addr space -- )
-  over 7 = IF hit-7 @ IF 999 throw ELSE hit-7 on THEN THEN
   dup TO current-space   >space <t!*>  ;
 
 \ Returns the host-addr for the current THERE position.
@@ -380,3 +376,25 @@ VARIABLE min-space
   \ And close the file.
   dup flush-file ABORT" Failed to flush"
       close-file ABORT" Failed to close" ;
+
+\ Targeting commas ===========================================================
+\ Some targets have ROMs for code and read-only data, and uninitialized RAM;
+\ some targets can load right into RAM.
+\ When it matters which of those spaces a , or c, is going, call these.
+\ For more advanced applications, (eg. GBA with its separate fast and slow RAM)
+\ you can adjust these DEFERed words directly from custom words.
+
+\ NOTE: CREATEd words always have parameter fields in data space!
+\ Conversely, HERE is always a pointer into code space.
+\ rwdata and rodata only change where , and c, send their value.
+
+DEFER <,>
+DEFER <C,>
+
+\ For compiling mutable data into a CREATEd word's parameter field:
+\ rwdata   CREATE foo   1 , 2 , 3 ,
+: rwdata ( -- ) tdata, IS <,>   tdata-c, IS <C,> ;
+
+\ For compiling read-only data into code space, eg. a character map:
+\ rodata   here   1 , 2 , 3 ,   CONSTANT foo
+: rodata ( -- ) tcode, IS <,>   tcode-c, IS <C,> ;

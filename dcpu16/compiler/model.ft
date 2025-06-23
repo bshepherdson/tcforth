@@ -36,9 +36,9 @@ $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
 : poprsp,  ( lhs -- ) [rsp] 2swap ( rhs lhs ) set,   1 # rsp add, ;
 
 \ Compile a JSR to the literal xt!
-: tcompile,   ( t-xt -- )    # jsr , ;
+: tcompile,   ( t-xt -- )    # jsr, ;
 \ To decompile the slot, take the arg from the next word.
-: tdecompile, ( slot -- t-xt ) 1+ tcode@ ;
+: tdecompile  ( slot -- t-xt ) 1+ tcode@ ;
 
 
 \ TODO: An alternative compilation scheme can make CREATEd words more efficient.
@@ -113,7 +113,7 @@ label DOVAR ( ret-addr pfa -- parameter-field )
   pop ra   set,  \ Pop PFA into A
   pop rb   set,  \ Pop return address into B
   [a] push set,  \ Push parameter field
-  b   pc   set,  \ And return to the original caller
+  rb  pc   set,  \ And return to the original caller
 
 
 \ Compiles the code for a CREATEd word without a DOES> section. It should be

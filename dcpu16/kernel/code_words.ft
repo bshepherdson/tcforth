@@ -340,6 +340,7 @@ end-code
 
 
 \ Multitasking ===============================================================
+host multitasking? [IF]
 \ Enters a task whose address is already in UP.
 \ The stacks for that task are **not** set up yet!
 \ The data stack for that task has ( user-stack... rsp ip ) on it.
@@ -408,3 +409,4 @@ label interrupt_handler
   interrupt-thread # ri set,
   \ And NEXT into it!
   next,
+host [THEN]

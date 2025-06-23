@@ -3,17 +3,17 @@
 \ ANS Forth standard names and arguments where practical.
 target definitions
 
-target : LATEST 'latest @ ;
+target :F LATEST 'latest @ ;
   host acts: latest ;
 \ LATEST gives the name token. Skip over the link pointer and check the length.
-target : IMMEDIATE
+target :F IMMEDIATE
     latest cell+   dup c@   f_immed or   swap c! ;
   host acts: latest tcell+ dup tname-c@   f_immed or   swap tname-c! ;
 
-target : [ 0 state ! ; IMMEDIATE
+target :F [ 0 state ! ; IMMEDIATE
   host acts: 0 state ! postpone host ; IMPERATIVE
 
-target : ] 1 state ! ;
+target :F ] 1 state ! ;
   host acts: postpone target meta] ;
 
 target
@@ -32,13 +32,17 @@ target
 \ Memory operations
 : COUNT dup c@ >R char+ R> ;
 
-target : ALLOT ( n -- ) dp +! ;
+target :F ALLOT ( n -- ) dp +! ;
   host acts: tdata-allot ;
 
-target : HERE dp @ ;
+target :F HERE dp @ ;
   host acts: data-space @ ;
 
 \ Does nothing! It's useful as an xt in various places.
 target : NOOP ( -- ) ;
 
 target : WITHIN ( x lo hi -- ? ) over - >R   - R> U< ;
+
+\ XXX: START HERE: Target compilation has reached this point... I think the
+\ basics are working! Hack up the finalize.ft logic so we can get to output
+\ and disassemble it to see how well it worked!

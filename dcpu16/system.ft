@@ -15,7 +15,7 @@ host REQUIRE kernel.ft
 
 \ Overwrite the jump target of the entry code to be main.
 \ The instruction is at $0000 and the jump target is at $0001.
-main 1 tcode!
+kmain 1 tcode!
 
 \ The main part of the metacompiler
 ?stack-clear

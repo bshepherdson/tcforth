@@ -13,7 +13,7 @@ S" Default UP: " type default-up hex. cr
 default-up var_up tdata!
 
 \ Machine code entry point, jumped to by the first instruction at $0000-1
-label main
+label kmain
   1 # iaq,                      \ Queueing on for safety.
   interrupt_handler # ias,      \ Set up interrupt handler
   default-up  # ra set,         \ Initial UP
@@ -32,4 +32,4 @@ label main
 
 \ Overwrite the jump target of the entry code to be main.
 \ The instruction is at $0000 and its target argument at $0001.
-main 1 tcode!
+kmain 1 tcode!

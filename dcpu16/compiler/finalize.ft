@@ -1,0 +1,19 @@
+\ Final file that goes last in the process.
+\ This sets Target's LATEST and DP properly.
+host REQUIRE ../../shared/finalizing.ft
+host definitions
+
+\ This needs to be the last lines in the target compilation.
+\ But not for non-interactive applications.
+\ host latest        latest0 tcode!
+\ host data-space @      dp0 tcode!
+
+host tcforth-output dump-forth
+
+
+\ HACK: For now I'm implementing my basic app in here.
+
+target definitions
+: main ( -- ) boot   12 log ;
+
+host T' main   entry-point tcode!

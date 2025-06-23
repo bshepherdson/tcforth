@@ -168,6 +168,12 @@
 :I BREAK ( x -- )   pop brk,   ;I
 
 
+\ These are fake inlines - they throw, since executing these at runtime makes
+\ no sense!
+:I ,   71 throw ;I
+:I C,  72 throw ;I
+
+
 \ CODE words =================================================================
 \ CODE words are written in assembly, but are NOT inlined!
 \ These are called using JSR like nonprimitives.
@@ -228,11 +234,6 @@ TVARIABLE var_handler
 :I 2DROP   2 # sp add,   ;I
 
 
-\ All the shared implementations for CODE words!
-REQUIRE kernel/code_words.ft
-
-
-
 \ More arithmetic ============================================================
 :I 1+      1 # peek add,   ;I
 :I CELL+   1 # peek add,   ;I
@@ -280,11 +281,44 @@ REQUIRE kernel/code_words.ft
 \ TODO: I skipped the parsing helpers, since they're not needed here.
 \ Those could go in the shared code and be conditionally included.
 
+REQUIRE ../kernel/code_words.ft
+
 
 \ Interrupts =================================================================
+\ interrupt_handler is what actually gets IAS'd.
+\ It's a machine code routine that sets up a Forth thread with the high-level
+\ interrupt routine and its own tail routine.
+\ The interrupt message is in A and the old A was pushed onto the stack. Since
+\ we might be mid-routine elsewhere, we need to preserve that A!
+\ The stack effect of the user handler is ( msg -- )
 :I IRQ+ ( -- )   0 # iaq,   ;I \ Interrupts on  = queueing disabled
 :I IRQ- ( -- )   1 # iaq,   ;I \ Interrupts off = queueing enabled
 
 
-REQUIRE kernel/code_words.ft
-REQUIRE kernel/init.ft
+TVARIABLE interrupt-xt
+
+code (>INTERRUPT) ( xt -- )
+  pop   interrupt-xt [#]  set,  \ Store the target xt for interrupts.
+end-code
+
+label interrupt_handler
+  \ First a special case - if the interrupt word is 0, just bail since no one is
+  \ listening.
+  0 #   interrupt-xt [#] ife,
+    0 # rfi,
+
+  \ Gotta save ~all the registers, since Forth words might clobber nearly any
+  \ of them. Don't need to save Z or A (A is already saved; Z is handled safely)
+  rb push set,   rc push set,   rx push set,
+  ry push set,   ri push set,   rj push set,
+
+  interrupt-xt [#] jsr,   \ Jump to the user handler
+
+  \ Restoring JIYXCB - A is already saved, and we're using Z.
+  pop rj set,   pop ri set,   pop ry set,
+  pop rx set,   pop rc set,   pop rb set,
+  \ Everything is reset; return from the interrupt.
+  0 # rfi,
+
+
+REQUIRE ../kernel/init.ft

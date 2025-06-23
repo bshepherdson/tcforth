@@ -7,6 +7,12 @@
 \ rather than compiled. These are the mirror words, and executing them compiles
 \ themselves into the Target.
 
+\ This flag causes metacompilation to be a no-op until a ; is seen.
+\ This is a special case that helps us skip over "interactive" Forth words
+\ like LATEST which have no place in a headless target.
+VARIABLE no-target?
+no-target? off
+
 \ Replacement parser for the target "compiler", runs during colon definitions.
 \ This is a normal compiler. The regular one would have worked except for two
 \ things: (1) HOST STATE is not NATIVE STATE; (2) capturing numbers.
@@ -15,14 +21,27 @@
   1 state ! \ Start off in the metacompiling state.
   BEGIN state @ WHILE
     parse-name ?dup IF ( c-addr u )
-      2dup find-name ( ca u nt|0 ) ?dup IF
-        \ Found it. Execute the target word.
-        >R 2drop R> name>int ( ." Before: " .s ) execute ( ."    after: " .s cr)
-      ELSE ( ca u )
-        2dup s>number? IF ( ca u d )
-          D>S >R 2drop R> ( n ) tliteral
-        ELSE \ Unknown word!
-          2drop 1 ABORT" *** Undefined Target word: " type cr 1 (bye)
+      no-target? @ IF ( c-addr u )
+        ." no-target? true, skipping over '" 2dup type ." '" cr
+        \ If the string is exactly ";" then turn off no-target.
+        1 =   swap c@ ';' =   and IF
+          ."     found semicolon!" cr
+          no-target? off
+          \ Actually do interpret the semicolon!
+          S" ;" find-name name>int execute
+        THEN
+        \ And compile nothing else.
+      ELSE
+        2dup find-name ( ca u nt|0 ) ?dup IF
+          \ Found it. Execute the target word.
+          >R 2drop R> name>int ( ." Before: " .s ) execute ( ."    after: " .s cr)
+        ELSE ( ca u )
+          \ If we didn't find a target word to try, just skip over inputs.
+          2dup s>number? IF ( ca u d )
+            D>S >R 2drop R> ( n ) tliteral
+          ELSE \ Unknown word!
+            2drop 1 ABORT" *** Undefined Target word: " type cr 1 (bye)
+          THEN ( )
         THEN ( )
       THEN ( )
     ELSE ( c-addr ) refill 2drop THEN ( )
@@ -70,8 +89,10 @@ VARIABLE acting?   VARIABLE doing?
 
 
 \ Regular semicolon, plus check acting? and doing? and update the 'mirror word.
+\ Always turns off no-target?
 : ;
   native postpone ; host
+  no-target? off
   acting? @ IF acting? off   ( xt ) 'mirror @ mirror>interp ! EXIT THEN
   doing?  @ IF doing?  off   ( xt ) 'mirror @ mirror>h-does ! EXIT THEN
 ; IMMEDIATE
@@ -150,8 +171,8 @@ host definitions
 \ in the metacompiler? I think data space is the right default, though, since
 \ these (1) are generally mutable and (2) nearly always follow a CREATE.
 
-(T') ,     'mirror !   act tdata,
-(T') c,    'mirror !   act tdata-c,
+(T') ,     'mirror !   act <,>
+(T') c,    'mirror !   act <C,>
 
 (T') cells 'mirror !   act tcells
 (T') chars 'mirror !   act tchars
@@ -169,15 +190,41 @@ host definitions
 
 \ Hand-roll the target+mirror definitions for : and ;
 \ They don't work on the target yet, just making space.
-\ TODO: Target : and ; are not needed when not interactive.
 target definitions host
-code : end-code-bare allot-:
-  host acts: ?forward   (TCREATE)   ?!forward   ,docol   meta] ;
 
-code ; end-code-bare allot-;
-\ Mark ; as IMMEDIATE
-latest tcell+ dup tname-c@ f_immed or swap tname-c!
-  host acts: 0 state !   EXIT, ; IMPERATIVE
+host has-dictionary? [IF]
+  \ Interactive target, set up the real : and ; on the target.
+  code : end-code-bare allot-:
+    host acts: ?forward   (TCREATE)   ?!forward   ,docol   meta] ;
+
+  code ; end-code-bare allot-;
+  \ Mark ; as IMMEDIATE
+  latest tcell+ dup tname-c@ f_immed or swap tname-c!
+    host acts: 0 state !   EXIT, ; IMPERATIVE
+host [ELSE]
+  \ Non-interactive: Target : is a ghost.
+  \ TODO: This actually does waste a little space by creating a blank target :
+  code : end-code
+    host acts: ?forward   (TCREATE)   ?!forward   ,docol   meta] ;
+  code ; end-code
+    host acts: 0 state !   EXIT, ; IMPERATIVE
+host [THEN]
+
+\ Non-interactive targets don't need target-side definitions for words like
+\ LATEST, :, [ and ]. Starting those definitions with TARGET :F will set
+\ no-target? ON, and the metacompiler will then skip any target-side
+\ implementation of those words.
+\ TODO: Some space might still be wasted? Not all metacompiler words that
+\ compile things into the target are found here.
+
+(TCREATE) :F
+\ Its metainterpretation action is to set no-target? if has-dictionary? is
+\ false, then act like :
+:noname
+  has-dictionary? 0=   no-target? !
+  ." :F called! no-target? " no-target? ? cr
+  [ (T') : ] LITERAL mirror>interp @ execute
+; (T') :F mirror>interp !
 
 
 host code-space @

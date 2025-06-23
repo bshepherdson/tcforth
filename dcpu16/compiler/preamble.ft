@@ -1,0 +1,37 @@
+\ Initial setup for native code compiled apps on DCPU-16.
+: tc-machine S" dcpu16-ncapp" ;
+
+REQUIRE ../../host/vocabularies.ft
+REQUIRE ../../host/helpers.ft
+
+host definitions
+
+\ Metacompiler configuration =================================================
+host REQUIRE ../../host/configuration.ft \ Default interactive is fine.
+
+16     TO char-bits
+1      TO cell-width
+2      TO (/codeword)    \ JSR + address
+
+
+false  TO tos-in-reg?
+false  TO little-endian?
+false  TO threaded?
+false  TO multitasking?
+true   TO tasks-desc?
+
+false  TO debugging?
+
+
+\ Target spaces ==============================================================
+REQUIRE ../../host/spaces.ft
+
+\ Address units are 16-bit values stored on the host as 2 bytes, big-endian.
+' <be16@> IS <tc@*>
+' <be16!> IS <tc!*>
+
+rom-application! headless!
+split-spaces!
+
+$0000 code-space ORG!   $0000 code-space space>offset !
+$4000 data-space ORG!   -1    data-space space>offset !

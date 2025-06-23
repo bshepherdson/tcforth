@@ -23,17 +23,8 @@ host REQUIRE ../../host/metacompiler.ft
 
 \ Now an interleaved dance of shared and target-specific metacompiled code.
 host REQUIRE ../../shared/basics.ft
-
-
-
-\ XXX: START HERE: Much of the below will need adjusting.
-\ I need to debug the core compiler workflow first.
-
-
-
-
-\ host REQUIRE ../branches.ft               \ Target-specific branching helpers.
-\ host REQUIRE ../../shared/control-structures.ft
+host REQUIRE branches.ft               \ Target-specific branching helpers.
+host REQUIRE ../../shared/control-structures.ft
 \ host REQUIRE ../../shared/exceptions.ft
 \ \ host REQUIRE model-target.ft
 \ host REQUIRE ../perf.ft

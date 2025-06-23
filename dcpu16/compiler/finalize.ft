@@ -8,12 +8,12 @@ host definitions
 \ host latest        latest0 tcode!
 \ host data-space @      dp0 tcode!
 
-host tcforth-output dump-forth
-
-
 \ HACK: For now I'm implementing my basic app in here.
 
 target definitions
-: main ( -- ) boot   12 log ;
+: main ( -- ) ( boot )   12 log ;
 
 host T' main   entry-point tcode!
+
+
+host tcforth-output dump-forth

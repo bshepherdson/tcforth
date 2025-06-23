@@ -35,3 +35,4 @@ split-spaces!
 
 $0000 code-space ORG!   $0000 code-space space>offset !
 $4000 data-space ORG!   -1    data-space space>offset !
+$8000 name-space ORG!   -1    name-space space>offset !

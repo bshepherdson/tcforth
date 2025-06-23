@@ -27,7 +27,7 @@ label kmain
   default/ds # t/stack  [a+] set,
 
   0 # iaq,                 \ Enable interrupts again
-  entry-point [#] pc set,  \ Jump to the code field of the starter word COLD.
+  >entry-point,
 
 
 \ Overwrite the jump target of the entry code to be main.

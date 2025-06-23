@@ -186,7 +186,9 @@
 \ to get a mirror. The default mirror>compile calls TCOMPILE, with the t-xt,
 \ which is exactly what we want!
 
-: CODE-BARE     ( "name" -- ) (TCREATE) ;
+: CODE-BARE     ( "name" -- )
+  (TCREATE)
+  ." CODE " 'mirror @   dup mirror>mirror-nt @ id. ." at " mirror>txt @ hex. cr ;
 : END-CODE-BARE ( -- )        ; \ Does nothing by default.
 
 \ By default, CODE words use I as the scratch register for the return address.

@@ -22,10 +22,10 @@ no-target? off
   BEGIN state @ WHILE
     parse-name ?dup IF ( c-addr u )
       no-target? @ IF ( c-addr u )
-        ." no-target? true, skipping over '" 2dup type ." '" cr
+        \ ." no-target? true, skipping over '" 2dup type ." '" cr
         \ If the string is exactly ";" then turn off no-target.
         1 =   swap c@ ';' =   and IF
-          ."     found semicolon!" cr
+          \ ."     found semicolon!" cr
           no-target? off
           \ Actually do interpret the semicolon!
           S" ;" find-name name>int execute
@@ -205,7 +205,9 @@ host [ELSE]
   \ Non-interactive: Target : is a ghost.
   \ TODO: This actually does waste a little space by creating a blank target :
   code : end-code
-    host acts: ?forward   (TCREATE)   ?!forward   ,docol   meta] ;
+    host acts: ?forward   (TCREATE)
+      'mirror @   dup mirror>mirror-nt @ id. ." compiling at " mirror>txt @ hex. cr
+      ?!forward   ,docol   meta] ;
   code ; end-code
     host acts: 0 state !   EXIT, ; IMPERATIVE
 host [THEN]
@@ -222,7 +224,7 @@ host [THEN]
 \ false, then act like :
 :noname
   has-dictionary? 0=   no-target? !
-  ." :F called! no-target? " no-target? ? cr
+  \ ." :F called! no-target? " no-target? ? cr
   [ (T') : ] LITERAL mirror>interp @ execute
 ; (T') :F mirror>interp !
 

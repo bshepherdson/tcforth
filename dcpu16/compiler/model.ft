@@ -144,3 +144,9 @@ label DOVAR ( ret-addr pfa -- parameter-field )
 0 CONSTANT task-area0
 
 label entry-point 0 asm,
+
+\ Compiles the jump or whatever to entry-point at the end of kmain.
+: >entry-point, ( -- )
+  \ JSR to the entry-point word, and BRK if it ever returns!
+  entry-point [#] jsr,
+  $dead # brk, ;

@@ -46,3 +46,39 @@ target : WITHIN ( x lo hi -- ? ) over - >R   - R> U< ;
 \ XXX: START HERE: Target compilation has reached this point... I think the
 \ basics are working! Hack up the finalize.ft logic so we can get to output
 \ and disassemble it to see how well it worked!
+\ - It's working! Colon and CODE words are compiled properly.
+
+\ TODO: :F still results in the preamble and postamble being written.
+\ TODO: There's a weird trailing portion that looks like the dictionary...
+\ that should be skipped because the names are excluded?
+\ Is its target set to -1 properly?
+\ TODO: Lots of potential for inlining and other operations that isn't being
+\ captured here. Inlining CODE words only doesn't really make sense; there's
+\ plenty of nonprimitives that are themselves possible to inline one or more
+\ layers deep.
+
+\ Dynamic compiler design ====================================================
+\ Inlining is the big trick. Things need to be delayed and registers allocated
+\ intelligently for good performance to be achieved.
+
+\ Inlining applies to whole nonprimitives as well as to individual fast words.
+\ It needs a way to see that whole phrases like   >R foo bar R>   can be
+\ simplified by using a register to hold TOS for a bit.
+
+\ XXX: Friction with the existing metacompiler: It expects compilation to be
+\ pretty direct, streaming right into the target with an already-known xt.
+\ We can still buffer up compilation and be smart about it, but it needs to
+\ write the final form right away so that the xt of the next word can be known
+\ ahead of time as well...
+\ Then again, the main use of mirror>txt is while compiling calls to that word
+\ in the code of other nonprimitives! So txt could be a lie, and it could
+\ really be a host pointer or maybe an index into a host table for the AST of
+\ the word being called, and we can do whole-program optimization and write it
+\ all out.
+\ That's probably ideal if I can pull it off!
+
+\ In any case, the objective for now is to get this working for the entire
+\ shared/* codebase so I can compile a complete app on DCPU and write a basic
+\ game with it. Once that's working (even slowly) I can consider how to
+\ optimize it and lower the friction inside the metacompiler, before porting to
+\ GBA outright.

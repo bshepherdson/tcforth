@@ -17,3 +17,7 @@ target definitions
   \ Want A=0 (SET_SPEED) with B as the input; no outputs; mask = 3
   60 *    3600 /
   0 swap   3 dev-timer @   >device ;
+
+: clock-int! ( msg -- )
+  \ Want A=2 (SET_INT), with B holding the message. 0 disables.
+  2 swap   3 dev-timer @   >device ;

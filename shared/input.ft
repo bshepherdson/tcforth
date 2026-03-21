@@ -40,7 +40,7 @@ host [THEN]
 
 target : DICT-HASH ( c-addr u -- index )
   [ host dict-hash-len-mask  tliteral target ] and
-  [ host /dict-hash-char     tliteral target ] lshift
+  [ host /dict-hash-char 0 [DO] T' 2* tcompile, [LOOP] target ]
   swap c@
   [ host dict-hash-char-mask tliteral target ] and or ;
 
@@ -105,7 +105,13 @@ target : PARSE-NAME ( "<spaces>name<space>" -- c-addr u )
 target : ' ( "name" -- xt ) parse-name (find) 0= IF err-undefined throw THEN ;
   host acts: T' ;
 
-target : POSTPONE ( "name" -- ) ' compile, ; IMMEDIATE
+target : POSTPONE ( "name" -- )
+  parse-name (find)
+  1 = IF compile, ELSE
+    \ Regular word
+    [ host t' literal tcompile, target ] \ Compiling the xt as a literal
+    [ host t' compile, tliteral target ] compile, \ And compiling compile,
+  THEN ; IMMEDIATE
   host acts: T' tcompile, ; IMPERATIVE
 
 target : ['] ( "name" --    X: -- xt )

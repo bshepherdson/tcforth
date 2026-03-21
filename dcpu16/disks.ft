@@ -10,7 +10,7 @@
 \ Target words intended for metacompilation.
 target definitions
 
-$fa00 CONSTANT rawbuf
+CREATE rawbuf   1024 allot
 1     CONSTANT disk-source-id
 
 \ Polls once to get the state of the disk.

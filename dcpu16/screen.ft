@@ -221,6 +221,11 @@ VARIABLE key-xt
 
 : semit ( ch -- )
   \ Send an HWI with A=3 B=ch; C gets error status
-  3 swap   $403   dev-serial @ >device ;
+  3 swap   $003   dev-serial @ >device ;
 
-: stype ( c-addr u -- ) 0 DO dup i + c@ semit LOOP drop ;
+: stype ( c-addr u -- )
+  dup 0= IF 2drop EXIT THEN
+  0 DO dup i + c@ semit LOOP drop ;
+
+\ Testing the interrupt thread.
+\ : test-interrupt ( -- )

@@ -413,7 +413,7 @@ label latest0 0 asm,16
 
 TVARIABLE var_dp
 TVARIABLE var_latest
-TVARIABLE var_base
+TVARIABLE var_up
 TVARIABLE var_state
 TVARIABLE var_handler
 
@@ -470,7 +470,7 @@ end-code
 code HANDLER      var_handler    lit, end-code
 code 'LATEST      var_latest     lit, end-code
 code STATE        var_state      lit, end-code
-code BASE         var_base       lit, end-code
+code UP           var_up         lit, end-code
 code 'SOURCE      var_source     lit, end-code
 code 'SOURCE-ID   var_source_id  lit, end-code
 code >IN          var_in_ptr     lit, end-code
@@ -891,6 +891,10 @@ end-code
 \ Main =======================================================================
 REQUIRE interrupts.ft
 
+\ TODO: For multitasking support, this needs to be per-task rather than
+\ a global.
+data-space @ CONSTANT user-space   t/user @ tdata-allot
+
 \ Some KERNAL routines for startup.
 $fda3 CONSTANT k-ioinit
 $fd50 CONSTANT k-ramtas
@@ -898,6 +902,9 @@ $fd15 CONSTANT k-restor
 $ff5b CONSTANT k-cint
 
 $0314 CONSTANT irq-indirect
+
+code IRQ+   cli,   end-code
+code IRQ-   sei,   end-code
 
 label debug-spin
   0 # lda,
@@ -936,6 +943,9 @@ label main
   herel         zp sta,
   dp0        1+ $  lda,
   hereh         zp sta,
+
+  \ Set UP to the global "user" area. FIXME: Needed for multitasking.
+  user-space var_up w!,
 
   \ The hardware stack starts configured - set up the data stack by setting X.
   sp0 # ldx,

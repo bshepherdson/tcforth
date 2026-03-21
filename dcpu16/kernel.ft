@@ -780,7 +780,7 @@ label int-EXIT
   \ Restoring JIYXCB - A is already saved, and we're using Z.
   pop rj set,   pop ri set,   pop ry set,
   pop rx set,   pop rc set,   pop rb set,
-  0 # rfi,
+  0 # rfi, \ This also restores A.
 
 label interrupt-thread 0 asm, int-EXIT asm,
 
@@ -798,6 +798,11 @@ label interrupt_handler
   \ of them. Don't need to save Z or A (A is already saved; Z is handled safely)
   rb push set,   rc push set,   rx push set,
   ry push set,   ri push set,   rj push set,
+  \ That was all saved stuff, now this is pushing the interrupt message.
+  \ FIXME: I think this needs to save EX as well - it's a Heisenbug waiting to
+  \ happen if the interrupt happened to catch us during a double-cell add etc.
+
+  ra push set, \ Interrupt message -> TOS
   \ Make the interrupt-thread the new I
   interrupt-thread # ri set,
   \ And NEXT into it!

@@ -92,3 +92,13 @@ T{ : GI4 BEGIN DUP 1+ DUP 5 > UNTIL ; -> }T
 T{ 3 GI4 -> 3 4 5 6 }T
 T{ 5 GI4 -> 5 6 }T
 T{ 6 GI4 -> 6 7 }T
+
+\ CASE statements ==================================================
+T{ : GS1 CASE ENDCASE ; -> }T
+T{ 4 GS1 -> }T
+T{ : GS2 CASE 1 OF 10 ENDOF   2 OF 100 ENDOF   3 OF 1000 ENDOF 0 ENDCASE ; -> }T
+T{  1 GS2 -> 10   }T
+T{  2 GS2 -> 100  }T
+T{  3 GS2 -> 1000 }T
+T{  4 GS2 -> 4    }T
+T{ -1 GS2 -> -1   }T

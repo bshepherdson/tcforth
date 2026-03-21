@@ -1,0 +1,4 @@
+turbo on
+send run-disk
+run 2000000
+turbo off

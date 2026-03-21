@@ -1,0 +1,125 @@
+5 CONSTANT msg-timer
+
+VARIABLE ticks-count
+
+: int-handler ( msg -- )
+  CASE
+  msg-timer OF 1 ticks-count +! ENDOF
+  drop ENDCASE ;
+
+' int-handler (>interrupt)
+msg-timer clock-int!
+
+\ Infinite loop of running the cursor around the board.
+24 CONSTANT snake-width
+ 8 CONSTANT snake-height
+
+ 7     black bg green fg CONSTANT snake-ew
+ 8     black bg green fg CONSTANT snake-ns
+ 9     black bg green fg CONSTANT snake-nw
+10     black bg green fg CONSTANT snake-ne
+11     black bg green fg CONSTANT snake-se
+12     black bg green fg CONSTANT snake-sw
+17     black bg pink  fg CONSTANT snake-ch
+
+: snake-left   ( -- x ) /row snake-width - 2/ 1- ;
+: snake-right  ( -- x ) snake-left snake-width + ;
+: snake-top    ( -- y ) #rows snake-height - 2/ 1- ;
+: snake-bottom ( -- y ) snake-top snake-height + ;
+
+: >snake    ( x y -- addr ) xy> vram + ;
+: snake@    ( x y -- ch )   >snake @ ;
+: snake!    ( ch x y -- )   >snake ! ;
+
+: snake-horiz ( y -- )
+  snake-right snake-left 1+ DO
+    snake-ew   i 2 pick snake! LOOP drop ;
+
+: snake-vert ( x -- )
+  snake-bottom snake-top 1+ DO
+    snake-ns over i snake! LOOP drop ;
+
+: snake-nw! ( -- ) snake-nw   snake-left  snake-top    snake! ;
+: snake-ne! ( -- ) snake-ne   snake-right snake-top    snake! ;
+: snake-sw! ( -- ) snake-sw   snake-left  snake-bottom snake! ;
+: snake-se! ( -- ) snake-se   snake-right snake-bottom snake! ;
+
+: snake-track! ( -- )
+  snake-top  snake-horiz   snake-bottom snake-horiz
+  snake-left snake-vert    snake-right  snake-vert
+  snake-nw! snake-ne! snake-se! snake-sw! ;
+
+\ Running around the track.
+VARIABLE snake-loc
+VARIABLE snake-under
+
+: snakate  ( -- ) snake-under @ snake-loc @ ! ;
+: snarrive ( -- )
+  snake-loc @
+  dup @ snake-under !
+  snake-ch swap ! ;
+
+2 VALUE snake-skip
+
+SEMAPHORE snaker
+: snake-to ( x y -- )
+  snakate   >snake snake-loc !   snarrive
+  snake-skip 0 DO snaker wait LOOP ;
+
+: snaking-n ( -- )
+  \ 4 TO snake-skip
+  snake-right 1+ snake-left DO i snake-top   snake-to 2 +LOOP ;
+: snaking-e ( -- )
+  \ 8 TO snake-skip
+  snake-bottom snake-top 1+ DO snake-right i snake-to LOOP ;
+: snaking-s ( -- )
+  \ 4 TO snake-skip
+  snake-left 1-  snake-right DO i snake-bottom snake-to   -2 +LOOP ;
+: snaking-w ( -- )
+  \ 8 TO snake-skip
+  snake-top 1+   snake-bottom 1- DO snake-left i snake-to -1 +LOOP ;
+
+: snake-lap ( -- )
+  snaking-n snaking-e snaking-s snaking-w ;
+
+
+: snake-handler ( msg -- )
+  CASE
+  msg-timer OF snaker signal ENDOF
+  ENDCASE ;
+
+: snake-int+ ( -- )
+  ['] snake-handler (>interrupt)
+  msg-timer clock-int! ;
+
+: snake ( -- )
+  clear vacate \ Wipe the screen and disable the cursor.
+  snake-track!
+  \ Set up the snake state.
+  0 0 >snake   dup snake-loc !   @ snake-under !
+  \ Kick off the timer interrupts.
+  snake-int+
+  BEGIN snake-lap AGAIN ;
+
+\ Visualizes the font
+: font-spam ( -- )
+  clear
+  \ Black-on-green header
+  black fg! green bg!
+  S" 01234567890123456789012345678901" type
+
+  \ White on black font picture
+  white fg! black bg!
+  128 0 DO i emit LOOP ;
+
+
+
+\ Serial sending and receiving
+32 cells TASK transmitter
+32 cells TASK receiver
+\ XXX: START HERE: Implement these two tasks, probably with the message
+\ passing mechanism for synchronization. Does it do that? I think it blocks
+\ until the other end picks up...? Oh, no it doesn't. There's a buffer size
+\ of 1 in practice; the sender waits until the receiver's mailbox is empty,
+\ then leaves the message and continues. The receiver might never actually
+\ look at the mailbox to read that first message.

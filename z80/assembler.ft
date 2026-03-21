@@ -40,10 +40,10 @@ clean-output
 : e    3 ;
 : h    4 ;
 : l    5 ;
-: (hl) 6 ;
+: [hl] 6 ;
 : a    7 ;
-: (bc) 8 ;
-: (de) 9 ;
+: [bc] 8 ;
+: [de] 9 ;
 
 : ix $dd ;
 : iy $fd ;
@@ -55,7 +55,7 @@ clean-output
 \ Written as LD A,B to write B into A. Any of the 7 working registers are allowed on
 \ both sides.
 \ These are encoded with the 8 * dst + $40 + src
-: ld-r,r ( dst src -- ) swap 3 lshift $40 + + assemble ;
+: ld-r,r ( dst src -- ) swap 8 * $40 + + assemble ;
 
 \ Memory to accumulator: $1234 $ a ld,
 \ LD A,(1234H)
@@ -63,7 +63,7 @@ clean-output
 : ld-a,$  ( src -- )   $3a assemble assemble16 ;
 : ld-$,a  ( dst -- )   $32 assemble assemble16 ;
 
-\ Memory to other register: (hl) c ld,
+\ Memory to other register: [hl] c ld,
 \ LD C,(HL)
 \ This is already handled by the main ld-r,r
 
@@ -81,11 +81,11 @@ clean-output
 : ld-(rr),a  ( [bc]=8/[de]=9 -- ) 8 - 16 * $02 + assemble ;
 
 \ Indirect
-\ These compile the IX/IY prefix, then (hl) ld-r,r, then the offset.
-: ld-r,(i+#) ( dst n ix/iy -- ) assemble swap (hl) ld-r,r assemble ;
+\ These compile the IX/IY prefix, then [hl] ld-r,r, then the offset.
+: ld-r,(i+#) ( dst n ix/iy -- ) assemble swap [hl] ld-r,r assemble ;
 
-\ These compile the IX/IY prefix, then (hl) swap ld-r,r, then the offset.
-: ld-(i+#),r ( n ix/iy src -- ) swap assemble (hl) swap ld-r,r assemble ;
+\ These compile the IX/IY prefix, then [hl] swap ld-r,r, then the offset.
+: ld-(i+#),r ( n ix/iy src -- ) swap assemble [hl] swap ld-r,r assemble ;
 
 
 \ 16-bit load/stores =========================================================
@@ -163,14 +163,14 @@ clean-output
 
 \ Block Transfers ============================================================
 \ These use BC, DE, and HL: BC is a 16-bit counter of bytes.
-\ (HL) is copied to (DE). There are incrementing and decrementing versions, and
+\ [HL] is copied to (DE). There are incrementing and decrementing versions, and
 \ repeating and one-byte variants.
 : ldi,  ( -- ) $ed assemble $a0 assemble ;
 : ldir, ( -- ) $ed assemble $b0 assemble ;
 : ldd,  ( -- ) $ed assemble $a8 assemble ;
 : lddr, ( -- ) $ed assemble $b8 assemble ;
 
-\ Block CP, comparing (HL) successively to the accumulator
+\ Block CP, comparing [HL] successively to the accumulator
 \ CPI and CPD do it once only.
 \ CPIR and CPDR repeat until either a match (equal?) or BC=0
 : cpi,  ( -- ) $ed assemble $a1 assemble ;
@@ -181,7 +181,7 @@ clean-output
 
 \ Arithmetic =================================================================
 \ ADD, ADC, SUB and SBC; AND, XOR, OR; CP; INC, DEC
-\ Regular registers and (HL)
+\ Regular registers and [HL]
 : add-r,  ( src -- ) $80 + assemble ;
 : adc-r,  ( src -- ) $88 + assemble ;
 : sub-r,  ( src -- ) $90 + assemble ;
@@ -314,6 +314,17 @@ clean-output
   $38 + assemble
   relative, ;
 : jr, ( nn -- ) $18 assemble   relative, ;
+
+\ Returns a forward reference and a fake target address.
+\ Assemble a relative jump with the fake target, and pass the ref to resolve.
+: fwd ( -- ref nn ) there @   dup 12 + ;
+
+\ Resolves a forward reference from fwd to point at the current spot.
+: resolve ( ref -- )
+  there @ tuck >R           ( target ref   R: target )
+  1+ there !   relative,    ( R: target )
+  R> there ! ;
+
 
 : jp-(rr), ( [hl]/ix/iy -- ) dup ix-reg? IF assemble ELSE drop THEN $e9 assemble ;
 

@@ -1,0 +1,751 @@
+\ Forth kernel for Z80.
+\ This is an 8-bit machine, DTC, TOS in register (BC).
+
+\ This file runs in the HOST vocabulary, assembling CODE words into the target.
+\ We attempt to use macros from model.ft (already loaded) to hide details of
+\ the system design.
+
+\ Assumptions in this code:
+\ - Hardware stack is the data stack.
+\ - TOS in register BC
+\ - IP in DE
+\ - HL and A are free.
+\ - Swap registers aren't used.
+\ - No alignment.
+
+\ Standard dictionary headers: link, length+immediate+hidden word, len words of
+\ name, code field.
+
+\ These are HOST vocab words that define assembler words on the Target - their
+\ mirror words are regular.
+: code      ( "name" -- ) (TCREATE) ;
+: end-code  ( -- )        next, ;
+\ End marker, but no NEXT.
+: end-code-bare ( -- ) ;
+
+: split-binary, ( lo-xt hi-xt -- )
+  >R >R
+  hl  pop,
+  a c ld-r,r     \ TOS goes in A, so this works for -
+  l   R> execute \ sum_lo -> A
+  c a ld-r,r     \ A -> C
+  a b ld-r,r
+  h   R> execute \ sum_hi -> A
+  b a ld-r,r ;   \ A -> B
+
+\ TODO: There's add hl,bc and sbc hl,bc for this.
+
+code +        ' add-r, ' adc-r, split-binary, end-code
+code -        ' sub-r, ' sbc-r, split-binary, end-code
+\ code *        pop tos  mlil,   end-code
+code AND      ' and-r, dup      split-binary, end-code
+code OR       '  or-r, dup      split-binary, end-code
+code XOR      ' xor-r, dup      split-binary, end-code
+
+code 2*
+  c sla-r,   \ TOS_lo shifts left into carry; shifting in 0.
+  b  rl-r,   \ TOS_hi shifts left, shifting in carry.
+end-code
+
+code 2/      \ Signed
+  b sra-r,   \ TOS_hi shifts right, into carry; keeping bit 7.
+  c  rr-r,   \ TOS_lo shifts right, shifting in carry.
+end-code
+
+code 2U/     \ Unigned
+  b srl-r,   \ TOS_hi shifts right, into carry; 0 -> bit 7.
+  c  rr-r,   \ TOS_lo shifts right, shifting in carry.
+end-code
+
+\ TODO: Implement these in code for speed.
+\ code LSHIFT   ' shll, (noncom) end-code
+\ code RSHIFT   ' shrl, (noncom) end-code
+\ code ARSHIFT  ' asrl, (noncom) end-code
+
+code LO ( x -- b )
+  b 0 ld-r,#  \ 0 -> TOS_hi
+end-code
+
+code HI ( x -- b )
+  c b ld-r,r  \ TOS_hi -> TOS_lo
+  b 0 ld-r,#  \ 0 -> TOS_hi
+end-code
+
+
+code INVERT
+  a b ld-r,r   cpl,   b a ld-r,r
+  a c ld-r,r   cpl,   c a ld-r,r
+end-code
+
+code NEGATE
+  a   xor,    \ 0 -> A
+  b   sub,    \ 0-TOS_hi -> A
+  b a ld-r,r  \ A -> B
+  a   xor,    \ 0 -> A
+  c   sbc,    \ 0-TOS_lo -> A
+  c a ld-r,r  \ A -> TOS_lo
+end-code
+
+\ Multiplication =============================================================
+\ Multiplying 16-bit TOS by 16-bit NOS to produce a 32-bit output.
+\ Input TOS is BC; NOS is moved to DE.
+code UM* ( u u -- ud )
+  hl pop,
+  ex-de,hl
+  hl push,       \ Save DE to stack. Inputs are in BC and DE.
+  hl 0 ld-rr,##  \ 0 the high result in HL.
+  a 16 ld-r,#    \ 16 bits to go.
+
+label mult16_loop            \ <-----------+
+  hl hl add-rr,rr \ Shift 32-bit result    |     (HL:DE) left 1.
+  ex-de,hl                   \             |
+  hl hl add-rr,rr            \             |
+  ex-de,hl                   \             |
+  \ This is a 2-byte instruction skipping  |  over a 1-byte instruction.
+  \ The jump target is thus THERE + 3      |
+  there @ 3 +   -c   jr-cc,  \ --+         |
+  hl bc add-rr,rr            \   |         |
+                             \   |         |
+  a dec-r,                   \ <-+         |
+  mult16_loop -z jr-cc,      \ ------------+
+
+  \ End of the loop! Now the multiplication result is in HL:DE.
+  \ The Forth IP is on the stack. We want the 32-bit result as ( lo hi )
+  \ so DE needs to go on the stack.
+  de ex-(sp),rr   \ res_lo -> NOS; IP restored to DE.
+  b h ld-r,r      \ res_hi -> TOS
+  c l ld-r,r      \ ...
+end-code
+
+
+\ Comparisons ================================================================
+code =
+  ccf,
+  a xor-r,
+  hl pop,        \ NOS     -> HL
+  bc sbc-hl,rr   \ NOS-TOS -> HL; Z etc. set correctly.
+  fwd -z jr-cc,  \ Skip forward if it's not 0 - leaves 0 in A.
+    a dec,       \ -1 -> A if it was zero.
+  resolve
+  b a ld-r,r     \ A -> BC
+  c a ld-r,r
+end-code
+
+code U< ( nos tos -- ? )
+  hl pop,           \ NOS -> HL
+label u<-compare      \ Entry point for < same-signs path.
+  a xor-r,          \ Clear A and carry
+  bc sbc-hl,rr      \ HL = NOS - TOS; carry set iff NOS < TOS (unsigned)
+  a sbc-r,          \ A = 0 - carry = $FF if less, $00 if not
+  b a ld-r,r
+  c a ld-r,r
+end-code
+
+code < ( nos tos -- ? )
+  hl pop,              \ NOS -> HL
+  a h ld-r,r           \ A = high(NOS)
+  b xor-r,             \ A = high(NOS) XOR high(TOS); bit 7 = signs differ?
+  a add-r,             \ Shift bit 7 into carry
+  \ When same signs, unsigned compare gives correct signed result.
+  u<-compare -c jr-cc, \ Jump into U< above if signs are the same (carry=0)
+
+  \ If we're still here, signs are different: NOS < TOS iff NOS is negative.
+  a h ld-r,r        \ A = high(NOS) (HL preserved since SBC was skipped)
+  a add-r,          \ Shift sign bit of NOS into carry
+  a sbc-r,          \ A = $FF if NOS negative (less), $00 if positive
+  b a ld-r,r
+  c a ld-r,r
+end-code
+
+
+\ Helpers ====================================================================
+: tos->hl, ( -- ) h b ld-r,r   l c ld-r,r ; \ 2B 8c
+: hl->tos, ( -- ) b h ld-r,r   c l ld-r,r ; \ 2B 8c
+
+\ Stack operations ===========================================================
+code DUP    bc push, end-code
+code DROP   bc pop,  end-code
+code OVER
+  hl pop,     \ This seems wasteful, but it's 5B 40c and I can't beat it.
+  hl push,
+  bc push,
+  hl->tos,
+end-code
+
+code SWAP
+  tos->hl,
+  hl ex-(sp),rr  \ Swap NOS and TOS
+  hl->tos,
+end-code
+
+code ROT ( c b a -- b a c )
+  hl pop,        \ b -> HL; c now on hardware stack.
+  hl ex-(sp),rr  \ b -> deepest slot; c -> HL
+  bc push,       \ a -> NOS slot
+  hl->tos,       \ c -> TOS
+end-code
+
+code -ROT ( c b a -- a c b )
+  tos->hl,       \ a -> HL
+  bc pop,        \ b -> TOS
+  hl ex-(sp),rr  \ a -> deepest; c -> HL
+  hl push,       \ c -> NOS
+end-code
+
+code ?DUP
+  a h ld-r,r
+  l or-r,        \ Z flag now set if TOS == 0.
+  fwd +z jr-cc,  \ Skip ahead if Z is set
+    bc push,     \ Push the dupe when Z is clear, ie. the value is non-zero.
+  resolve
+end-code
+
+code NIP ( y x -- x )
+  hl pop,
+end-code
+
+code TUCK ( y x -- x y x )
+  hl pop,
+  bc push,
+  hl push, \ = 3B 32c total
+end-code
+
+
+\ Pushes TOS first so it counts in the SP.
+code SP@
+  bc push,
+  hl 0 ld-rr,##    \ 0  -> HL
+  hl sp add-rr,rr  \ SP -> HL
+  hl->tos,
+end-code
+
+\ Set SP to TOS then pop the new TOS from it.
+code SP!
+  tos->hl,
+  hl ld-sp,rr
+  bc pop,
+end-code
+
+\ Return stack pointer is in IX, which is janky to access.
+code RP@
+  ix push,
+  hl pop,
+  bc push,
+  hl->tos,
+end-code
+
+code RP!
+  bc push,
+  ix pop,
+  bc pop,
+end-code
+
+code >R   bc rr-pushrsp,   bc pop,         end-code
+code R>   bc push,         bc rr-poprsp,   end-code
+code R@
+  bc push,
+  c 0 ix ld-r,(i+#)
+  b 1 ix ld-r,(i+#)
+end-code
+
+\ This is a bit weird with TOS in register. The bottom value in memory is
+\ actually whatever dummy value was in the TOS register when the first real
+\ value was pushed.
+\ BUT sp0 is $ff7f and not $ff80, because that's the right value to   sp0 sp!
+\ so DEPTH actually pushes TOS early to move SP one notch "too far", then
+\ measures the depth from $ff7f, rather than the real empty SP of $ff80.
+code DEPTH
+  hl sp0 ld-rr,##   \ SP0 -> HL
+  bc     push,      \ Push TOS
+  ccf,
+  sp     sbc-hl,rr  \ SP0 - SP - 0 -> HL = depth in bytes
+  h      srl-r,     \ depth_hi shifts right by 1, unsigned.
+  l      rr-r,      \ depth_lo shifts right by 1, loose bit from hi shifted in.
+  hl->tos,          \ HL -> TOS is now depth in cells.
+end-code
+
+
+code @
+  [bc] ld-a,(rr)    \ target_lo -> A
+  l a ld-r,r        \ A -> L
+  bc inc-rr,
+  [bc] ld-a,(rr)    \ target_hi -> A
+  b a ld-r,r
+  c l ld-r,r
+end-code
+
+code !
+  hl pop,           \ Value -> HL; address is in TOS/BC.
+  a l ld-r,r
+  [bc] ld-(rr),a    \ value_lo -> [TOS]
+  bc inc-rr,
+  a h ld-r,r
+  [bc] ld-(rr),a    \ value_hi -> [TOS+1]
+  bc pop,           \ Reload TOS
+end-code
+
+code C@
+  [bc] ld-a,(rr)    \ Value -> A
+  b 0  ld-r,#       \ 0 -> TOS_hi
+  c a  ld-r,r       \ Value -> TOS_lo
+end-code
+
+code C!
+  hl pop,           \ Value -> HL
+  a l ld-r,r        \ value_lo -> A
+  [bc] ld-(rr),a    \ value_lo -> [TOS]
+  bc pop,           \ Refill TOS
+end-code
+
+\ TODO: 2@ and 2! are quite clunky and can be written in Forth instead.
+
+code +! ( delta addr -- )
+  tos->hl,       \ addr in HL
+  bc pop,        \ delta in BC
+  a [hl] ld-r,r  \ target_lo -> A
+  c      add-r,  \ target_lo + delta_lo -> A
+  [hl] a ld-r,r  \ sum_lo -> memory
+  hl inc,        \ Move to the hi byte
+  a [hl] ld-r,r  \ target_hi -> A
+  b      add-r,  \ target_hi + delta_hi -> A
+  [hl] a ld-r,r  \ sum_hi -> memory
+  bc pop,        \ Reload TOS
+end-code
+
+
+\ Leaves IP alone. Jump directly into the target's code field.
+\ The EXECUTEd word's NEXT will continue after here (eventually).
+code EXECUTE \ Target is in BC, but we need to pop the new TOS first.
+  tos->hl,
+  bc pop,
+  hl push,   \ There's no jump-to-register, so make it a RET.
+  ret,
+end-code-bare
+
+\ TODO: Can LOG and BREAK be useful? Currently they only DROP.
+code LOG ( x -- )
+  bc pop,
+end-code
+
+code BREAK ( n -- )
+  bc pop,
+end-code
+
+
+\ XXX: START HERE: Keep going from here, implementing the kernel.
+label var_dp          0 t,
+label var_latest      0 t,
+label var_base        0 t,
+label var_state       0 t,
+label var_handler     0 t,
+
+label var_last_parse  0 t, 0 t,
+label var_source      0 t, 0 t,
+label var_in_ptr      0 t,
+label var_source_id   0 t,
+label input-buf       : (buf) 128 0 DO 0 tc, LOOP ; (buf)
+
+: (var) ( var-label "name" -- )
+  >R
+  code
+    bc    push,
+    bc R> ld-rr,##
+  end-code ;
+
+var_dp (var) DP
+
+code ,
+label (compile)
+  hl var_dp ld-rr,$    \ HERE -> HL   (absolute load)
+  [hl] c    ld-r,r     \ x_lo -> dictionary
+  hl        inc-rr,    \ HL++
+  [hl] b    ld-r,r     \ x_hi -> dictionary
+  hl        inc-rr,    \ HL++
+  var_dp hl ld-$,rr    \ HERE+2 -> DP
+  bc        pop,       \ Refill TOS
+end-code
+
+code COMPILE,   (compile) jp,   end-code-bare
+
+code C,
+  hl var_dp ld-rr,$    \ HERE -> HL   (absolute load)
+  [hl] c    ld-r,r     \ x_lo -> dictionary
+  hl        inc-rr,    \ HL++
+  var_dp hl ld-$,rr    \ HERE+1 -> DP
+  bc        pop,       \ Refill TOS
+end-code
+
+
+var_handler    (var) HANDLER
+var_latest     (var) 'LATEST
+var_state      (var) STATE
+var_base       (var) BASE
+var_source     (var) 'SOURCE
+var_source_id  (var) 'SOURCE-ID
+var_in_ptr     (var) >IN
+input-buf      (var) TIB
+var_last_parse (var) LAST-PARSE
+
+code F_IMMED
+  bc         push,
+  bc f_immed ld-rr,##
+end-code
+
+
+code 2DUP ( b a -- b a b a )
+  hl pop,
+  hl push,
+  bc push,
+  hl push,
+end-code
+
+code 2DROP ( c b a -- c )
+  bc pop,
+  bc pop,
+end-code
+
+label scratch1 0 t,
+
+code 2SWAP ( x c b a -- b a x c )
+  hl          pop,    \ b -> HL
+  scratch1 bc ld-$,rr \ a -> scratch1
+  bc          pop,    \ c -> TOS
+  hl       ex-(sp),rr \ x -> HL; b -> deepest slot
+  exx,                \ Flip to shadow regs
+  hl scratch1 ld-rr,$ \ a -> HL'
+  hl push,            \ a -> second-deepest slot
+  exx,                \ Flip back to the real regs
+  hl push,            \ x -> NOS
+end-code
+
+code 2OVER ( x c b a -- x c b a x c )
+  bc push,        \ Everything on the stack now.
+  hl 7 ld-rr,##   \ Load offset of x_hi on the stack
+  hl sp add-rr,rr \ 'x_hi -> HL
+  b [hl] ld-r,r   \ x_hi -> B
+  hl dec-rr,      \ 'x_lo -> HL
+  c [hl] ld-r,r   \ x_lo -> C
+  bc push,        \ Push x -> NOS; HL has an absolute address and didn't move!
+  hl dec-rr,      \ 'c_hi -> HL
+  b [hl] ld-r,r   \ x_hi -> B
+  hl dec-rr,      \ 'c_lo -> HL
+  c [hl] ld-r,r   \ x_lo -> C
+end-code
+
+
+code 1+      bc inc-rr,            end-code
+code CELL+   bc inc-rr, bc inc-rr, end-code
+code CHAR+   bc inc-rr,            end-code
+code 1-      bc dec-rr,            end-code
+code CELLS   c  sla-r,  b rl-r,    end-code
+code CHARS                         end-code
+
+code CELL
+  bc push,
+  bc 2 ld-rr,##
+end-code
+
+
+\ Double-cell arithmetic
+\ TODO 123. double-cell conversion in the >NUMBER interpreter
+code S>D
+  bc push,
+  hl 0  ld-rr,##         \ 0 -> HL
+  a b   ld-r,r           \ TOS_hi -> A
+  a     add-r,           \ Top bit into Carry
+  hl hl sbc-rr,rr        \ 0 - 0 - Carry -> HL becomes -1 or 0
+  hl->tos,
+end-code
+
+\ D>S is DROP
+code D>S   bc pop,   end-code
+
+code D+  ( l1 h1 l2 h2 -- l3 h3 )
+  \ BC=h2. Stack: l1 h1 l2.
+  scratch1 bc ld-$,rr  \ Save h2 to scratch.
+  bc          pop,     \ BC = l2. Stack: l1 h1
+  hl          pop,     \ HL = h1. Stack: l1
+  hl       ex-(sp),rr  \ HL = l1, [SP] = h1. Stack: h1.
+  hl bc    add-rr,rr   \ HL = l1 + l2 = l3. Carry set.
+  hl       ex-(sp),rr  \ HL = h1, [SP] = l3. Carry preserved.
+  bc scratch1 ld-rr,$  \ BC = h2. Carry preserved.
+  bc       adc-hl,rr   \ HL = h1 + h2 + carry = h3.
+  hl->tos,             \ BC = h3. Stack: l3. Done.
+end-code
+
+code D-  ( l1 h1 l2 h2 -- l3 h3 )
+  \ BC=h2. Stack: l1 h1 l2.
+  scratch1 bc ld-$,rr  \ Save h2 to scratch.
+  bc          pop,     \ BC = l2. Stack: l1 h1.
+  hl          pop,     \ HL = h1. Stack: l1.
+  hl       ex-(sp),rr  \ HL = l1, [SP] = h1. Stack: h1.
+  a           or-r,    \ Clear carry (borrow) for first SBC.
+  bc       sbc-hl,rr   \ HL = l1 - l2 = l3. Borrow set.
+  hl       ex-(sp),rr  \ HL = h1, [SP] = l3. Borrow preserved.
+  bc scratch1 ld-rr,$  \ BC = h2. Borrow preserved.
+  bc       sbc-hl,rr   \ HL = h1 - h2 - borrow = h3.
+  hl->tos,             \ BC = h3. Stack: l3. Done.
+end-code
+
+\ TODO: Not sure if this is still needed.
+\ code UDM* ( l1 h1 u2 -- l3 h3 )
+\ START HERE: This multiplies an unsigned 32-bit value h1:l1 by u2, an
+\ unsigned 16-bit value. u2 is in BC, h1 is on the hardware stack with l1
+\ underneath it.
+\ The result is a 32-bit unsigned value h3:l3, where l3 goes on the hardware
+\ stack and h3 in BC.
+\ end-code
+
+
+code UM/MOD ( ulo uhi udiv -- ur uq )
+  \ Dividing a 32-bit unsigned dividend by an unsigned 16-bit divisor to get
+  \ an unsigned 16-bit quotient and unsigned 16-bit remainder.
+  \ This works by successive bit-shifting until we run out of divisor bits.
+  \ The dividend goes into two 16-bit registers; after the division is complete
+  \ the high part will hold the remainder and the low part the quotient.
+  \ Each steps shifts this 32-bit value, moving the top bit of the low/quotient
+  \ into the high/remainder.
+  \ We shift in a 0 at the least significant bit, but if the remainder is >= the
+  \ divisor, we subtract the divisor from the remainder and make bit 0 of the
+  \ quotient 1.
+  \ After cycling for as many bits as the divisor is wide (16), all the dividend
+  \ bits have been shifted out of the quotient, and the remainder holds exactly
+  \ the remainder we want!
+  \ This requires 3 working 16-bit registers. The divisor is already in BC.
+  \ Since we subtract the divisor from the remainder, it's best for the
+  \ remainder (= high portion) to be in HL so we can SBC HL,DE. That leaves DE
+  \ for the quotient.
+  \ We also need a counter of bits to go; that has to go in memory because we
+  \ need A.
+  hl pop,          \ hi/rem -> HL
+  ex-de,hl         \ hi/rem -> DE; IP -> HL
+  hl ex-(sp),rr    \ IP -> stack; lo/quot -> HL
+  ex-de,hl         \ hi/rem -> HL; lo/quot -> DE
+  a 16 ld-r,#      \ Bit counter starts at 16.
+
+label UM/MOD-loop
+  scratch1 ld-$,a  \ Save the bit counter (A) to memory.
+
+  \ Shift HL:DE left as a 32-bit value.
+  e sla-r,
+  d  rl-r,
+  l  rl-r,
+  h  rl-r,
+
+  \ Skip ahead if the divisor (BC) is unsigned-greater than remainder (HL).
+  a h ld-r,r
+  b   cp-r,
+  fwd +c jr-cc, \ Hi byte shows divisor is greater.
+
+  \ If the high bytes were equal, we need to check the low bytes too.
+  \ So jump ahead if the high bytes just compared were not-equal.
+  fwd -z jr-cc, \ Hi bytes not equal, so remainder strictly less than divisor.
+
+  \ At this point, compare the low bytes just like the high bytes.
+  a l ld-r,r
+  c   cp-r,
+  fwd +c jr-cc, \ Lo bytes show divisor is greater than remainder.
+
+  \ Now, the heart of the algorithm: remainder >= divisor!
+  \ There are *three* forward refs on the stack: ( skip divide skip )
+  swap resolve \ Saving the other two for later: ( skip skip )
+
+  \ Here the divisor in BC is <= the remainder in HL.
+  ccf,
+  bc sbc-hl,rr   \ Subtract the divisor BC from remainder HL.
+  e  inc-rr,     \ And add 1 to the low/quotient value (it's always even)
+
+  \ Drawing everything back in. Reduce the bit counter by 1.
+  resolve resolve
+  scratch1 ld-a,$       \ Load the bit counter.
+  a dec-r,              \ Decrement it.
+  UM/MOD-loop -z jr-cc, \ Jump back to the top unless it reaches 0.
+
+  \ All done! Remainder (HL) goes on the stack; quotient (DE) to TOS.
+  \ Need to put the IP (stacked) into DE as well.
+  c e ld-r,r   \ Quotient (DE) -> TOS (BC)
+  b d ld-r,r
+  de pop,      \ IP -> DE
+  hl push,     \ remainder (HL) -> NOS   ( rem quot )
+end-code
+
+
+\ TODO: More double-cell arithmetic?
+
+
+\ Branches are abstracted, because they differ signficantly on STC systems,
+\ and even on others they might prefer relative or absolute branches.
+\ 0/BRANCH, !DEST etc. handle that abstraction between the kernel and the
+\ shared high-level Forth control structures.
+
+\ On Z80 DTC these are absolute new IP values, in the next slot of the thread.
+\ This is the same design as DCPU-16 and Risque-16 (and DTC on ARM, actually).
+code (BRANCH)
+label branch-inner
+  de  ld-a,(rr)   \ [IP] -> A  (low)
+  l a ld-r,r      \ -> L
+  de  inc-rr,
+  de  ld-a,(rr)   \ [IP+1] -> A (high)
+  d a ld-r,r
+  e l ld-r,r
+end-code
+
+code (0BRANCH)
+  a c ld-r,r
+  b   or-r,
+  bc  pop,
+  branch-inner +z jr-cc,
+
+  \ Branch not taken, skip over the branch target.
+  de inc-rr,
+  de inc-rr,
+end-code
+
+
+code EXIT
+  \ Get the target XT for EXIT and stash it in the forward reference.
+  here 'EXIT !
+
+  de rr-poprsp,
+end-code
+
+\ Copies src to dst from lower addresses to higher.
+\ Uses the LDIR operation on the Z80, which is designed for block copying.
+\ It copies [HL] to [DE], increments both addresses, and decrements BC;
+\ and repeats until BC becomes 0.
+code MOVE< ( src dst u -- )
+  ex-de,hl       \ IP -> HL
+  de pop,        \ dst -> DE
+  hl ex-(sp),rr  \ IP -> stack; src -> HL
+  ldir,          \ Repeatedly copy bytes until done.
+  de pop,        \ Restore IP
+  bc pop,        \ Reload TOS
+end-code
+
+\ Copies src to dst from higher addresses to lower.
+code MOVE> ( src dst u -- )
+  ex-de,hl       \ IP -> HL
+  de pop,        \ dst -> DE
+  hl ex-(sp),rr  \ IP -> stack; src -> HL
+  lddr,          \ Repeatedly copy bytes until done.
+  de pop,        \ Restore IP
+  bc pop,        \ Reload TOS
+end-code
+
+\ Copies src to dst from lower addresses to higher.
+code FILL ( c-addr u ch -- )
+  scratch1 c ld-$,r    \ Stash the character in the scratch cell.
+  bc  pop,             \ Counter in BC
+  ex-de,hl             \ IP -> HL
+  hl ex-(sp),rr        \ IP -> stack; dst -> HL
+  ex-de,hl             \ dst -> DE
+  hl scratch1 ld-rr,## \ HL points at scratch1 as the src
+
+  fwd jr,              \ Jump to the loop bottom.
+
+label FILL-loop
+  ldi,           \ [HL++] -> [DE++]; BC--
+  hl  dec,       \ HL-- to put it back on scratch1
+
+  resolve        \ Jumping to here from above.
+  a c ld-r,r     \ Check if BC is zero.
+  b   or-,r
+  FILL-loop -z jr-cc, \ Jump back up if we're still counting.
+
+  \ BC=0, so we're done.
+  de pop,        \ Restore IP
+  bc pop,        \ Refill TOS
+end-code
+
+\ XXX: START HERE
+
+code (DO) ( limit index --   R: -- limit index )
+  hl pop,
+  hl rr-pushrsp,
+  bc rr-pushrsp,
+  bc pop,
+end-code
+
+code (LOOP-END)  ( delta -- done?    R: limit index1 -- limit index2 )
+  \ BC = delta. R-stack: index at [IX+0..1], limit at [IX+2..3].
+
+  \ Load index into HL.
+  l 0 ix ld-r,(i+#)
+  h 1 ix ld-r,(i+#)       \ HL = index
+
+  \ index2 = index + delta; write back.
+  hl bc add-rr,rr          \ HL = index2
+  0 ix l ld-(i+#),r
+  1 ix h ld-(i+#),r        \ [IX+0..1] = index2
+
+  \ Load limit into BC (save delta on data stack first).
+  bc push,                  \ Save delta.
+  c 2 ix ld-r,(i+#)
+  b 3 ix ld-r,(i+#)        \ BC = limit
+
+  \ after = index2 - limit.
+  a or-r,                   \ Clear carry.
+  bc sbc-hl,rr              \ HL = after
+
+  \ Save after_hi; restore delta; compute before = after - delta.
+  a h ld-r,r                \ A = after_hi
+  bc pop,                   \ BC = delta
+  a or-r,                   \ Clear carry (A preserved: A OR A = A).
+  bc sbc-hl,rr              \ HL = before = after - delta = index - limit
+
+  \ H = before_hi, A = after_hi, B = delta_hi.
+  \ done = (before_hi XOR after_hi) AND (delta_hi XOR before_hi), bit 7.
+  h xor-r,                  \ A = after_hi XOR before_hi
+  l a ld-r,r                \ L = stash xor1
+  a b ld-r,r                \ A = delta_hi
+  h xor-r,                  \ A = delta_hi XOR before_hi
+  l and-r,                  \ A = xor1 AND xor2; bit 7 = done
+
+  \ Convert bit 7 of A into a full flag in BC.
+  a add-r,                  \ Carry = done (bit 7 shifted out)
+  a sbc-r,                  \ A = -carry = $FF if done, $00 if not
+  b a ld-r,r
+  c a ld-r,r                \ BC = done? flag
+end-code
+
+code UNLOOP ( --    R: limit index -- )
+  ix inc-rr,
+  ix inc-rr,
+  ix inc-rr,
+  ix inc-rr,
+end-code
+
+code I ( -- index    R: index -- index )
+  bc push,
+  c 0 ix ld-r,(i+#)
+  b 1 ix ld-r,(i+#)       \ BC = index
+end-code
+
+code J ( -- index1   R: index1 limit2 index2 -- index1 limit2 index2 )
+  bc push,
+  c 2 ix ld-r,(i+#)
+  b 3 ix ld-r,(i+#)       \ BC = index1
+end-code
+
+
+\ Keyboard ===================================================================
+code KEY ( -- key )
+  bc push,
+  b 0xff ld-r,#
+  c b    ld-r,r
+end-code
+
+\ Interrupts =================================================================
+\ TODO: Handle interrupts!
+
+
+\ Main =======================================================================
+\ Machine code entry point. Sets up the basic system.
+label main
+  1 # iaqw,                 \ Queueing on for safety.
+  \ interrupt_handler # ias, \ Set up interrupt handler
+  rp0 # rsp setl,           \ Initial RSP
+  sp0 # sp  setl,           \ Initial SP
+  pop   tos setl,           \ And pop into TOS, fixing the off-by-one-cell SP0
+  0 # iaqw,                 \ Enable interrupts again
+  entry-point [#] pc setl,  \ Jump to the code field of the starter word COLD.

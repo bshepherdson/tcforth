@@ -3,88 +3,19 @@
 \ as possible. model.ft implements a few key routines (eg. DOCOL) and assembler
 \ macros (eg. pushrsp,) to hide the details of the model as much as possible.
 
-
-\ Experimenting with size and speed for the different execution models.
-
-\ Z80 hardware SP is a full 16-bit register and can point anywhere at all.
-
-\ PUSH rr is 1 byte and 11 t-states; POP rr is 1 byte and 10 t-states.
-\ They work on BC DE HL (and AF)
-\ PUSH IX/IY is 2 bytes and 15 t-states; POP IX/IY is 2 bytes and 14 t-states.
-
-\ There is EX DE,HL (1B, 4t) that may be really handy for juggling stacks?
-\ TOS in HL seems likely, it's very powerful and flexible.
-
-\ BC and DE make good working registers, especially DE with EX DE,HL.
-
-\ Registers (16-bit):
-\ Brad Rodriguez in Moving Forth gives the example of:
-\ W=DE, IP=BC, PSP=SP, RSP=IX, TOS=memory
-
-\ There's a lot of assymmetry in the various registers.
-\ For example, there's LD SP, HL but not the reverse.
-\ There's EX DE, HL but nothing for BC.
-
-\ There's EX (SP), HL/IX/IY (which makes HL) a tempting TOS-in-register target?
-
-\ IX and IY can only be loaded with:
-\ - immediates
-\ - absolute reads,
-\ - POP
-
-\ IX and IY can only be sent to:
-\ - absolute writes
-\ - PUSH
-\ - SP
-
-\ SP can only be loaded with:
-\ - Immediates
-\ - HL, IX and IY
+\ NOTE: I'm running with the Moving Forth example Z80. In Part 1 he gives one
+\ example allocation but the complete CamelForth source later on uses a
+\ different one that seems better to me.
+\ DTC, 16-bit cells, 8-bit chars and address units.
+\ BC = Forth TOS   (top of parameter stack)
+\ HL =       W     working register
+\ DE =       IP    Interpreter Pointer
+\ SP =       PSP   Parameter Stack Pointer
+\ IX =       RSP   Return Stack Pointer
+\ IY =       UP    User area pointer
 
 \ First the inner interpreter: NEXT, ENTER, EXIT
 \ DTC ========================================================================
-\ NEXT - jump to (IP++), post-incrementing
-\ With IP=BC:
-bc push,   \ 1B 11c
-bc inc-rr, \ 1B  6c
-bc inc-rr, \ 1B  6c
-ret,       \ 1B 10c  = 4B 33c
-
-\ ENTER - push IP to return stack, set IP to data area
-\ Putting a CALL in the slot, that pushes the new thread onto the (data) stack.
-enter call,       \ 3B 17c
-
-\ enter: TOS is the new IP; old IP is in
-\ START HERE: EX (SP), ?? probably?
-
-
-
-ix dec,           \ 2B 10c
-0 ix b ld-(i+#),r \ 3B 19c
-ix dec,           \ 2B 10c
-0 ix b ld-(i+#),r \ 3B 19c
-bc $1234 ld-rr,## \ 3B 10c = 13B 68c
-
-\ EXIT - pop return stack into IP
-c 0 ix ld-r,(i+#) \ 3B 19c
-ix inc,           \ 2B 10c
-c 0 ix ld-r,(i+#) \ 3B 19c
-ix inc,           \ 2B 10c = 10B 58c
-
-
-\ ITC ========================================================================
-\ NEXT - Load (IP) to W or X, increment IP, jump to (X)
-
-
-
-
-\ Design:
-\ - Direct threading
-\ - Return stack: RSP in Z; top 128 cells of memory, $ff80 to $ffff.
-\ - Data stack: PSP is SP; TOS on stack (PUSH, PEEK etc. are super fast)
-\ - IP is I (so STI can be used in NEXT)
-\ - A B C X Y are free; J is reserved (it gets clobbered by STI)
-\   - (No STI, STD aside from that use.)
 
 \ Standard dictionary headers: link, length+immediate+hidden word, len words of
 \ name, code field.
@@ -99,30 +30,68 @@ HOST DEFINITIONS
 \ We capture that address as the HOST DP as well.
 there CONSTANT DP
 : here dp @ ;
-0 dp !   \ DCPU execution starts at $0000 by default.
+$8000 dp !   \ Earliest byte that isn't contended etc.
 
-: t,        ( w -- )  asm, ;
-: tc,       ( b -- )  asm, ;   \ Byte-width assemble. That's just t, here.
-: tc@ t@ ;
-: tc! t! ;
+: tc,       ( b -- )  assemble ;   \ Byte-width assemble.
+: t,        ( w -- )  assemble16 ; \ Word-width assemble.
+: tc@ b@ ;
+: tc! b! ;
 
 
 \ First line of code, the entry point. It'll be a jump to COLD eventually.
-$8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
+$8000 call,
 
 
 \ These are pseudooperands that hide what registers are used for what.
-: rsp     ( -- op ) rz  ;
-: [rsp]   ( -- op ) [z] ;
-: ip      ( -- op ) ri  ;
-: [ip]    ( -- op ) [i] ;
+: rsp     ( -- op ) ix   ;
+: w       ( -- op ) hl   ;
+: [w]     ( -- op ) [hl] ;
+: ip      ( -- op ) de   ;
+: [ip]    ( -- op ) [de] ;
+: tos     ( -- op ) bc   ;
 
-: <[ip]+, ( lhs -- ) [i] 2swap sti, ;
+\ Assembler macros ===========================================================
+\ NEXTHL - NEXT, where HL already contains the IP to use.
+: nexthl, ( -- )
+  e [hl] ld-r,r   \ 1B 7c   cfa_lo -> W_lo
+  hl     inc-rr,  \ 1B 6c   IP++
+  d [hl] ld-r,r   \ 1B 7c   cfa_hi -> W_hi
+  hl     inc-rr,  \ 1B 6c   IP++
+         ex-de,hl \ 1B 4c   IP <-> W
+  [hl]   jp,      \ 1B 4c  = 6B 34c
+;
 
-\ Some assembler macros
-: next,    ( -- ) [ip] pc sti, ;
-: pushrsp, ( rhs -- ) 1 # rsp sub,   ( rhs ) [rsp] set, ;
-: poprsp,  ( lhs -- ) [rsp] 2swap ( rhs lhs ) set,   1 # rsp add, ;
+\ NEXT - jump to (IP++), post-incrementing
+: next, ( -- )  ex-de,hl   nexthl, ;  \ 1B 4c  + NEXTHL 6B 34c = 7B 38c.
+\ So that's longer and slower... but mine doesn't leave the address in an
+\ accessible register. I'm not sure how much that matters.
+
+
+\ Called like E D pushrsp, and see below for the rr versions.
+: lh-pushrsp, ( lo hi -- )
+  ix   dec-rr,
+  0 ix ld-r,(i+#)
+  ix   dec-rr,
+  0 ix ld-r,(i+#) ;
+
+: lh-poprsp,  ( lo hi -- )
+  swap     ( hi lo )
+  0 ix ld-(i+#),r
+  ix   inc-rr,
+  0 ix ld-(i+#),r
+  ix   inc-rr, ;
+
+: rr->lh ( rr -- lo hi )
+  CASE
+  bc OF c b ENDOF
+  de OF e d ENDOF
+  hl OF l h ENDOF
+  throw
+  ENDCASE ;
+
+: rr-pushrsp, ( rr -- ) rr->lh lh-pushrsp, ;
+: rr-poprsp,  ( rr -- ) rr->lh lh-poprsp,  ;
+
 
 : tcompile, tcode, ;
 
@@ -131,25 +100,26 @@ VARIABLE 'latest   \ Host var holding the Target nt of the last word defined.
 0 'latest !
 
 
-\ DOCOL and DODOES right at the top so they can be JSR DOCOL'd with the inline
-\ literal from the code fields!
+\ DOCOL and DODOES are callable routines, they can go wherever.
 
-\ This is called by JSR, so the parameter field address is on the data stack.
+\ This is called by CALL so the parameter field address is on the data stack.
 label DOCOL
-  ip pushrsp,
-  pop ip set,
-  next,
+  ip rr-pushrsp, \ Save the old IP onto the return stack.
+  hl pop,        \ Get the PFA from the data stack (it was the return address)
+  nexthl,        \ And call it.
 
 \ DOVAR is the code word for a CREATEd definition without a DOES> - it pushes
-\ the address of the parameter field. In order to support DOES>, however, a two-
-\ word code field is needed. CREATE assembles JSR DOVAR, which fits in one word
-\ since DOVAR is at the very top of memory (circa $0007) and fits inline.
-\ So CREATE "wastes" one word.
+\ the address of the parameter field.
 \ See the DOES> design below.
-
+\ TOS is in BC, NOS is [SP], which is where the PFA is. So this is a SWAP.
 label DOVAR
-  \ 1 # peek add,
+  hl pop,    \ PFA -> HL
+  bc push,   \ old-TOS -> NOS position
+  c l ld-r,r \ PFA_lo -> C
+  b h ld-r,r \ PFA_hi -> B   new TOS now in place
   next,
+
+
 
 \ DOES> design for DTC =======================================================
 \ This is different from the original TC-Forth DODOES scheme.
@@ -160,53 +130,61 @@ label DOVAR
 \ DOES> is an immediate word, it runs during "Sequence 1".
 \ It compiles   (DOES>) EXIT dodoes-asm   at the end of CONSTANT.
 \ Then the Forth code after DOES> is compiled. The final CONSTANT looks like:
-\ link | len | CONSTANT | jsr docol | (blank) | CREATE | , | (DOES>) | EXIT |
+\ link | len | CONSTANT | CALL docol | CREATE | , | (DOES>) | EXIT |
 \ dodoes-code | @ | EXIT
 \ Sequence 2 (eg. 7 CONSTANT FOO) CREATEs the new header with the default
-\ JSR DOVAR in its code field, but then (DOES>) runs and patches it to
-\ JSR &dodoes-code as above, ie. after the EXIT:
-\ link | len | FOO | jsr lit | &dodoes-code | 7
+\ CALL DOVAR in its code field, but then (DOES>) runs and patches it to
+\ CALL &dodoes-code as above, ie. after the EXIT:
+\ link | len | FOO | CALL &dodoes-code | 7
 
 \ In DTC, the dodoes-code is entered with the parameter field (pointer to 7)
-\ conveniently already on the stack, because that's what's after the code field
-\ of FOO and was pushed by the JSR.
+\ already on the stack, because that's what's after the code field of FOO and
+\ was pushed by the CALL.
 
-\ The actual dodoes-code can be simply JSR DOCOL as well in this system, since
+\ The actual dodoes-code can be simply CALL DOCOL as well in this system, since
 \ that will enter the thread with IP pointing at the right place! That's nice
-\ because it's fast and compact (1 word).
+\ because it's fast and compact.
 
 \ This HOST word is invoked by Host-side DOES> to compile the necessary pieces.
 VARIABLE '(DOES>)
 VARIABLE 'EXIT   \ These get populated later.
 
-: DOES, ( -- xt-does ) '(DOES>) @ t,   'EXIT @ t,   here   DOCOL # jsr, ;
+: DOES, ( -- xt-does ) '(DOES>) @ t,   'EXIT @ t,   here   DOCOL call, ;
 
 
 \ Not really words, just assembler routines.
-\ TODO Maybe these are better as mirror words without Target-side headers?
+\ TODO: Maybe these are better as mirror words without Target-side headers?
+
+\ [IP] is the number we want in TOS.
 label LIT
-  [i] push sti,
+  tos push,      \ Push old TOS.
+  ex-de,hl       \ DE <-> HL
+  c [hl] ld-r,r  \ TOS_lo
+  hl     inc,    \ Bump
+  b [hl] ld-r,r  \ TOS_hi
+  hl     inc,    \ Bump
+  ex-de,hl       \ DE <-> HL
   next,
 
 label DOSTRING
-  \ Next word in the thread is the length, then that many characters.
-  [i] ra   sti, \ Length into TOS, I now points at the string.
-  ri  push set, \ Push the string address as NOS
-  ra  push set, \ And the length above that.
-  ra  ri   add, \ Advance I past the string.
+  \ Next byte in the thread is the length, then that many characters.
+  tos push,        \ Push old TOS
+  a [de] ld-a,(rr) \ Length into A.
+  de  inc,         \ DE points at the string now
+  de  push,        \ Push the address into the NOS position.
+  e   add,         \ A contains the low byte.
+  e a ld-r,r       \ IP_lo -> E
+  a   xor,         \ 0 -> A
+  d   adc,         \ IP_hi -> D     - No alignment on Z80.
   next,
 
 
-
 \ Compiles the code field (address) for a colon declaration.
-\ For DTC that means assembling a JSR docol.
-: ,docol ( -- ) docol # jsr, ;
+\ For DTC that means assembling a CALL docol.
+: ,docol ( -- ) docol call, ;
 
-\ Compiles the JSR DOVAR. This deliberately uses the long form JSR lit + DOVAR
-\ So that the pushed PC is exactly the data region.
-\ The code for DODOES can't use the inline literal, so it needs this space for
-\ a long JSR lit.
-: ,dovar ( -- ) $7c20 t, dovar t, ;
+\ Compiles the CALL DOVAR.
+: ,dovar ( -- ) dovar call, ;
 
 \ Compiles a string literal into the thread.
 \ In ITC/DTC that's DOSTRING, then the length, then the chars.
@@ -217,8 +195,10 @@ label DOSTRING
 
 \ Overwrites the code field (address) of the word at word-xt to point to the
 \ ;CODE or DOES> at does-xt.
-\ On DTC DCPU-16, this compiles JSR does-xt as two words: $7c20 does-xt
-: !dodoes ( does-xt word-xt -- ) $7c20 over t!   tcell+ t! ;
+\ On DTC Z80, word-xt points to a CALL, so the address needs to be adjusted.
+\ It's pointing at the CALL opcode, not the address.
+: !dodoes ( does-xt word-xt -- ) 1+ w! ;
+
 
 \ Compile a literal. This is in the model because eg. STC doesn't use the two-
 \ cell [LIT|x] pattern.
@@ -227,10 +207,11 @@ label DOSTRING
 : ,dest ( dest -- ) t, ;
 : !dest ( dest slot -- ) t! ;
 
-: t>body ( target-xt -- target-body ) 2 tcells + ;
+: t>body ( target-xt -- target-body ) 3 tchars + ;
 
 
-0     CONSTANT rp0
-$ff80 CONSTANT sp0
+\ $ff58 and up is reserved.
+$ff50 CONSTANT rp0 \ $58 = 88 bytes, 44 cells of RSP.
+$ff00 CONSTANT sp0
 
 label entry-point 0 asm,

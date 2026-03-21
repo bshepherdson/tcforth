@@ -54,6 +54,9 @@ VARIABLE >mirror \ Holds the body address of the mirror currently executing.
 : mirror-compile ( -- )
   >mirror @ mirror>txt @ ( dup ." compiling " hex. cr ) TCOMPILE, ;
 
+: mirror-immediate? ( mirror-body -- ? )
+  mirror>compile @ ['] mirror-compile <> ;
+
 \ The parameter field of a mirror word contains:
 \ Target xt, metainterpreting xt, metacompiling xt, Host DOES> xt, Target DOES> xt
 : mirror ( target-xt "name" -- )

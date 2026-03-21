@@ -112,7 +112,8 @@ target : POSTPONE ( "name" -- )
     [ host t' literal tcompile, target ] \ Compiling the xt as a literal
     [ host t' compile, tliteral target ] compile, \ And compiling compile,
   THEN ; IMMEDIATE
-  host acts: T' tcompile, ; IMPERATIVE
+  host acts: (T') dup mirror>txt @   swap mirror-immediate? IF
+    tcompile, ELSE tliteral   [T'] compile, tcompile, THEN ; IMPERATIVE
 
 target : ['] ( "name" --    X: -- xt )
     ' postpone literal ; IMMEDIATE

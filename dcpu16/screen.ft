@@ -87,8 +87,11 @@ VARIABLE (cur-ch)
 : vacate ( -- ) (cur-ch) @ >cursor c! ;
 : arrive ( -- ) >cursor c@  dup (cur-ch) !   reversed >cursor c! ;
 
-: at-xy  ( col row -- ) vacate   /row * + cursor !   arrive ;
-: cur-xy ( -- col row ) cursor @ /row /mod ;
+: xy>    ( col row -- offset ) /row * + ;
+: >xy    ( col row -- offset ) /row /mod ;
+
+: at-xy  ( col row -- ) vacate   xy> cursor !   arrive ;
+: cur-xy ( -- col row ) cursor @ >xy ;
 
 host presume scroll target
 
@@ -149,7 +152,7 @@ VARIABLE <scroll-delta> \ Always positive!
 
 
 \ Printing ===================================================================
-\ Emites the given *screen* character word (colours etc. added) at the current
+\ Emits the given *screen* character word (colours etc. added) at the current
 \ cursor. See also EMIT.
 : (DISPLAY) ( screen-ch -- ) >cursor c! ;
 : DISPLAY   ( screen-ch -- ) vacate   (DISPLAY)   1 +cursor   arrive ;

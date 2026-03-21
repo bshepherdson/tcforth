@@ -102,3 +102,14 @@ T{  2 GS2 -> 100  }T
 T{  3 GS2 -> 1000 }T
 T{  4 GS2 -> 4    }T
 T{ -1 GS2 -> -1   }T
+
+\ VALUE and TO =====================================================
+T{ 5 VALUE GV1 -> }T
+T{ GV1 -> 5 }T
+T{ 8 TO GV1 -> }T
+T{ GV1 -> 8 }T
+
+T{ : GV1! 6 TO GV1 ; -> }T
+T{ GV1 -> 8 }T   \ Unchanged!
+T{ GV1! -> }T
+T{ GV1 -> 6 }T

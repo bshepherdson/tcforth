@@ -155,28 +155,11 @@ target : IS ( I: xt "name" --    C: "name" --   X: xt -- )
 target : ACTION-OF ( "name" -- xt )
   state @ IF ' postpone literal defer@ ELSE ' defer@ THEN ; IMMEDIATE
 
-target : TO ( I: xt "name" --    C: "name" --   X: xt -- )
-    state @ IF
-      ' >body postpone literal postpone ! ELSE ' >body ! THEN ; IMMEDIATE
+target : TO ( I: x "name" --    C: "name" --   X: x -- )
+    ' >body   state @ IF postpone LITERAL postpone ! ELSE ! THEN ; IMMEDIATE
   host acts:
     state @ IF T' t>body tliteral [tcompile] ! ELSE
       T' t>body tdata! THEN ; IMPERATIVE-BOTH
-
-\ host cr cr hex
-\ .s cr
-\ (T') CONSTANT
-\ ." CONSTANT mirror: " dup                       hex. cr
-\ ."   target xt:     " dup mirror>txt     @      hex. cr
-\ ."   interp-xt:     " dup mirror>interp  @      hex. cr
-\ ."   compile-xt:    " dup mirror>compile @      hex. cr
-\ ."   h-does:        " dup mirror>h-does  @      hex. cr
-\ ."   t-does:        " dup mirror>t-does  @      hex. cr
-\
-\ dup mirror>interp  @ xt-see cr
-\ dup mirror>compile @ xt-see cr
-\ drop
-\ .s
-\ decimal cr cr
 
 target : ['] ( C: "name" --    X: -- xt )
     parse-name (find) drop postpone literal ; IMMEDIATE

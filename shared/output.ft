@@ -6,9 +6,7 @@ target definitions
 : SPACES ( u -- )    bl padded ;
 
 : TYPE   ( c-addr u -- )
-  termlock claim
-  ?dup IF 0 DO ( c-addr ) dup c@ emit 1+ LOOP THEN drop
-  termlock release ;
+  T[ ?dup IF 0 DO ( c-addr ) dup c@ emit 1+ LOOP THEN drop ]T ;
 
 \ Pictured numeric ouput =====================================================
 VARIABLE (picout)

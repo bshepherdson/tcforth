@@ -7,10 +7,10 @@ target definitions
 : ?.mins  ( mins  -- ) [char] m   2 ?.time ;
 
 : .run-time ( -- )
-  run-time   termlock claim
+  run-time   T[
   ?.days ?.hours ?.mins
   2 0.R [char] . emit   3 0.R space
-  termlock release ;
+  ]T ;
 
 \ Sets the clock tick rate, from 60Hz to 1Hz
 : HZ ( rate-hz -- )

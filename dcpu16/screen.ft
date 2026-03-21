@@ -159,12 +159,12 @@ VARIABLE <scroll-delta> \ Always positive!
 
 \ Emits the given ASCII character at the current cursor.
 : EMIT ( ascii-ch -- )
-  termlock claim   coloured display   termlock release pause ;
+  T[ coloured display ]T pause ;
 
 : CR ( -- )
-  termlock claim
+  T[
   vacate   cursor @ /row 1- and   /row swap -   +cursor   arrive
-  termlock release pause ;
+  ]T pause ;
 
 
 \ Keyboard input =============================================================
@@ -175,10 +175,10 @@ VARIABLE <scroll-delta> \ Always positive!
 \ c-addr-min
 : BACKSPACE ( c-addr-current c-addr-min -- c-addr' )
   over = IF EXIT THEN \ At left edge, do nothing.
-  termlock claim
+  T[
   \ Can't use EMIT directly here, it also juggles the cursor.
   vacate   -1 +cursor   bl coloured (display)   arrive
-  1- ( c-addr' )   termlock release ;
+  1- ( c-addr' )   ]T ;
 
 : ACCEPT-CHAR ( c-addr ch -- c-addr' ) dup emit   over c! char+ ;
 

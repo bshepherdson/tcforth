@@ -291,6 +291,10 @@ DEFER release
 ' drop IS CLAIM
 ' drop IS RELEASE
 
+\ Shorthand from claiming and releasing the termlock.
+target : T[ ( -- ) termlock claim ;
+target : ]T ( -- ) termlock release ;
+
 
 \ Colon definitions ==========================================================
 \ Target : and ; are empty placeholders right now. These need to be filled in

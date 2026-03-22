@@ -24,7 +24,9 @@ target : .ERROR ( exc# -- )
   err-unexpected-EOF OF ." Disk unexpectedly ended or ejected" ENDOF
   err-underflow      OF ." Stack underflow" ENDOF
   ( exc# ) ." Exception " .
-  0 ENDCASE ;
+  0 ENDCASE
+  cr source type
+  cr >IN @ spaces   [char] ^ emit ;
 
 \ Extra debugging utilities and things.
 

@@ -778,8 +778,8 @@ code IRQ- ( -- ) 1 # iaq, end-code \ Interrupts off = queueing enabled
 \ registers off the stack and then does RFI.
 label int-EXIT
   \ Restoring JIYXCB - A is already saved, and we're using Z.
-  pop rj set,   pop ri set,   pop ry set,
-  pop rx set,   pop rc set,   pop rb set,
+  pop ex set,   pop rj set,   pop ri set,   pop rz set,
+  pop ry set,   pop rx set,   pop rc set,   pop rb set,
   0 # rfi, \ This also restores A.
 
 label interrupt-thread 0 asm, int-EXIT asm,
@@ -796,8 +796,8 @@ label interrupt_handler
 
   \ Gotta save ~all the registers, since Forth words might clobber nearly any
   \ of them. Don't need to save Z or A (A is already saved; Z is handled safely)
-  rb push set,   rc push set,   rx push set,
-  ry push set,   ri push set,   rj push set,
+  rb push set,   rc push set,   rx push set,   ry push set,
+  rz push set,   ri push set,   rj push set,   ex push set,
   \ That was all saved stuff, now this is pushing the interrupt message.
   \ FIXME: I think this needs to save EX as well - it's a Heisenbug waiting to
   \ happen if the interrupt happened to catch us during a double-cell add etc.

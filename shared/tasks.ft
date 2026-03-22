@@ -286,11 +286,15 @@ target : wait ( addr -- )
 target : signal  ( addr -- ) irq-   1 swap +!   irq+ ;
 \ SIGNAL> is "signal and go"; it PAUSEs to allow anyone waiting to run first.
 target : signal> ( addr -- ) signal pause ;
+\ SIGNAL1 sets a cell to exactly 1. This will unblock anyone trying to WAIT on
+\ it, but prevent double-counting.
+target : signal1 ( addr -- ) irq-   1 swap !   irq+ ;
 
 
 \ Nestable mutexes ===========================================================
 \ These are "free" if they're 0 and if nonzero only the claiming task can
 \ nest it further. Two cells [ nesting | task ].
+\ TODO: Fairness and blocking, rather than spin-waiting.
 target : MUTEX ( "name" --    X: -- mutex ) CREATE 0 , 0 , DOES> ;
   host acts: CREATE 0 tdata, 0 tdata, DOES> ;
 

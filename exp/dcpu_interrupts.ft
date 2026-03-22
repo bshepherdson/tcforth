@@ -1,11 +1,20 @@
 5 CONSTANT msg-timer
+6 CONSTANT msg-transmit
+7 CONSTANT msg-receive
+
+\ To keep the interrupt handlers as light as possible, these semaphores are
+\ blocked by the
+SEMAPHORE clear-to-send
+SEMAPHORE data-ready
 
 VARIABLE ticks-count
 
 : int-handler ( msg -- )
   CASE
-  msg-timer OF 1 ticks-count +! ENDOF
-  drop ENDCASE ;
+  msg-timer    OF 1 ticks-count +! ENDOF
+  msg-transmit OF clear-to-send signal1 ENDOF
+  msg-receive  OF data-ready signal1 ENDOF
+  log 0 ENDCASE ;
 
 ' int-handler (>interrupt)
 msg-timer clock-int!
@@ -114,12 +123,96 @@ SEMAPHORE snaker
 
 
 
-\ Serial sending and receiving
+\ Async serial port ==========================================================
+\ A separate task takes care of the transmitting and receiving. The ends are
+\ separate, there's no requests and responses as pairs. Instead, two small
+\ tasks handle reading and writing data from defined buffers.
 32 cells TASK transmitter
 32 cells TASK receiver
-\ XXX: START HERE: Implement these two tasks, probably with the message
-\ passing mechanism for synchronization. Does it do that? I think it blocks
-\ until the other end picks up...? Oh, no it doesn't. There's a buffer size
-\ of 1 in practice; the sender waits until the receiver's mailbox is empty,
-\ then leaves the message and continues. The receiver might never actually
-\ look at the mailbox to read that first message.
+
+MUTEX xmit-lock
+MUTEX recv-lock
+
+CREATE outgoing-msg 2 cells allot
+: transmit1 ( -- )
+  \ Wait for the receiver to come through.
+  6 log
+  receive drop ( c-addr -- )
+  7 log
+  receive drop ( c-addr u -- )
+  dup 0= IF 2drop EXIT THEN
+  2dup outgoing-msg 2!
+
+  BEGIN
+    outgoing-msg 2@
+    clear-to-send WAIT
+    over c@ semit
+    1 /string   tuck outgoing-msg 2!
+  0= UNTIL ;
+\ TODO: Notify senders when their message is done?
+
+
+: read-serial ( -- ch status )
+  2 $501 dev-serial @ >device ;
+
+\ Receives until either the provided buffer is full or the remote hangs up.
+\ The latter is detected by the "no data" error. The hardware will send an
+\ interrupt (if enabled) when the remote hangs up.
+CREATE incoming-msg 2 cells allot
+VARIABLE incoming-start
+VARIABLE receiver-callback
+VARIABLE incoming-error
+
+: got-byte ( ch -- u-headroom )
+  >R   incoming-msg 2@   over R> swap ( c-addr u ch c-addr )
+  !   1 /string   tuck incoming-msg 2! ( u ) ;
+
+
+: receive1 ( -- )
+  3 log
+  receive 4 log receiver-callback !   receive drop ( c-addr u )
+  dup 0= IF 2drop   0 receiver-callback @ send EXIT THEN \ Empty
+  over incoming-start !   incoming-msg 2!
+  incoming-error OFF
+  BEGIN
+    \ Wait for the hardware to signal it has data available.
+    data-ready WAIT
+    \ Then send the read HWI.
+    read-serial ( ch status ) CASE
+      0 OF got-byte ENDOF
+      3 OF drop 0   ENDOF
+      drop ENDCASE ( u-left )
+  0= UNTIL
+  \ At this point, we're done loading the message. Get its length and signal
+  \ the requesting task.
+  incoming-msg 2@ drop incoming-start @ - ( u-read )
+  receiver-callback @ send ;
+
+
+: transmitter-start ( -- ) transmitter ACTIVATE BEGIN transmit1 AGAIN ;
+: receiver-start    ( -- ) receiver    ACTIVATE BEGIN receive1  AGAIN ;
+
+\ Fire-and-forget transmitter. Does NOT wait for the whole message to be sent.
+: serial-transmit ( c-addr u -- )
+  xmit-lock claim
+  swap transmitter send   transmitter send
+  xmit-lock release ;
+
+: serial-receive ( c-addr u-space -- u-read )
+  recv-lock claim
+  swap receiver send   receiver send
+  \ That will call us back with the length read.
+  receive drop ( u-read )
+  recv-lock release ;
+
+
+\ A=4 Configure. B=3 to enable both, C=receive, X=transmit
+: serial-ints+ ( -- )
+  \ A=4 Configure. B=3 to enable both, C=receive, X=transmit
+  4 3 msg-receive msg-transmit   $f dev-serial @ >device ;
+: serial-ints- ( -- )
+  4 0 0 0   $f dev-serial @ >device ;
+
+transmitter-start
+receiver-start
+serial-ints+

@@ -53,40 +53,21 @@ label interrupt-return
 
 label 'var_handler   var_handler asm,
 
-\ TODO: Currently this assumes the only interrupt source is the timer.
-\ XXX: IRQ+ and IRQ- do nothing - interrupts are permanently disabled.
+\ Simple timer interrupt handler: clear the timer interrupt, bump ticks, return.
+\ The complex Forth-task-switching handler that was here before has an IRQ mode
+\ issue: inner-pause uses sp (r13) which is banked in IRQ mode, so the task
+\ switcher would operate on the wrong stack.
 label interrupt-handler
-  \ Push all the used registers - r0-r4, r9-r12. (r13 and r14 are banked.)
-  \ That includes saving the original UP, so we can just overwrite it.
-  {{ r0 r1 r2 r3 r4   r9 r10 r11 r12 lr }} push, \ LR too just in case.
-  'main-task     up ldr-pc,   \ Kernel Task -> UP
-  \ At its SP is the IP, which we should change to its own code area.
-  'var_handler   r0 ldr-pc,   \ Get the address of the HANDLER var.
-  r0 []          r0 ldr,      \ xt for interrupt handling -> r0
-
-  ttask-code # up [+] r1 ldr, \ thread -> r1
-  r1              []  r0 str, \ xt -> thread[0]
-  interrupt-return r0 nearby,
-  4 # r1          [+] r0 str, \ int-ret -> thread[1]
-
-  tsp   # up [+] sp str,      \ Store the task's SP to the SP slot.
-  sp         []  r1 str,      \ Store the thread into the IP slot.
-  trp0  # up [+] r1 ldr,      \ RP0 -> r1
-  4     # sp [+] r1 str,      \ RP0 -> rsp slot
-
-  \ Now the thread is ready, so we can unpause it!
-  inner-pause       b,
-
-
-  \ timer-intclr  r0 ldr-pc,
-  \ 1 #           r1 mov,
-  \ r0 []         r1 str,
-  \ 'ticks        r0 ldr-pc, \ Pointer to address to ticks cell
-  \ r0 []         r1 ldr,    \ Load the tick count
-  \ 1 #   r1      r1 add,    \ Increment it
-  \ r0 []         r1 str,    \ And write back
-  \ {{ r0 r1 }} pop,         \ Restore the registers
-  \ 4 # lr  pc  S sub,       \ LR is 4 bytes too far for hardware reasons.
+  {{ r0 r1 }} push,
+  timer-intclr  r0 ldr-pc,
+  1 #           r1 mov,
+  r0 []         r1 str,       \ Clear the timer interrupt.
+  'ticks        r0 ldr-pc,   \ Pointer to address of ticks cell
+  r0 []         r1 ldr,       \ Load the tick count
+  1 #   r1      r1 add,       \ Increment it
+  r0 []         r1 str,       \ And write back
+  {{ r0 r1 }} pop,            \ Restore the registers
+  4 # lr  pc  S sub,          \ Return from IRQ (restores CPSR from SPSR).
 
 
 \ Main =======================================================================

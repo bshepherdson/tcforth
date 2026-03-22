@@ -37,8 +37,6 @@ CONSTANT tm-flags
   \ ." Top" cr
   interval timer1 tm-load ( ." Timer load: " hex.s cr ) !
   tm-flags timer1 tm-ctl  ( ." Timer ctl:  " hex.s cr ) !
-  \ XXX: This needs to be reenabled for the timer interrupt to work - but it
-  \ seems to lock up the system?
   pic vic-intenable +   dup @   pic-timer1 or   swap ! ;
 
 : ticks ( -- addr ) [ host 'ticks tcode@ tliteral target ] ;

@@ -505,7 +505,7 @@ Forth handlers support relies on multitasking, in this way:
 - After starting the user task, the kernel task does the following:
     - `SLEEP`s itself - not `STOP` since we don't want to `PAUSE` yet.
         - Now it's out of the task round-robin ring.
-    - Set its `LINK` to itself, so it's a party of one.
+    - Set its `LINK`s to itself, so it's a party of one.
     - Call `INTERRUPTED`, then `EXIT`.
 
 Interrupt handling process:
@@ -546,7 +546,7 @@ This is a pretty normal task start, except for two things:
     - `UP@` and `UP!`
     - `(RESTART)` to start running in the task in `UP`
     - `(PAUSE)` which suspends the current task in `UP` and `(RESTART)`s the
-      task in TOS. (**Not** the `LINK` field, to enable some jugglery.)
+      task in TOS. (**Not** the `LINK` fields, to enable some jugglery.)
     - Probably `IRQ+` and `IRQ-` to control interrupts.
 - In the `model.ft`:
     - Drop the `sp0` and `rp0` constants.

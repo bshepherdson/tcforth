@@ -2,7 +2,10 @@
 \ Only REQUIREd:
 \ (1) on targets that support it, and
 \ (2) when multitasking? is true.
+host REQUIRE linked.ft
+
 target definitions
+
 
 \ XXX: The current definition is not safe for preemptive schemes!
 \ That would require words to disable and re-enable interrupts, which are
@@ -63,31 +66,23 @@ target : SINGLE ( -- )
 
 
 \ Given a task, find the task which points to it as its LINK.
-target : PREV-TASK ( task -- task )
-  dup >R
-  BEGIN
-    link over 's @   ( current next   R: target )
-    dup R@ <>
-  WHILE nip REPEAT   ( prev   R: target )
-  R> 2drop ;
+target : PREV-TASK ( task1 -- task2 )
+  link 2@ ( prev next ) drop ;
 
 \ Removes a target task from the round-robin ring of tasks.
-target : SLEEP ( task -- )
-  \ Detail: STOP needs SLEEP to preserve the LINK field of the target task.
-  link over 's @   ( sleeper linked )
-  swap prev-task   ( linked prev )
-  link swap 's ! ;
+target : SLEEP ( task -- ) link swap 's duck ;
 
 \ SLEEPs the current task so it will not run again.
 \ Hands off to the next ready task like PAUSE.
-target : STOP ( -- ) up@ SLEEP   PAUSE ;
+target : STOP ( -- )
+  link @     ( next )
+  up@ SLEEP  ( next )
+  (PAUSE) ;
 
 \ WAKEs a task so it will run. The awakened task goes in the front of the queue,
 \ and this task immediately PAUSEs to let the new one run.
-target : WAKE ( task -- )
-  up@ link @   over link ! \ Current task's successor -> target successor.
-  up@ link !               \ Target task -> my successor
-  PAUSE ;
+target : <WAKE> ( task -- ) up@ q+ ;
+target : WAKE   ( task -- ) <wake> PAUSE ;
 
 
 \ Printing ===================================================================
@@ -137,8 +132,7 @@ target : (initiate) ( xt task -- task )
   \ ." Top of (initiate) " hex.s cr
   >R
   sp0 R@ 's @   task-sp R@ 's ! \ Set the task's SP to its SP0.
-  link @        link    R@ 's ! \ Current LINK becomes the new thread's LINK.
-  R@ link !                     \ The LINK of the current task is the new one
+  R@ link q+                    \ Enqueue the new task right after current.
   R@ tos>task                   \ This is a no-op if TOS is not in a register
   rp0 R@ 's @   R@ >task        \ Push RP0 into the task's stack
   dp @                          \ Save DP so we can compile
@@ -190,9 +184,6 @@ target : ACTIVATE ( C: colon-sys1 -- colon-sys2    X: task -- )
   ; IMPERATIVE
 target
 
-\ XXX: START HERE - Keep debugging ACTIVATE, it's handy for tests.
-\ Check out the "ring" message passing tests in tests/multitasking.ft
-
 
 : (PASS) ( xn ... x1 n task -- task )
   >R BEGIN ?dup WHILE dup pick R@ >task   1- REPEAT R> ;
@@ -205,10 +196,10 @@ target
 target : INIT-MULTI ( -- )
   [ host task-area0 tliteral target ]   dup task-area !
   up@ - abs   task-allot drop \ Making space for the startup task.
-  up@ link ! ; \ Link kernel task to itself, since it's the only one running.
+  link encircle ; \ Link kernel task to itself, it's the only one running.
 
 
-\ Like WORDS, prints out the current state of all the running tasks.
+\ Like WORDS, prints out the current state of all running or ready tasks.
 target : TASKS ( -- )
   \ ['] pause defer@ >R   single
   cr up@ hex. ."    <-- running"
@@ -218,99 +209,101 @@ target : TASKS ( -- )
   REPEAT
   drop   ; \ R> ['] pause defer! ;
 
-\ Shelved idea: Smarter linked lists
-\ - Ready tasks form a circular queue.
-\ - If there's only one task, it points to itself in both directions.
-\ - There's no pointer for the current task; it's in UP!
-\ - If a task gets blocked eg. on a semaphore, it gets removed from the ready
-\   ring and added to the back of the semaphore's queue.
-\ - When a task gets unblocked on a semaphore, it gets removed and queued
-\   to run next.
-
-\ Doubly-linked lists ========================================================
-\ TODO: Put this in a separate library file; it's reusable.
-\ Also, it's commented out here because a simpler round-robin scheme is used
-\ instead.
-
-\ XXX: vvvvvv DISABLED CODE vvvvvv
-host 0 [IF]
-
-\ The cells are stored [ next prev ], so 2@ yields ( prev next )
-\ Make prev come before next and next after previous.
-target : xlink ( prev next -- ) 2dup cell+ !   swap ! ;
-
-\ Enqueue to the back.
-target : q+ ( new-node node -- )
-  \ Fetch the previous node, and make it come before the new one.
-  2dup cell+ @ swap xlink ( new-node node )
-  xlink ( ) ;
-
-\ Enqueue to the front.
-target : +q ( new-node node -- )
-  \ Fetch the next node, make it the next of the new node.
-  2dup @ xlink
-  \ Then make the current node the prev of the new one.
-  swap   xlink ;
-
-\ Makes a node into a circular queue of length 1.
-target : encircle ( node -- ) dup dup 2! ;
-
-\ "Duck" out of the queue - makes the prev and next nodes into neighbours.
-\ Makes this item into its own neighbours.
-\ Note that if this is a queue of 1, it gets linked to itself.
-\ But that's exactly how it was about to go anyway!
-target : duck ( node -- ) dup cell+ @   over @ xlink   encircle ;
-
-host [THEN]
-\ XXX: ^^^^^^ DISABLED CODE ^^^^^^
-
-
 
 \ Semaphores =================================================================
-\ For now, these busy-wait + PAUSE on a cell being 0 or not.
-\ If it's 0, you keep waiting; if it's nonzero, decrement it and continue.
-\ When you're finished, you SIGNAL and it increments again.
+\ Semaphores are stored as [ count | wait-queue ]
+\ WAIT checks the count. If it's positive decrement and continue.
+\ If count is zero, put this thread to SLEEP and append it to the wait-queue.
 
-\ These details are not internals, but a public interface!
-\ Perhaps an interrupt handler should SIGNAL something from machine code.
+\ SIGNAL checks the queue - if there's anyone waiting, they get removed from
+\ wait-queue and queued up next in the main LINK round-robin queue.
 
-target : SEMAPHORE ( "name" --    X: -- semaphore ) CREATE 1 , DOES> ;
-  host acts: CREATE host 0 tdata,   DOES> ;
+\ TODO: One approach to interrupts is a machine code handler that unblocks a
+\ Forth thread that's waiting on a semaphore. But that's a bit tricky to do
+\ with the linked lists out of the box.
+\ I think if Forth handlers will work, that's more the style we're looking for.
 
-\ This can wait for any cell to become nonzero; it needn't be a semaphore.
-target : wait ( addr -- )
-  BEGIN pause dup @ UNTIL
-  irq-   -1 swap +!   irq+ ;
+\ NOTE: It's important that semaphores and mutexes both have their wait queues
+\ in the first slot.
+target : SEMAPHORE ( "name" --    X: -- semaphore ) CREATE 0 , 1 , DOES> ;
+  host acts: CREATE host 0 tdata, 1 tdata, DOES> ;
 
-\ SIGNAL increments a cell so anyone waiting for a semaphore can continue.
-target : signal  ( addr -- ) irq-   1 swap +!   irq+ ;
+target : <WAIT-ON> ( 'queue -- )
+  up@ SLEEP
+  dup @ IF ( 'queue )
+    @ up@ +q
+  ELSE
+    up@ swap !
+  THEN ;
+
+target : WAIT ( sem -- )
+  irq-   dup cell+ @ IF -1 swap cell+ +! ELSE <WAIT-ON> THEN   irq+ ;
+
+\ Dequeues a waiting task and returns it. If there's nothing queued, returns 0.
+\ The returned task is DUCKed out of the waiting queue.
+target : <UNBLOCK> ( 'queue -- waiting-task|0 )
+  dup @ dup link> @ over <> IF \ ( 'q blocked ) more tasks waiting after it!
+    dup link> @    ( 'q blocked next )
+    swap duck >R   ( 'q next   R: blocked )
+    swap ! R>      ( blocked )
+  ELSE
+    swap off ( blocked )
+  THEN ;
+
+\ SIGNAL will unblock the next task in wait-queue, if any. If there are none,
+\ the count is incremented instead.
+target : <SIGNAL> ( sem  -- )
+  <unblock> ?dup IF <wake> ELSE 1 swap +! THEN ;
+
+target : SIGNAL  ( addr -- ) irq-   <SIGNAL>   irq+ ;
+
 \ SIGNAL> is "signal and go"; it PAUSEs to allow anyone waiting to run first.
-target : signal> ( addr -- ) signal pause ;
+target : SIGNAL> ( addr -- ) signal pause ;
+
 \ SIGNAL1 sets a cell to exactly 1. This will unblock anyone trying to WAIT on
 \ it, but prevent double-counting.
-target : signal1 ( addr -- ) irq-   1 swap !   irq+ ;
+target : SIGNAL1 ( addr -- )
+  irq-
+  dup <signal>
+  cell+ dup @ 1 min swap ! \ Only valid values are 0 and 1.
+  irq+ ;
 
 
 \ Nestable mutexes ===========================================================
 \ These are "free" if they're 0 and if nonzero only the claiming task can
-\ nest it further. Two cells [ nesting | task ].
-\ TODO: Fairness and blocking, rather than spin-waiting.
-target : MUTEX ( "name" --    X: -- mutex ) CREATE 0 , 0 , DOES> ;
-  host acts: CREATE 0 tdata, 0 tdata, DOES> ;
+\ nest it further.
+\ Can't actually use BEGIN-STRUCTURE.
+target
+3 cells CONSTANT [MUTEX]
+: mutex>waiters ( mutex -- 'waiters ) ;
+: mutex>nesting ( mutex -- 'nesting ) cell+ ;
+: mutex>task    ( mutex -- 'task )    2 cells + ;
+
+target : MUTEX ( "name" --    X: -- mutex ) CREATE [MUTEX] allot align DOES> ;
+  host acts: CREATE 0 tdata, 0 tdata, 0 tdata, DOES> ;
 
 \ Waits until the mutex is free, then claims it.
 \ If this task has already claimed it, increases the nesting level.
 target : <CLAIM>   ( mutex -- )
-  dup cell+ @ up@ = IF 1 swap +! EXIT THEN
-  ( mutex ) BEGIN pause dup @ 0= UNTIL
-  up@ 1 rot 2! ;
+  irq-
+  dup mutex>task @ ?dup IF ( mutex locked-by )
+    up@ = IF ( mutex )
+      1 swap mutex>nesting +!
+    ELSE <WAIT-ON> THEN
+  ELSE \ ( mutex ) Nothing currently locking it, so set the task and nesting 1.
+    1 up@ rot mutex>nesting 2!
+  THEN irq+ ;
 ' <CLAIM> IS CLAIM
 
-target : <RELEASE> ( mutex -- ) -1 swap +! ;
+target : <RELEASE> ( mutex -- )
+  irq-
+  dup mutex>nesting dup @ 1- ( mutex 'nesting nesting' )
+  tuck swap ! ( mutex nesting' ) 0= IF \ Nested drained to 0, so unblock.
+    <unblock> ?dup IF <wake> THEN THEN irq+ ;
 ' <RELEASE> IS RELEASE
 
 \ Core locks =================================================================
-target here   2 cells allot   IS termlock
+target here   [mutex] allot   IS termlock
 
 
 \ Message passing ============================================================

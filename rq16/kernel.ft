@@ -667,7 +667,7 @@ label inner-restart        \ <-- Used by (PAUSE) below to directly enter here.
   \ The task's stacks are ready, so it's ready to run!
 end-code \ NEXT into the new task
 
-\ Internal implementation of PAUSE - next task is TOS, not the LINK field!
+\ Internal implementation of PAUSE - next task is TOS, not the LINK fields!
 \ That allows it to be called in "handoff" sorts of cases.
 code (PAUSE)
   \ New UP is in TOS, 'UP in r0.

@@ -62,12 +62,12 @@ label interrupt-handler
   timer-intclr  r0 ldr-pc,
   1 #           r1 mov,
   r0 []         r1 str,       \ Clear the timer interrupt.
-  'ticks        r0 ldr-pc,   \ Pointer to address of ticks cell
+  'ticks        r0 ldr-pc,    \ Pointer to address of ticks cell
   r0 []         r1 ldr,       \ Load the tick count
   1 #   r1      r1 add,       \ Increment it
   r0 []         r1 str,       \ And write back
-  {{ r0 r1 }} pop,            \ Restore the registers
-  4 # lr  pc  S sub,          \ Return from IRQ (restores CPSR from SPSR).
+  {{ r0 r1 }}   pop,          \ Restore the registers
+  4 # lr  pc    S sub,        \ Return from IRQ (restores CPSR from SPSR).
 
 
 \ Main =======================================================================

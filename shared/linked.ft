@@ -1,0 +1,32 @@
+\ Doubly-linked lists ========================================================
+target definitions
+
+\ Returning the next and previous link _slots_.
+target : link> ( node -- 'next ) ;
+target : <link ( node -- 'prev ) cell+ ;
+
+\ The cells are stored [ next prev ], so 2@ yields ( prev next )
+\ Make prev come before next and next after previous.
+target : xlink ( prev next -- ) 2dup cell+ !   swap ! ;
+
+\ Enqueue to the back.
+target : +q ( new-node node -- )
+  \ Fetch the previous node, and make it come before the new one.
+  2dup cell+ @ swap xlink ( new-node node )
+  xlink ( ) ;
+
+\ Enqueue to the front.
+target : q+ ( new-node node -- )
+  \ Fetch the next node, make it the next of the new node.
+  2dup @ xlink
+  \ Then make the current node the prev of the new one.
+  swap   xlink ;
+
+\ Makes a node into a circular queue of length 1.
+target : encircle ( node -- ) dup dup 2! ;
+
+\ "Duck" out of the queue - makes the prev and next nodes into neighbours.
+\ Makes this item into its own neighbours.
+\ Note that if this is a queue of 1, it gets linked to itself.
+\ But that's exactly how it was about to go anyway!
+target : duck ( node -- ) dup cell+ @   over @ xlink   encircle ;

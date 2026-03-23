@@ -10,7 +10,7 @@ DCPU_DISK ?= /dev/null
 
 
 ARM_QEMU ?= qemu-system-arm -M versatilepb -m 128M -nographic
-ARM_QEMU_FLAGS ?=
+ARM_QEMU_FLAGS ?= -drive if=sd,format=raw,file=test_arm_sd.img
 #ARM_QEMU_FLAGS ?= -D log.txt -d exec,cpu,int
 ARM_PREFIX ?= arm-none-eabi-
 

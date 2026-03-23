@@ -103,10 +103,11 @@ VARIABLE t/user
 
 : TUSER ( "name" --   X: -- offset ) 1 tcells tuser-allot CONSTANT ;
 
-\ XXX: This list has to be mirrored in shared/tasks.ft
+\ XXX: This list has to be mirrored in shared/user-area.ft
 \ TODO: That sucks and I'm sure I can find a better approach.
 multitasking? [IF]
   TUSER tlink
+  TUSER <tlink
   TUSER tsp
   4   tcells tuser-allot CONSTANT ttask-code
   TUSER tsender

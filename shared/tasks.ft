@@ -81,7 +81,7 @@ target : STOP ( -- )
 
 \ WAKEs a task so it will run. The awakened task goes in the front of the queue,
 \ and this task immediately PAUSEs to let the new one run.
-target : <WAKE> ( task -- ) up@ q+ ;
+target : <WAKE> ( task -- ) link q+ ;
 target : WAKE   ( task -- ) <wake> PAUSE ;
 
 
@@ -242,7 +242,9 @@ target : WAIT ( sem -- )
 \ Dequeues a waiting task and returns it. If there's nothing queued, returns 0.
 \ The returned task is DUCKed out of the waiting queue.
 target : <UNBLOCK> ( 'queue -- waiting-task|0 )
-  dup @ dup link> @ over <> IF \ ( 'q blocked ) more tasks waiting after it!
+  dup @ ?dup 0= IF drop 0 EXIT THEN
+  \ ( 'q blocked ) — at least one task is waiting.
+  dup link> @ over <> IF \ More tasks waiting after it!
     dup link> @    ( 'q blocked next )
     swap duck >R   ( 'q next   R: blocked )
     swap ! R>      ( blocked )
@@ -291,15 +293,29 @@ target : <CLAIM>   ( mutex -- )
       1 swap mutex>nesting +!
     ELSE <WAIT-ON> THEN
   ELSE \ ( mutex ) Nothing currently locking it, so set the task and nesting 1.
-    1 up@ rot mutex>nesting 2!
+    up@ over mutex>task !
+    1 swap mutex>nesting !
   THEN irq+ ;
 ' <CLAIM> IS CLAIM
 
+target : <NESTING--> ( mutex -- new-nesting )
+  mutex>nesting dup @   1- dup >R   ( 'nesting new-nesting   R: new-nesting )
+  swap ! R> ;
+
 target : <RELEASE> ( mutex -- )
   irq-
-  dup mutex>nesting dup @ 1- ( mutex 'nesting nesting' )
-  tuck swap ! ( mutex nesting' ) 0= IF \ Nested drained to 0, so unblock.
-    <unblock> ?dup IF <wake> THEN THEN irq+ ;
+  dup <nesting--> 0= IF \ Nested drained to 0, so unblock. ( mutex )
+    dup <unblock> ?dup IF \ Wake up the next blocked task ( mutex blocked )
+      dup <wake>
+      \ Also claim the MUTEX on its behalf!
+      over mutex>task !
+      1 swap mutex>nesting ! ( )
+    ELSE \ Nobody waiting, so just leave it unblocked.
+      ( mutex ) 0 swap mutex>task !
+    THEN
+  ELSE \ Still nested, just carry on.
+    drop
+  THEN irq+ ;
 ' <RELEASE> IS RELEASE
 
 \ Core locks =================================================================

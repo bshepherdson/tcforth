@@ -196,14 +196,14 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
 \ x=1 for extension field; c=1 for control field (bits 7-0)
 \ RRRR is ROR in steps of 2 for the immediate
 \ i is the immediate
-\ For our purposes here, MSR is I=1, c=1,
 : spec-reg ( spec 2 -- opcode-slice )
   ?spec 0<> $00400000 and ;
 
-: msr, ( imm 1 spec 2 )
+: msr, ( value 0|1 spec 2 )
   spec-reg >R
-  drop dup ?u8   $ff and
-  $0321f000 or R> or +cond asm, ;
+  IF   dup ?u8 $ff and   $0321f000   \ Immediate form: I=1
+  ELSE            $0f and   $0121f000   \ Register form:  I=0
+  THEN or R> or +cond asm, ;
 
 \ MRS only applies for CPSR into a register.
 \ cccc 0001 0S00 1111 dddd 0000 0000 0000

@@ -15,7 +15,7 @@ host definitions
 
 host code-space @
 
-S" test.disk" embed
+S" test_multi.disk" embed
 
 host code-space @
 

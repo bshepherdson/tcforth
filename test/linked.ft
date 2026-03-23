@@ -1,0 +1,35 @@
+\ Doubly-linked lists ==============================================
+CREATE ll1   2 cells allot
+CREATE ll2   2 cells allot
+CREATE ll3   2 cells allot
+CREATE ll4   2 cells allot
+T{ ll1 encircle -> }T
+T{ ll1 2@ -> ll1 ll1 }T
+
+\ Places ll2 after ll1, forming a 2-cycle.
+T{ ll2 ll1 q+ -> }T
+T{ ll1 2@ -> ll2 ll2 }T
+T{ ll2 2@ -> ll1 ll1 }T
+
+\ Placing ll3 after ll1.
+T{ ll3 ll1 q+ -> }T
+T{ ll1 link> @ -> ll3 }T
+T{ ll1 <link @ -> ll2 }T
+T{ ll2 link> @ -> ll1 }T
+T{ ll2 <link @ -> ll3 }T
+T{ ll3 link> @ -> ll2 }T
+T{ ll3 <link @ -> ll1 }T
+
+\ Placing ll4 before ll1.
+T{ ll4 ll1 +q -> }T ( prev next )
+T{ ll1 2@ -> ll4 ll3 }T
+T{ ll3 2@ -> ll1 ll2 }T
+T{ ll2 2@ -> ll3 ll4 }T
+T{ ll4 2@ -> ll2 ll1 }T
+
+\ Duck ll2 out of the queue.
+T{ ll2 duck -> }T
+T{ ll1 2@ -> ll4 ll3 }T
+T{ ll3 2@ -> ll1 ll4 }T
+T{ ll4 2@ -> ll3 ll1 }T
+T{ ll2 2@ -> ll2 ll2 }T

@@ -8,6 +8,7 @@ DCPU_FLAGS ?=
 EMU_FLAGS ?= -hw $(DCPU_HW) $(DCPU_FLAGS)
 DCPU_DISK ?= /dev/null
 
+MULTITASKING_TESTS ?= test/linked.ft
 
 ARM_QEMU ?= qemu-system-arm -M versatilepb -m 128M -nographic
 ARM_QEMU_FLAGS ?= -drive if=sd,format=raw,file=test_arm_sd.img
@@ -52,16 +53,20 @@ run-dcpu16-separate: forth-dcpu16-separate.bin
 run-dcpu16-copying: forth-dcpu16-copying.bin
 	$(EMULATOR) -disk $(DCPU_DISK) $<
 
-test.disk: test/*.ft
+test_single.disk: test/*.ft
 	cat test/harness.ft test/basics.ft test/comparisons.ft test/arithmetic.ft \
-		test/parsing.ft test/rest.ft test/end.ft > test.disk
+		test/parsing.ft test/rest.ft test/end.ft > test_single.disk
 
-test-dcpu16: forth-dcpu16.bin test.disk test.dcs FORCE
-	$(EMULATOR) -turbo -disk test.disk -script test.dcs $<
-test-dcpu16-separate: forth-dcpu16-separate.bin test.disk test.dcs FORCE
-	$(EMULATOR) -turbo -disk test.disk -script test.dcs $<
-test-dcpu16-copying: forth-dcpu16-copying.bin test.disk test.dcs FORCE
-	$(EMULATOR) -turbo -disk test.disk -script test.dcs $<
+test_multi.disk: test/*.ft
+	cat test/harness.ft test/basics.ft test/comparisons.ft test/arithmetic.ft \
+		test/parsing.ft test/rest.ft $(MULTITASKING_TESTS) test/end.ft > test_multi.disk
+
+test-dcpu16: forth-dcpu16.bin test_multi.disk test.dcs FORCE
+	$(EMULATOR) -turbo -disk test_multi.disk -script test.dcs $<
+test-dcpu16-separate: forth-dcpu16-separate.bin test_multi.disk test.dcs FORCE
+	$(EMULATOR) -turbo -disk test_multi.disk -script test.dcs $<
+test-dcpu16-copying: forth-dcpu16-copying.bin test_multi.disk test.dcs FORCE
+	$(EMULATOR) -turbo -disk test_multi.disk -script test.dcs $<
 
 # Risque-16 ==================================================================
 # My RISC-style, Thumb-inspired "competitor" in the DCPU cinematic universe.
@@ -94,12 +99,12 @@ run-rq16-separate: forth-rq16-separate.bin
 run-rq16-copying: forth-rq16-copying.bin
 	$(EMULATOR) -arch rq -disk $(DCPU_DISK) $<
 
-test-rq16: forth-rq16.bin test.disk test.dcs FORCE
-	$(EMULATOR) -arch rq -turbo -disk test.disk -script test.dcs $<
-test-rq16-separate: forth-rq16-separate.bin test.disk test.dcs FORCE
-	$(EMULATOR) -arch rq -turbo -disk test.disk -script test.dcs $<
-test-rq16-copying: forth-rq16-copying.bin test.disk test.dcs FORCE
-	$(EMULATOR) -arch rq -turbo -disk test.disk -script test.dcs $<
+test-rq16: forth-rq16.bin test_single.disk test.dcs FORCE
+	$(EMULATOR) -arch rq -turbo -disk test_single.disk -script test.dcs $<
+test-rq16-separate: forth-rq16-separate.bin test_single.disk test.dcs FORCE
+	$(EMULATOR) -arch rq -turbo -disk test_single.disk -script test.dcs $<
+test-rq16-copying: forth-rq16-copying.bin test_single.disk test.dcs FORCE
+	$(EMULATOR) -arch rq -turbo -disk test_single.disk -script test.dcs $<
 
 # Mocha 86k ==================================================================
 # My 32-bit big brother to the DCPU-16.
@@ -112,8 +117,8 @@ mocha86k: forth-mocha86k.bin
 run-mocha86k: forth-mocha86k.bin
 	$(EMULATOR) $(EMU_FLAGS) -arch mocha -disk $(DCPU_DISK) forth-mocha86k.bin
 
-test-mocha86k: forth-mocha86k.bin test.disk test-long.dcs FORCE
-	$(EMULATOR) -arch mocha -turbo -disk test.disk -script test-long.dcs \
+test-mocha86k: forth-mocha86k.bin test_single.disk test-long.dcs FORCE
+	$(EMULATOR) -arch mocha -turbo -disk test_single.disk -script test-long.dcs \
 		forth-mocha86k.bin
 
 # ARMv7 32-bit (bare metal) ==================================================
@@ -155,11 +160,11 @@ forth-arm-copying-tests.bin: host/*.ft arm/*.ft shared/*.ft test/*.ft
 		arm/system.ft -e 'host :noname S" $@" ; IS tcforth-output' \
 		arm/embedding.ft arm/finalize.ft -e 'bye'
 
-test-arm: forth-arm-tests.bin test.disk FORCE
+test-arm: forth-arm-tests.bin test_multi.disk FORCE
 	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel $<
-test-arm-separate: forth-arm-separate-tests.bin test.disk FORCE
+test-arm-separate: forth-arm-separate-tests.bin test_multi.disk FORCE
 	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel $<
-test-arm-copying: forth-arm-copying-tests.bin test.disk FORCE
+test-arm-copying: forth-arm-copying-tests.bin test_multi.disk FORCE
 	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel $<
 
 # Commodore 64 ===============================================================
@@ -189,6 +194,6 @@ test: test-dcpu16 test-dcpu16-separate test-dcpu16-copying \
 	test-c64 test-mocha86k FORCE
 
 clean: FORCE
-	rm -f *.bin forth-c64.prg test.disk serial.in serial.out
+	rm -f *.bin forth-c64.prg test_single.disk test_multi.disk serial.in serial.out
 
 FORCE:

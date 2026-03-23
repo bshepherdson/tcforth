@@ -1,17 +1,23 @@
+REQUIRE preamble.ft
+default-spaces!
+REQUIRE assembler.ft
+
 VARIABLE start-depth
+
+4 CONSTANT instr-width \ TODO: This should probably just be removed?
 
 VARIABLE error?
 error? off
 
 : error error? on   type source type cr ;
 
-: T{ 0 there !   depth start-depth ! ;
+: T{ 0 code-space !   depth start-depth ! ;
 
 : -> depth start-depth @ <> IF S" Stack not clean during assembly " error THEN ;
 
 : }T depth start-depth @ <= IF S" Empty expectation " error THEN
-  there @ BEGIN instr-width    - dup 0>= WHILE ( ... exp tgt-addr )
-    tuck t@ <> IF S" Mismatch " error THEN ( ... tgt-addr )
+  code-space @ BEGIN instr-width    - dup 0>= WHILE ( ... exp tgt-addr )
+    tuck tcode@ <> IF S" Mismatch " error THEN ( ... tgt-addr )
   REPEAT drop
   depth start-depth @ swap - IF S" Expectation longer than actual " error THEN ;
 
@@ -99,6 +105,15 @@ T{ r1 r2 r4 ne? swp,  -> $11014092 }T
 T{ r1 r2 r4     swpb, -> $e1414092 }T
 T{ r1 r2 r4 ne? swpb, -> $11414092 }T
 
+
+\ MSR and MRS ==================================================================
+T{ cpsr     r0 mrs, -> $e10f0000 }T
+T{ cpsr     r3 mrs, -> $e10f3000 }T
+T{ spsr     r5 mrs, -> $e14f5000 }T
+T{ $c0 # cpsr msr, -> $e321f0c0 }T
+T{  r0   cpsr msr, -> $e121f000 }T
+T{  r3   cpsr msr, -> $e121f003 }T
+T{  r5   spsr msr, -> $e161f005 }T
 
 : tests-done cr error? @ IF ." Tests failed!" ELSE ." Tests complete" THEN cr ;
 tests-done bye

@@ -18,6 +18,10 @@ target definitions
   60 *    3600 /
   0 swap   3 dev-timer @   >device ;
 
+
+:noname 60 HZ ; IS init-clock
+
+
 : clock-int! ( msg -- )
   \ Want A=2 (SET_INT), with B holding the message. 0 disables.
   2 swap   3 dev-timer @   >device ;

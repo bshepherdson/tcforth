@@ -26,9 +26,33 @@ host REQUIRE ../../shared/basics.ft
 host REQUIRE branches.ft               \ Target-specific branching helpers.
 host REQUIRE ../../shared/control-structures.ft
 host REQUIRE ../../shared/exceptions.ft
-\ host REQUIRE model-target.ft         \ No target compiler, no target model
+\ There's no machine-specific target model w/o a target, but the shared
+\ model-target contains a bunch of "if the target doesn't define FOO, add it"
+host REQUIRE ../../shared/model-target.ft
 host REQUIRE ../perf.ft
 
+host REQUIRE ../../shared/input.ft
+host REQUIRE ../../shared/core2.ft
+host REQUIRE ../../shared/user-area.ft
+host REQUIRE ../../shared/refill.ft
+host REQUIRE ../lib.ft                    \ Division etc. helpers
+host REQUIRE ../hardware.ft               \ Hardware handling
+host REQUIRE ../../shared/output.ft
+host REQUIRE ../../shared/error-messages.ft
+
+host structures?   [IF] REQUIRE ../../shared/structs.ft host [THEN]
+host multitasking? [IF] REQUIRE ../../shared/tasks.ft   host [THEN]
+
+host REQUIRE ../screen.ft
+
+host debugging?    [IF]
+  target definitions   4 CONSTANT dump-width
+  host REQUIRE ../../shared/debugging.ft
+  host REQUIRE ../debugging.ft
+host [THEN]
+
+host REQUIRE ../intro.ft                  \ DCPU-16/Risque-16 HW init; intro msg
+host REQUIRE ../../shared/init.ft         \ Shared init code.
 
 \ XXX: START HERE: Keep progressing down this list, marking compile-only words
 \ as :F and checking that it still builds.
@@ -36,26 +60,3 @@ host REQUIRE ../perf.ft
 \ keyboard-input, keyboard-output, has-dictionary, and other config flags.
 \ Perhaps split up that file into three - common utils, input, sources and
 \ dictionary?
-
-\ host REQUIRE ../../shared/input.ft
-\ host REQUIRE ../../shared/core2.ft
-\ host REQUIRE ../../shared/user-area.ft
-\ host REQUIRE ../../shared/refill.ft
-\ host REQUIRE ../lib.ft                    \ Division etc. helpers
-\ host REQUIRE ../hardware.ft               \ Hardware handling
-\ host REQUIRE ../../shared/output.ft
-\ host REQUIRE ../../shared/error-messages.ft
-\
-\ host structures?   [IF] REQUIRE ../../shared/structs.ft host [THEN]
-\ host multitasking? [IF] REQUIRE ../../shared/tasks.ft   host [THEN]
-\
-\ host REQUIRE ../screen.ft
-\
-\ host debugging?    [IF]
-\   target definitions   4 CONSTANT dump-width
-\   host REQUIRE ../../shared/debugging.ft
-\   host REQUIRE ../debugging.ft
-\ host [THEN]
-\
-\ host REQUIRE ../intro.ft                  \ DCPU-16/Risque-16 HW init; intro msg
-\ host REQUIRE ../../shared/init.ft         \ Shared init code.

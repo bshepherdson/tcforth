@@ -88,3 +88,6 @@ target
   \ Mask is __ZYXC__ _______a = $3c01.
   $11 $3c01 dev-timer @ >device   ( days hours:mins secs millis )
   swap 2swap swap ;
+
+DEFER init-clock
+' noop IS init-clock

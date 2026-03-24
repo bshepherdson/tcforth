@@ -8,7 +8,7 @@ target definitions
 \ But there's a pointer to the code field if the code and name spaces are
 \ separated.
 \ link | len | name... | padding... | (slot)
-target : (CREATE) ( "name" -- )
+target :F (CREATE) ( "name" -- )
     here 'latest !
     parse-name                   ( c-addr u )
     2dup dict-hash >bucket dup @ ( c-addr u bucket prev-nt )
@@ -24,7 +24,7 @@ host definitions
 : CREATE ( "name" --    X: -- addr )   (tcreate) ,dovar t,pfa ;
 target definitions
 
-target : CREATE ( "name" --     X: -- addr )
+target :F CREATE ( "name" --     X: -- addr )
     (CREATE) [ host dovar tliteral target ] ,cf ,pfa ;
   host acts: create ;
 
@@ -94,7 +94,7 @@ target definitions
 \ LIT mirror-CONSTANT | (DOES>) | EXIT on the host.
 \ Use the acting? and doing? flags in HOST ; to define the interp-xt (current
 \ :noname) and target-does-xt (about to be started) actions.
-target : DOES> ( -- )
+target :F DOES> ( -- )
     [ host TDOES, target ]
     ; IMMEDIATE
   host acts: does,   'mirror @ mirror>t-does ! ; IMPERATIVE
@@ -134,10 +134,7 @@ target : VARIABLE ( "name" --     X: -- addr ) CREATE 0 , ;
 target : CONSTANT ( x "name" --    X: -- x ) CREATE , DOES> @ ;
   host acts: create tdata, DOES> tdata@ ;
 
-target : VALUE ( x "name" --    X: -- x ) CREATE , DOES> @ ;
-  host acts: create tdata, DOES> tdata@ ;
-
-target : DEFER ( "name" --    X: ... -- ... ) CREATE ['] noop , DOES> @ execute ;
+target :F DEFER ( "name" --    X: ... -- ... ) CREATE ['] noop , DOES> @ execute ;
   host acts: create [T'] noop tdata, DOES> tdata@ execute ;
 
 target : DEFER@ ( xt1 -- xt2 ) >body @ ;
@@ -146,22 +143,22 @@ target : DEFER@ ( xt1 -- xt2 ) >body @ ;
 target : DEFER! ( xt1 xt2 -- ) >body ! ;
   host acts: t>body tdata! ;
 
-target : IS ( I: xt "name" --    C: "name" --   X: xt -- )
+target :F IS ( I: xt "name" --    C: "name" --   X: xt -- )
     state @ IF
       ' postpone literal postpone defer! ELSE ' defer! THEN ; IMMEDIATE
   host acts:
     T' state @ IF tliteral [tcompile] defer! ELSE t>body tdata! THEN ; IMPERATIVE-BOTH
 
-target : ACTION-OF ( "name" -- xt )
+target :F ACTION-OF ( "name" -- xt )
   state @ IF ' postpone literal defer@ ELSE ' defer@ THEN ; IMMEDIATE
 
-target : TO ( I: x "name" --    C: "name" --   X: x -- )
+target :F TO ( I: x "name" --    C: "name" --   X: x -- )
     ' >body   state @ IF postpone LITERAL postpone ! ELSE ! THEN ; IMMEDIATE
   host acts:
     state @ IF T' t>body tliteral [tcompile] ! ELSE
       T' t>body tdata! THEN ; IMPERATIVE-BOTH
 
-target : ['] ( C: "name" --    X: -- xt )
+target :F ['] ( C: "name" --    X: -- xt )
     parse-name (find) drop postpone literal ; IMMEDIATE
   host acts: T' tliteral ; IMPERATIVE
 
@@ -185,7 +182,7 @@ target : ['] ( C: "name" --    X: -- xt )
 
 target VARIABLE (loop-top)
 
-target : DO ( m i -- )
+target :F DO ( m i -- )
     ['] (DO) compile,   1 postpone literal
     0BRANCH,                        ( C: new-loop-top )
     (loop-top) @ swap (loop-top) !  ( C: old-jump-addr )
@@ -231,7 +228,7 @@ host definitions
 
 target definitions
 
-target : +LOOP ( step --   C: old-jump-addr )
+target :F +LOOP ( step --   C: old-jump-addr )
     ['] (loop-end) compile,   0branch, ( old-top bottom )
     (loop-top) @ dest>post   ( old-top bottom top-target ) swap !dest ( old-top )
     \ End of the loop, start of the postlude
@@ -241,7 +238,7 @@ target : +LOOP ( step --   C: old-jump-addr )
     ['] unloop compile, ; IMMEDIATE
   host acts: (+LOOP) ; IMPERATIVE
 
-target : LOOP   1 postpone literal   postpone +LOOP ; IMMEDIATE
+target :F LOOP   1 postpone literal   postpone +LOOP ; IMMEDIATE
   host acts: 1 tliteral   (+LOOP) ; IMPERATIVE
 
 \ LEAVE compiles code that will jump out of the innermost loop.
@@ -249,7 +246,7 @@ target : LOOP   1 postpone literal   postpone +LOOP ; IMMEDIATE
 \ to the 0branch itself, pushes a 0 so it'll branch, and branches there.
 \ Note that the UNLOOP is after the top branch's target, so it'll handle
 \ removing those parameters.
-target : LEAVE ( --    R: loop-sys --   C: -- )
+target :F LEAVE ( --    R: loop-sys --   C: -- )
     0   postpone literal
     (loop-top) @ dest>branch   branch, !dest ; IMMEDIATE
   host acts:
@@ -268,7 +265,7 @@ target : MAX ( x y -- max ) 2dup < IF swap THEN drop ;
 
 \ Recurse is tricky. It's an immediate word that uses latest at runtime.
 \ On the host, it's similar, since HOST LATEST exists.
-target : RECURSE ( -- ) latest >cfa compile, ; IMMEDIATE
+target :F RECURSE ( -- ) latest >cfa compile, ; IMMEDIATE
   host acts: latest tname>int tcompile, ; IMPERATIVE
 
 target : PICK ( ... n -- ... nth ) 1+ cells sp@ + @ ;
@@ -302,40 +299,41 @@ target : ]T ( -- ) termlock release ;
 \ : is   (CREATE) ,docol smudge ] EXIT
 \ ; is   LIT EXIT   COMPILE,   reveal   postpone [   EXIT
 
-target : SMUDGE ( -- )
+target :F SMUDGE ( -- )
   latest cell+ dup c@
   [ host f_hidden tliteral target ] or
   swap c! ;
 
-target : REVEAL ( -- )
+target :F REVEAL ( -- )
   latest cell+ dup c@
   [ host f_hidden invert tliteral target ] and
   swap c! ;
 
 
-host code-space @ \ Save the old dp
-T' :
-( old-dp t-xt ) code-space ! \ Pretend we're compiling there.
-,docol
-T' (CREATE) tcompile,
-T' ,docol   tcompile,
-T' smudge   tcompile,
-T' ]        tcompile,
-exit,
-\ That's 6 cells with a 1-cell DOCOL.
 
+host has-dictionary? [IF]
+  code-space @ \ Save the old dp
+  T' :
+  ( old-dp t-xt ) code-space ! \ Pretend we're compiling there.
+  ,docol
+  T' (CREATE) tcompile,
+  T' ,docol   tcompile,
+  T' smudge   tcompile,
+  T' ]        tcompile,
+  exit,
+  \ That's 6 cells with a 1-cell DOCOL.
 
-T' ;
-( old-dp t-xt ) code-space !    \ Pretend we're compiling at semicolon
-,docol
-EXIT-compile,
-T' reveal   tcompile,
-T' [        tcompile,
-exit,
-\ That's 7 cells with a 1-cell DOCOL.
+  T' ;
+  ( old-dp t-xt ) code-space !    \ Pretend we're compiling at semicolon
+  ,docol
+  EXIT-compile,
+  T' reveal   tcompile,
+  T' [        tcompile,
+  exit,
+  \ That's 7 cells with a 1-cell DOCOL.
 
-( old-dp ) code-space !
-
+  ( old-dp ) code-space !
+host [THEN]
 
 \ Signed long division =======================================================
 target definitions
@@ -372,5 +370,5 @@ target : M*    ( n1 n2 -- n3 )    >R S>D R> UDM* D>S ;
 target : */MOD ( n1 n2 n3 -- n4 ) >R M* R> sm/rem ;
 target : */    ( n1 n2 n3 -- n4 ) */MOD nip ;
 
-target : :noname ( C: -- xt ) here ,docol postpone ] ;
+target :F :noname ( C: -- xt ) here ,docol postpone ] ;
   host acts: code-space @ ,docol   postpone target meta] ;

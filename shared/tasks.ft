@@ -41,7 +41,7 @@ target : newtask* ( u-data u-return -- task )
 
 \ Creates a new task with stacksize address units for *each* of its stacks.
 target : newtask ( stacksize -- task ) dup newtask* ;
-target : task ( stacksize "name" --    X: -- task ) newtask CONSTANT ;
+target :F task ( stacksize "name" --    X: -- task ) newtask CONSTANT ;
 
 \ Returns the *data* stack size of the current task.
 target : stacksize ( -- u ) /stack @ ;
@@ -168,7 +168,7 @@ target : (ACTIVATE) ( task -- )
   R@ [ host /exit tliteral target ] + swap initiate ;
 
 
-target : ACTIVATE ( C: colon-sys1 -- colon-sys2    X: task -- )
+target :F ACTIVATE ( C: colon-sys1 -- colon-sys2    X: task -- )
     \ NOTE: Runs during a : definition likes DOES> !
     ['] (activate) compile,
     [ host EXIT-compile, target ]
@@ -225,7 +225,7 @@ target : TASKS ( -- )
 
 \ NOTE: It's important that semaphores and mutexes both have their wait queues
 \ in the first slot.
-target : SEMAPHORE ( "name" --    X: -- semaphore ) CREATE 0 , 1 , DOES> ;
+target :F SEMAPHORE ( "name" --    X: -- semaphore ) CREATE 0 , 1 , DOES> ;
   host acts: CREATE host 0 tdata, 1 tdata, DOES> ;
 
 target : <WAIT-ON> ( 'queue -- )

@@ -11,8 +11,8 @@
 \   file as the new source, and INTERPRET it.
 \ 'SOURCE 'SOURCE-ID TIB >IN are already defined in the kernel.
 target definitions
-target : SOURCE    'SOURCE    2@ ;
-target : SOURCE-ID 'SOURCE-ID  @ ;
+target :F SOURCE    'SOURCE    2@ ;
+target :F SOURCE-ID 'SOURCE-ID  @ ;
 
 target : >UPPER ( ch1 -- ch2 )
   dup [ host 'a' tliteral 'z' 1+ tliteral target ] within IF 32 - THEN ;
@@ -29,27 +29,27 @@ target : istr= ( ca1 u1 ca2 u2 -- ? )
   REPEAT 2drop -1 ;
 host [THEN]
 
-host <T'> <find> 0= [IF]
+host <T'> <find> 0=   has-dictionary? and [IF]
 \ Implementing <FIND> in code gave a 2x speedup on DCPU-16.
-target : <FIND> ( c-addr u nt -- nt|0 )
+target :F <FIND> ( c-addr u nt -- nt|0 )
   BEGIN dup WHILE
     dup >R name>string   2over istr= IF 2drop R> EXIT THEN
     R> @
   REPEAT ( c-addr u 0 ) 2drop drop 0 ;
 host [THEN]
 
-target : DICT-HASH ( c-addr u -- index )
+target :F DICT-HASH ( c-addr u -- index )
   [ host dict-hash-len-mask  tliteral target ] and
   [ host /dict-hash-char 0 [DO] T' 2* tcompile, [LOOP] target ]
   swap c@
   [ host dict-hash-char-mask tliteral target ] and or ;
 
-target : >BUCKET ( index -- 'nt )
+target :F >BUCKET ( index -- 'nt )
   cells [ host dict-buckets tliteral target ] + ;
 
 \ Internal formulation of FIND with a stacked string, not a counted string.
 \ Returns 1 for IMMEDIATE words, -1 for regular words, 0 for not found.
-target : (FIND) ( c-addr u -- 0 | xt 1 | xt -1 )
+target :F (FIND) ( c-addr u -- 0 | xt 1 | xt -1 )
   2dup dict-hash >bucket @   <FIND> ( nt|0 )
   dup IF \ Found something! ( nt )
     dup >cfa swap        ( xt nt )
@@ -57,13 +57,13 @@ target : (FIND) ( c-addr u -- 0 | xt 1 | xt -1 )
     ( xt immed? ) IF 1 ELSE -1 THEN
   THEN ;
 
-target : FIND ( c-addr -- c-addr 0 | xt 1 | xt -1 )
+target :F FIND ( c-addr -- c-addr 0 | xt 1 | xt -1 )
   dup >R   count (find)   dup IF R> drop ELSE drop R> 0 THEN ;
 
 
 target : /STRING ( c-addr u n -- c-addr2 u2 ) tuck - >R   + R> ;
 
-target : PARSE ( delim "...<delim>" -- c-addr u )
+target :F PARSE ( delim "...<delim>" -- c-addr u )
   source >IN @ /string   over >R   rot >R ( c-addr u   R: start delim )
   BEGIN dup WHILE
     over c@ R@ = IF \ End of string
@@ -76,7 +76,7 @@ target : PARSE ( delim "...<delim>" -- c-addr u )
   1000 >IN +! R> R> 2drop ;
 
 host <T'> skip-spaces 0= [IF]
-target : SKIP-SPACES ( -- )
+target :F SKIP-SPACES ( -- )
   BEGIN source >in @ /string WHILE \ Not empty  ( c-addr )
     c@ bl <> IF EXIT THEN
     1 >IN +!
@@ -84,14 +84,14 @@ target : SKIP-SPACES ( -- )
 host [THEN]
 
 host <T'> skip-non-spaces 0= [IF]
-target : SKIP-NON-SPACES ( -- )
+target :F SKIP-NON-SPACES ( -- )
   BEGIN source >in @ /string WHILE \ Not empty  ( c-addr )
     c@ bl = IF EXIT THEN
     1 >IN +!
   REPEAT drop ;
 host [THEN]
 
-target : PARSE-NAME ( "<spaces>name<space>" -- c-addr u )
+target :F PARSE-NAME ( "<spaces>name<space>" -- c-addr u )
   skip-spaces
   source drop     >IN @ ( src start )
   skip-non-spaces >IN @ ( src start end )
@@ -102,20 +102,23 @@ target : PARSE-NAME ( "<spaces>name<space>" -- c-addr u )
   >R + R> ;
 
 
-target : ' ( "name" -- xt ) parse-name (find) 0= IF err-undefined throw THEN ;
+target :F ' ( "name" -- xt ) parse-name (find) 0= IF err-undefined throw THEN ;
   host acts: T' ;
 
-target : POSTPONE ( "name" -- )
+target :F POSTPONE ( "name" -- )
   parse-name (find)
   1 = IF compile, ELSE
     \ Regular word
     [ host t' literal tcompile, target ] \ Compiling the xt as a literal
     [ host t' compile, tliteral target ] compile, \ And compiling compile,
   THEN ; IMMEDIATE
-  host acts: (T') dup mirror>txt @   swap mirror-immediate? IF
-    tcompile, ELSE tliteral   [T'] compile, tcompile, THEN ; IMPERATIVE
+  host acts: (T') dup mirror>txt @   swap mirror-immediate? IF tcompile, ELSE
+    [ has-dictionary? [IF] ]
+      tliteral   [T'] compile, tcompile,
+    [ [ELSE] ] drop [ [THEN] ]
+  THEN ; IMPERATIVE
 
-target : ['] ( "name" --    X: -- xt )
+target :F ['] ( "name" --    X: -- xt )
     ' postpone literal ; IMMEDIATE
   host acts: T' tliteral ; IMPERATIVE
 
@@ -172,7 +175,7 @@ target : ?NUMBER ( c-addr u -- n true | false )
 host presume .
 
 \ Interprets a single parsed word or number.
-target : INTERP1   ( c-addr u -- )
+target :F INTERP1   ( c-addr u -- )
   2dup last-parse 2!
   2dup (find) ?dup IF ( c-addr u xt 1|-1 )
     2swap 2drop ( xt 1|-1 )
@@ -192,7 +195,7 @@ target : INTERP1   ( c-addr u -- )
   depth 0< IF err-underflow throw THEN ;
 
 \ Fundamental single-line interpreter loop.
-target : INTERPRET ( -- )
+target :F INTERPRET ( -- )
   BEGIN parse-name dup WHILE interp1 REPEAT 2drop ;
 
 host presume ACCEPT presume EMIT presume REVERSE presume CR

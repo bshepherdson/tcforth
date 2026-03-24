@@ -11,15 +11,15 @@ host keyboard-input? [IF]
 host [ELSE]
   \ Empty target versions, but they need to exist so we can metacompile comments
   \ in TARGET mode.
-  target : \   ; IMMEDIATE
+  target :F \   ; IMMEDIATE
     host acts: native postpone \ host ; IMPERATIVE-BOTH
 
-  target : (   ; IMMEDIATE
+  target :F (   ; IMMEDIATE
     host acts: native 41 parse 2drop host ; IMPERATIVE-BOTH
 host [THEN]
 
 
-host keyboard-input? [IF]
+host has-dictionary? [IF]
 target : ABORTED ( -- )
   R> rp0 @ rp! >R \ Drops everything but ABORTED's own return
   [ host T' [ tcompile, target ]
@@ -50,10 +50,13 @@ target : QUIT ( -- )
 host [THEN]
 
 
-target : INIT-DATA-PTRS ( -- )
-  [ host latest0 tliteral target ] @ [ host var_latest tliteral target ] !
-  [ host dp0     tliteral target ] @ [ host var_dp     tliteral target ] ! ;
-
+host has-dictionary? [IF]
+  target : INIT-DATA-PTRS ( -- )
+    [ host latest0 tliteral target ] @ [ host var_latest tliteral target ] !
+    [ host dp0     tliteral target ] @ [ host var_dp     tliteral target ] ! ;
+host [ELSE]
+  target :F INIT-DATA-PTRS ( -- ) ;
+host [THEN]
 
 host data-indirect? [IF]
 \ Copy initialized data ======================================================

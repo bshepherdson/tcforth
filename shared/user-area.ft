@@ -10,10 +10,10 @@ target definitions
 \ Size of the user area. User updatable via UALLOT
 host t/user @   target VALUE /USER
 
-target : UALLOT ( delta -- offset ) /USER   tuck +   TO /USER ;
+target :F UALLOT ( delta -- offset ) /USER   tuck +   TO /USER ;
   host acts: t/user @   tuck t/user +! ;
 
-target : USER ( "name" --    X: -- addr )
+target :F USER ( "name" --    X: -- addr )
     CREATE   1 cells uallot ,   DOES> @ up@ + ;
   host acts: CREATE 1 tcells uallot ." USER offset " dup hex. ." at " data-space @ hex. cr tdata, ; \ No DOES> - can't call these on the host.
 

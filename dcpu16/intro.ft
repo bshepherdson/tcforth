@@ -1,11 +1,17 @@
 target definitions
 
-:noname ( -- ) white fg! light blue bg!
+host keyboard-output? [IF]
+  target
   \  01234567890123456789012345678901
-  ."        TC-FORTH version 7       "
-  default-colours cr ;
-'.intro !
+  S"        TC-FORTH version 7       " STRING header-str
 
-: init-hardware ( -- ) init-devices init-lem init-serial   60 hz ;
+  :noname ( -- ) white fg! blue ish bg!
+    header-str type
+    default-colours cr ;
+  '.intro !
 
-:noname ( ch -- ch ) $7f and (printable) ; IS printable
+  :noname ( ch -- ch ) $7f and (printable) ; IS printable
+host [THEN]
+target
+
+: init-hardware ( -- ) 10 log init-devices 11 log init-lem 12 log init-serial 13 log init-clock ;

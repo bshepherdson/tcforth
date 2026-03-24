@@ -14,13 +14,13 @@ target : BASE ( -- addr ) [ host tbase tliteral target ] up@ + ;
 \ on non-interactive targets.
 
 host data-indirect? [IF]
-  target : ,PFA ( -- ) here cell+ , ;
+  target :F ,PFA ( -- ) here cell+ , ;
 host [ELSE]
-  target : ,PFA ( -- ) ;
+  target :F ,PFA ( -- ) ;
 host [THEN]
 
 \ If LITERAL was not defined, assume we want the standard non-STC version.
-host <T'> LITERAL 0= [IF]
+host <T'> LITERAL 0=   has-dictionary? and [IF]
   \ Error: non-threaded code (eg. STC) should define a custom LITERAL!
   threaded? 0= [IF] 95 throw [THEN]
   target : LITERAL ( C: x --    X: -- x )
@@ -46,27 +46,27 @@ host [THEN]
 
 
 \ Compiling string-likes =====================================================
-target : ,STRING ( c-addr u -- )
+target :F ,STRING ( c-addr u -- )
   here char+ swap   ( src dst u )
   dup c,            \ Compile the length
   dup chars allot   \ Make space for the string
   move align ;      \ Copy the string and realign DP.
 
-target : ,DOSTRING ( c-addr u -- )
+target :F ,DOSTRING ( c-addr u -- )
   [ host dostring tliteral target ] compile, \ Compile the codeword
   ,string ;
 
-target : NAME>STRING ( nt -- c-addr u )
+target :F NAME>STRING ( nt -- c-addr u )
   cell+ dup char+ swap c@ [ host mask_len tliteral target ] and ;
 
-target : >CFA ( nt -- xt )
+target :F >CFA ( nt -- xt )
   name>string + aligned
   [ host names-indirect? [IF] target ] @ [ host [THEN] target ] ;
 
 host names-indirect? [IF]
-target : /NAME-FIELD ( -- u ) 1 cells ;
+target :F /NAME-FIELD ( -- u ) 1 cells ;
 host [ELSE]
-target : /NAME-FIELD ( -- u ) 0 ;
+target :F /NAME-FIELD ( -- u ) 0 ;
 host [THEN]
 
 \ TODO: Set the /codeword in all targets!
@@ -91,12 +91,14 @@ host [THEN]
 \ It's assuming the next chunk before the xt is 1 cell wide, but that only works
 \ in ITC and DTC. In STC and TTC it doesn't work - we need a config field for it.
 \ Probably /EXIT, and defaulting to a cell.
-target : (DOES>)
+target :F (DOES>)
   R@   [ host /exit tliteral target ] +    latest >cfa   !cf ;
 
 host definitions
-T' (DOES>) '(DOES>) !
-<T'> EXIT [IF] T' EXIT   'EXIT ! [THEN]
+has-dictionary? [IF]
+  T' (DOES>) '(DOES>) !
+  <T'> EXIT [IF] T' EXIT   'EXIT ! [THEN]
+[THEN]
 
 
 \ Fallback Forth versions of lib code ========================================

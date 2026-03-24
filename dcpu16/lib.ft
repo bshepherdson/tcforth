@@ -1,4 +1,5 @@
 \ Some extra Target words that supplement the core library.
 target definitions
 
+\ TODO: I think this is already in code on DCPU and possibly other machines?
 : /MOD ( a b -- r q ) 2dup mod   -rot / ;

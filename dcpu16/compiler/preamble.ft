@@ -30,7 +30,8 @@ REQUIRE ../../host/spaces.ft
 ' <be16@> IS <tc@*>
 ' <be16!> IS <tc!*>
 
-rom-application! headless!
+rom-application!
+headless!
 split-spaces!
 
 $0000 code-space ORG!   $0000 code-space space>offset !

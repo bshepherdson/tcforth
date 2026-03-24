@@ -1,5 +1,7 @@
 target definitions
 
+host keyboard-output? [IF]
+
 \ Basic output helpers =======================================================
 : SPACE  ( -- )      bl emit ;
 : PADDED ( u ch -- ) over 0> IF swap 0 DO dup emit LOOP 0 THEN 2drop ;
@@ -68,3 +70,5 @@ VARIABLE (.)
 : HEX.S ( -- ) ['] hex. (.) ! (.S) ;
 
 : ? ( a-addr -- ) @ . ;
+
+host [THEN]

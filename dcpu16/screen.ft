@@ -16,22 +16,27 @@ CREATE vram   /vram allot align
 
 VARIABLE (colours)
 
-VARIABLE (light)
-: LIGHT   8 (light) ! ;
-: COLOUR ( c "name" --   X: -- c ) create c, DOES> c@ (light) @ +   0 (light) ! ;
-  host acts: create tdata-c, DOES> tdata-c@ ;
+\ XXX: I need to reread the metacompilation articles from Forth Dimensions.
+\ I feel like it should be possible for a word like COLOUR to skip the
+\ HOST ACTS: and HOST DOES> since all the words in its body are supported on
+\ the host side.
+\ But for now I'll just write the basic function.
+
+:F ISH    ( c -- c' ) 8 + ;
+
+$0 CONSTANT black
+$1 CONSTANT blue
+$2 CONSTANT green
+$3 CONSTANT cyan
+$4 CONSTANT red
+$5 CONSTANT pink
+$6 CONSTANT yellow
+$7 CONSTANT grey
+
+grey host ." Ran grey, got " . cr
 target
 
-$0 COLOUR black
-$1 COLOUR blue
-$2 COLOUR green
-$3 COLOUR cyan
-$4 COLOUR red
-$5 COLOUR pink
-$6 COLOUR yellow
-$7 COLOUR grey
-
-: white ( -- colour ) light grey ;
+: white ( -- colour ) grey ish ;
 
 \ Character values ===========================================================
 \ These words manipulate screen character words on the stack, not in memory.

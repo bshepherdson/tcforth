@@ -40,3 +40,14 @@ CONSTANT tm-flags
   pic vic-intenable +   dup @   pic-timer1 or   swap ! ;
 
 : ticks ( -- addr ) [ host 'ticks tcode@ tliteral target ] ;
+
+: MS ( u-ms -- )
+  \ TODO: This is rolling the dice on overflow. On the other hand, a 32-bit tick
+  \ counter updating at 125Hz will roll over every 4772 hours or so, which seems
+  \ fine. If this OS every reaches 198 days of uptime, I'll embrace this bug!
+  \ irq- ticks @ 1000000000 > IF ticks OFF THEN irq+
+
+  \ The ARM clocks are set up to tick at 125Hz, so each tick is worth 8ms.
+  \ We want to wait *at least* that long, so round up.
+  ticks @ >R \ Save the starting value.
+  7 + 8 / BEGIN pause   ticks @ R@ -   over U>= UNTIL R> 2drop ;

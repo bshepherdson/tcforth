@@ -6,3 +6,6 @@ true   TO little-endian?
 true   TO threaded?
 true   TO multitasking?
 true   TO tos-in-reg?
+
+\ The defaults for e.g. alignment are fine - they default to cell-size.
+\ Likewise, codewords and EXIT calls are cell-sized.

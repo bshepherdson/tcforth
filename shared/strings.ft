@@ -22,19 +22,19 @@ target :F S" ( "ccc"" --     X: -- c-addr u )
 
 \ Compiles an interpretation-time string as r/o-data into the target.
 \ Defines a new word that works like a 2CONSTANT, ( -- c-addr u ).
-target :F STRING ( c-addr u "name" --    X: -- c-addr u )
-    CREATE dup ,   here swap   dup allot   move   align
-    DOES> dup cell+ swap @ ;
-  host acts:
-    \ We don't want to use CREATE, it'll put the string in the writable data.
-    \ Instead, directly compile the string with tcode, and then put its address
-    \ and length into a 2CONSTANT.
-    ." Top of STRING (HOST) "
-    dup >R code-space @ .s cr >R
-    0 ?DO ( c-addr ) dup i chars + c@ tcode-c, LOOP
-    drop R> R> ( 'contents u )
-    dup tchars tcode-allot   tcode-align
-    (TCREATE) ,docol .s cr swap tliteral tliteral exit, ;
+\ target :F STRING ( c-addr u "name" --    X: -- c-addr u )
+\     CREATE dup ,   here swap   dup allot   move   align
+\     DOES> dup cell+ swap @ ;
+\   host acts:
+\     \ We don't want to use CREATE, it'll put the string in the writable data.
+\     \ Instead, directly compile the string with tcode, and then put its address
+\     \ and length into a 2CONSTANT.
+\     ." Top of STRING (HOST) "
+\     dup >R code-space @ .s cr >R
+\     0 ?DO ( c-addr ) dup i chars + c@ tcode-c, LOOP
+\     drop R> R> ( 'contents u )
+\     dup tchars tcode-allot   tcode-align
+\     (TCREATE) ,docol .s cr swap tliteral tliteral exit, ;
 
 \ Forward reference to TYPE, resolved later.
 host presume type

@@ -127,12 +127,15 @@ target definitions
 
 
 \ Now we're ready to define the various defining words in the core!
-target : VARIABLE ( "name" --     X: -- addr ) CREATE 0 , ;
+target :F VARIABLE ( "name" --     X: -- addr ) CREATE 0 , ;
   host acts: create host 0 tdata,   DOES> ;
   \ Empty DOES> action, but that leaves the target-body on the stack.
 
-target : CONSTANT ( x "name" --    X: -- x ) CREATE , DOES> @ ;
-  host acts: create tdata, DOES> tdata@ ;
+target :F CONSTANT ( x "name" --    X: -- x ) CREATE , DOES> @ ;
+  host acts: create tdata, DOES>  tdata@ ;
+
+target :F VALUE ( x "name" --    X: -- x ) CREATE , DOES> @ ;
+   host acts: create tdata, DOES> tdata@ ;
 
 target :F DEFER ( "name" --    X: ... -- ... ) CREATE ['] noop , DOES> @ execute ;
   host acts: create [T'] noop tdata, DOES> tdata@ execute ;

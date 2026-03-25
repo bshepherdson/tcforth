@@ -1,6 +1,7 @@
 target definitions
 
 host keyboard-output? [IF]
+target
 
 \ Basic output helpers =======================================================
 : SPACE  ( -- )      bl emit ;

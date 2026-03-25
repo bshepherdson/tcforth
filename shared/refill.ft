@@ -20,6 +20,7 @@ host definitions
 target definitions
 host keyboard-input? [IF]
   host presume (quit)
+  target
 
   CREATE refillers 8 cells allot
   : refiller ( src-id -- 'refiller-xt ) 2 + cells refillers + ;

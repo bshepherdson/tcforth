@@ -5,12 +5,23 @@ target definitions
 \ TODO: These should have HOST ACTS: defined so that they can be run on the host
 \ during metacompilation.
 
-:F begin-structure ( "name" -- struct-sys 0 ) CREATE here 0   0 , DOES> @ ;
-:F end-structure   ( struct-sys +n -- ) swap ! ;
+target :F begin-structure ( "name" -- struct-sys 0 )
+    CREATE here 0   0 , DOES> @ ;
+  host acts: CREATE data-space @   0   0 tdata, DOES> tdata@ ;
 
-:F +field ( offset1 +n "name" -- offset2    X: addr -- addr+offset1 )
-  CREATE   over ,   +   DOES> @ + ;
+target :F end-structure   ( struct-sys +n -- ) swap ! ;
+  host acts: swap tdata! ;
 
-:F cfield: ( u1 "name" -- u2   X: addr -- addr+u1 ) 1 +field ;
-:F field:  ( u1 "name" -- u2   X: addr -- addr+u1 ) aligned 1 cells +field ;
-:F 2field: ( u1 "name" -- u2   X: addr -- addr+u1 ) aligned 2 cells +field ;
+target :F +field ( offset1 +n "name" -- offset2    X: addr -- addr+offset1 )
+    CREATE   over ,   +   DOES> @ + ;
+  host acts:
+    CREATE   ( data-space @ , )   over tdata,   + DOES> tdata@ + ;
+
+target :F cfield: ( u1 "name" -- u2   X: addr -- addr+u1 ) 1 +field ;
+  host acts: 1 target +field host ;
+target :F field:  ( u1 "name" -- u2   X: addr -- addr+u1 )
+    aligned 1 cells +field ;
+  host acts: >IN @ ." FIELD:" parse-name type cr >IN ! taligned 1 tcells target +field host ;
+target :F 2field: ( u1 "name" -- u2   X: addr -- addr+u1 )
+    aligned 2 cells +field ;
+  host acts: taligned 2 tcells target +field host ;

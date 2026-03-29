@@ -1,0 +1,515 @@
+\ The QEMU versatilepb board has a PL181 MMC interface with an SD card.
+\ The cards are memory mapped using the ARM advanced peripheral bus (APB).
+
+\ The stack looks like this:
+\ - Filesystem
+\ - Block device
+\ - MMC subsystem
+\ - PL181 + SD card driver
+
+\ TODO: Add vocabularies to the target Forth? Custom build for the ARM machine,
+\ maybe.
+
+\ ARM systems do not (generally) have a BIOS, and because they use
+\ memory-mapped I/O rather than port-based I/O, it's less obvious how to
+\ standardize on the locations and types of devices. On a PC architecture,
+\ the PCI bus can always be poked at particular standard I/O port numbers and
+\ probed to find out what's up. For ARM, the kernel must Just Know where to find
+\ each device and what it already is.
+\ This is achieved with device trees, and is why there are device-specific
+\ builds for ARM systems compared to the general `x86_64` builds of PC Linux.
+\ I can hard-code these for now based on the various devices, but certainly if
+\ I want some flexibility this will need to become a basic data input.
+
+\ The QEMU versatilepb board has the following (`info mtree` for all):
+\ - $1000_0000 x     $1000   ARM sysctl
+\ - $1000_5000 x     $1000   PL181 MMC interface to SD Card
+\ - $1000_6000 x     $1000   PL050 KMI with PS/2 keyboard (or mouse?)
+\ - $1000_7000 x     $1000   PL050 KMI with PS/2 mouse (or keyboard?)
+\ - $1000_b000 x     $1000   PL181 MMC interface to SD Card
+\ - $1001_0000 x       $10   SMC 91c11 ethernet adapter
+\ - $1012_0000 x     $1000   PL110 LCD controller
+\ - $3400_0000 x $400_0000   Flash ROM with `-kernel` payload(?)
+\ - And then some PCI stuff (hard drive, CD and floppy controllers via SCSI)
+
+\ Programmer's Interface =====================================================
+\ Addr Type Width  Reset  Name             Use
+\ $000 R W      8      0  MCIPower         Power control register
+\ $004 R W     12      0  MCIClock         Clock control register
+\ $008 R W     32      0  MCIArgument      Argument register
+\ $00c R W     11      0  MMCCommand       Command register
+\ $010 R        6      0  MCIRespCmd       Response command register
+\ $014 R       32      0  MCIResponse0     Response register 0
+\ $018 R       32      0  MCIResponse1     Response register 1
+\ $01c R       32      0  MCIResponse2     Response register 2
+\ $020 R       31      0  MCIResponse3     Response register 3
+\ $024 R W     32      0  MCIDataTimer     Data timer
+\ $028 R W     16      0  MCIDataLength    Data length register
+\ $02c R W      8      0  MCIDataCtrl      Data control register
+\ $030 R       16      0  MCIDataCnt       Data counter
+\ $034 R       22      0  MCIStatus        Status register
+\ $038   W     11      0  MCIClear         Clear register
+\ $03c R W     22      0  MCIMask0         Interrupt 0 mask register
+\ $040 R W     22      0  MCIMask1         Interrupt 1 mask register
+\ $044 R W      4      0  MCISelect        SD card select register
+\ $048 R       15      0  MCIFifoCnt       FIFO counter
+\ (reserved)
+\ $080 R W     32      0  MCIFIFO          Data FIFO register
+\ ... FIFO is 16 words = 64 bytes long ($40)
+\ $0bc R W     32      0  MCIFIFO          Data FIFO register
+\ $fe0 R        8    $80  MCIPeriphID0     Peripheral ID register  7:0
+\ $fe4 R        8    $11  MCIPeriphID1     Peripheral ID register 15:8
+\ $fe8 R        8    $04  MCIPeriphID2     Peripheral ID register 23:16
+\ $fec R        8    $00  MCIPeriphID3     Peripheral ID register 31:24
+\ $ff0 R        8    $0d  MCICellID0       PrimeCell  ID register  7:0
+\ $ff4 R        8    $f0  MCICellID1       PrimeCell  ID register 15:8
+\ $ff8 R        8    $05  MCICellID2       PrimeCell  ID register 23:16
+\ $ffc R        8    $b1  MCICellID3       PrimeCell  ID register 31:24
+
+target definitions
+
+$10005000 CONSTANT pl181
+BEGIN-STRUCTURE [pl181]   \  Wdth Rst Name            Use
+  FIELD: mci>power        \ RW  8   0 MCIPower        Power control reg
+  FIELD: mci>clock        \ RW 12   0 MCIClock        Clock control reg
+  FIELD: mci>argument     \ RW 32   0 MCIArgument     Argument reg
+  FIELD: mci>command      \ RW 11   0 MMCCommand      Command reg
+  FIELD: mci>resp-cmd     \ R   6   0 MCIRespCmd      Response command reg
+  FIELD: mci>response0    \ R  32   0 MCIResponse0    Response reg 0
+  FIELD: mci>response1    \ R  32   0 MCIResponse1    Response reg 1
+  FIELD: mci>response2    \ R  32   0 MCIResponse2    Response reg 2
+  FIELD: mci>response3    \ R  32   0 MCIResponse3    Response reg 3
+  FIELD: mci>data-timer   \ RW 32   0 MCIDataTimer    Data timer
+  FIELD: mci>data-length  \ RW 16   0 MCIDataLength   Data length reg
+  FIELD: mci>data-ctrl    \ RW  8   0 MCIDataCtrl     Data control reg
+  FIELD: mci>data-counter \ R  16   0 MCIDataCnt      Data counter
+  FIELD: mci>status       \ R  22   0 MCIStatus       Status register
+  FIELD: mci>clear        \  W 11   0 MCIClear        Clear register
+  FIELD: mci>mask0        \ RW 22   0 MCIMask0        Interrupt 0 mask reg
+  FIELD: mci>mask1        \ RW 22   0 MCIMask1        Interrupt 1 mask reg
+  FIELD: mci>select       \ RW  4   0 MCISelect       SD card select reg
+  FIELD: mci>fifo-cnt     \ R  15   0 MCIFifoCnt      FIFO counter
+  FIELD: mci>fifo0        \ RW 32   0 MCIFIFO         16 words of FIFO
+  drop $fe0
+  FIELD: mci>periph-id0   \ R   8 $80 MCIPeriphID0    Peripheral ID reg  7:0
+  FIELD: mci>periph-id1   \ R   8 $11 MCIPeriphID1    Peripheral ID reg 15:8
+  FIELD: mci>periph-id2   \ R   8 $04 MCIPeriphID2    Peripheral ID reg 23:16
+  FIELD: mci>periph-id3   \ R   8 $00 MCIPeriphID3    Peripheral ID reg 31:24
+  FIELD: mci>cell-id0     \ R   8 $0d MCICellID0      PrimeCell  ID reg  7:0
+  FIELD: mci>cell-id1     \ R   8 $f0 MCICellID1      PrimeCell  ID reg 15:8
+  FIELD: mci>cell-id2     \ R   8 $05 MCICellID2      PrimeCell  ID reg 23:16
+  FIELD: mci>cell-id3     \ R   8 $b1 MCICellID3      PrimeCell  ID reg 31:24
+END-STRUCTURE
+
+: mci-init-controller ( base-addr -- )
+  dup   mci>power   dup @   3 or   swap !
+  $11f  swap mci>clock !
+  \ Wait at least 2ms for the interface and card to be ready.
+  2 ms ;
+
+\ MCICommand ($00c, R/W, 11 bits)
+\ EPI LRcc cccc
+\ E=Enable CPSM; P=Wait for CmdPend before sending command
+\ I=Stop timer and wait for interrupt; L=Long response expected
+\ R=Wait for a response; c=command index
+
+
+\ TODO: Rename these, they're not very Forth-y.
+ 0 CONSTANT SD_CMD_GO_IDLE_STATE
+ 2 CONSTANT SD_CMD_ALL_SEND_CID
+ 3 CONSTANT SD_CMD_SEND_RELATIVE_ADDR
+ 8 CONSTANT SD_CMD_SEND_IF_COND
+ 9 CONSTANT SD_CMD_SEND_CSD
+ 7 CONSTANT SD_CMD_SELECT_CARD
+55 CONSTANT SD_CMD_APP_CMD
+41 CONSTANT SD_CMD_SD_SEND_OP_COND
+
+ $3f CONSTANT MMC_CMD_MASK
+$400 CONSTANT MMC_CPSM_ENABLE
+
+1 30 lshift CONSTANT OCR_HCS
+1 31 lshift CONSTANT OCR_READY
+$ff8000     CONSTANT SD_VOLTAGE_WINDOW
+512         CONSTANT BYTES_PER_BLOCK
+$40000000   CONSTANT CSD_V2_MASK \ CSD structure version 2.0
+256 1024 *  CONSTANT SD_STD_CAPACITY_MULT
+512 1024 *  CONSTANT SD_HIGH_CAPACITY_MULT
+$ff         CONSTANT SD_BYTE_MASK
+$120        CONSTANT CMD55_VALID_RESP
+
+$01 CONSTANT MMC_RSP_PRESENT
+$02 CONSTANT MMC_RSP_136
+$04 CONSTANT MMC_RSP_CRC
+$08 CONSTANT MMC_RSP_BUSY
+$10 CONSTANT MMC_RSP_OPCODE
+$1f CONSTANT MMC_RSP_MASK
+
+\ Response maps - these are combos of the above flags.
+0                                                       CONSTANT MMC_RSP_NONE
+MMC_RSP_PRESENT                                         CONSTANT MMC_RSP_R3
+MMC_RSP_PRESENT                                         CONSTANT MMC_RSP_R4
+MMC_RSP_PRESENT MMC_RSP_CRC or MMC_RSP_OPCODE or    dup CONSTANT MMC_RSP_R1
+dup                                                     CONSTANT MMC_RSP_R5
+dup                                                     CONSTANT MMC_RSP_R6
+dup                                                     CONSTANT MMC_RSP_R7
+MMC_RSP_BUSY or                                         CONSTANT MMC_RSP_R1B
+MMC_RSP_PRESENT MMC_RSP_136 or MMC_RSP_CRC or           CONSTANT MMC_RSP_R2
+
+1 8 lshift                      CONSTANT MMC_DATA_WRITE
+1 9 lshift                      CONSTANT MMC_DATA_READ
+MMC_DATA_WRITE MMC_DATA_READ or CONSTANT MMC_DATA_XFER
+
+
+
+\ SD card checks:
+\ - SD_CMD_SEND_IF_COND, $1aa, MMC_RSP_R7
+\ - Retry up to 5 times:
+\   - Wait 10ms.
+\   - Bail if we're out of retries.
+\   - SD_CMD_APP_CMD, 0, MMC_RSP_R1
+\     - Retry if the response wasn't CMD55_VALID_RESP
+\   - SD_CMD_SD_SEND_OP_COND, OCR_HCS | SD_VOLTAGE_WINDOW, MMC_RSP_R3
+\   - Repeat until the resp[0]&OCR_READY bit is nonzero.
+\ - If we leave that loop then this is indeed an SD card.
+\ - SD_CMD_ALL_SEND_CID, 0, MMC_RSP_R2
+\   - Returns card, manufacturer etc. info, dump it for intel!
+\ - SD_CMD_SEND_RELATIVE_ADDR, 0, MMC_RSP_R6
+\   - Returns the card's RCA, the relative address. (resp[0]>>16)
+\ - SD_CMD_SEND_CSD, rca<<16, MMC_RSP_R2
+\   - Has the device size etc., see that command.
+
+CREATE mmc-resp 4 cells allot
+
+\ EPI LRcc cccc
+\ E=Enable CPSM; P=Wait for CmdPend before sending command
+\ I=Stop timer and wait for interrupt; L=Long response expected
+\ R=Wait for a response; c=command index
+: <pl181-req-flags> ( responds? long? -- cmd-bits )
+  MMC_CPSM_ENABLE
+  swap MMC_RSP_136 and IF $80 or THEN ( responds? cmd-bits )
+  swap                 IF $40 or THEN ;
+
+: <pl181-send> ( cmd arg responds? long? base-addr -- )
+  >R <pl181-req-flags> ( cmd arg cmd-bits )
+  rot MMC_CMD_MASK and or ( arg cmd )
+  ." PL181 addr: " R@   hex. cr
+  ." PL181 cmd:  " dup  hex. cr
+  ." PL181 arg:  " over hex. cr
+  swap R@ mci>argument !  ( cmd )
+       R> mci>command ! ;
+
+: <pl181-receive> ( 'resp base-addr -- )
+  2dup mci>response0 @   swap !
+  2dup mci>response1 @   swap cell+     !
+  2dup mci>response2 @   swap 2 cells + !
+       mci>response3 @   swap 3 cells + ! ;
+
+: pl181:mmc-request ( cmd arg flags 'resp base-addr -- )
+  swap >R >R        ( cmd arg flags    R: 'resp base-addr )
+  dup  MMC_RSP_PRESENT and
+  swap MMC_RSP_136 and      ( cmd arg responds? long? )
+  R@ <pl181-send>           ( R: 'resp base-addr )
+  R> R> swap <pl181-receive> ;
+  \ TODO: Handle the MMC_DATA_XFER copying and whatnot.
+
+\ CMDn is that plain command.
+\ ACMDn is sending a CMD55 first, then CMDn. The "APP_CMD" prefix.
+\ Card capacities and standard filesystems:
+\ - SDSC supports 8MiB to 2GiB. This is the FAT16 limit due to byte indexes.
+\ - SDHC supports 4GiB to 32GiB, which is the limits of the FAT32 filesystem.
+\ - SDXC supports 64GiB to 2TiB, using exFAT and 32-bit block indexes.
+\ - SDUC exists (128TiB) using exFAT, extending the address to a 38-bit LBA.
+
+\ The initialization sequence (see https://elm-chan.org/docs/mmc/rc/sdinit.png
+\ though note that it's for SPI mode and doesn't match perfectly) is this:
+\ - CMD0 SD_CMD_GO_IDLE_STATE to put all cards into standby mode.
+\   - On an error or no response: unknown/no card.
+\ - CMD8 SD_CMD_SEND_IF_COND with arg $1aa
+\ - Check low 12 bits of R7 response:
+\   - Mismatch: Unknown card
+\   - Matches 0x1aa: See SDv2+ below.
+\   - Error or no response: See SDv1 below.
+\
+\ SDv2+ (common):
+\ - ACMD41, arg $40000000, await R1 response
+\   - Error, no response or timeout: Unknown card
+\   - Response $01: repeat ACMD41 - loop can take 1000ms!
+\   - Response $00: Proceed
+\ - CMD58: Check CCS bit of OCR
+\   - 0: SDv2 with byte addresses
+\   - 1: SDv2 with block addresses
+\ - **If byte addressing** use CMD16 $200 to force a 512B block.
+\ - Success!
+
+\ SDv1 - Similar, but disregard for now, they're really old.
+
+\ Sending commands ===========================================================
+\ Raw command word that takes every arg literally.
+DEFER <mmc-send-cmd> ( cmd arg flags 'resp base-addr -- )
+' pl181:mmc-request IS <mmc-send-cmd>
+
+CREATE mmc-response 4 cells allot
+0 VALUE mmc-base
+
+\ Cooked command word that uses the global response and base.
+: mmc-send-cmd ( cmd# arg resp-type -- )
+  mmc-response mmc-base <mmc-send-cmd> ;
+
+\ R1 response bits
+1  CONSTANT RESP_IDLE
+2  CONSTANT RESP_ERASE_RESET
+4  CONSTANT RESP_ILLEGAL_CMD
+8  CONSTANT RESP_CRC_ERROR
+16 CONSTANT RESP_ERASE_SEQ_ERROR
+32 CONSTANT RESP_ADDR_ERROR
+64 CONSTANT RESP_PARAM_ERROR
+
+\ Clears all 11 "static" status bits.
+: mmc-clear-status ( -- )
+  $7ff mmc-base mci>clear ! ;
+
+\ Sends CMD58(0) and read R3. Bit 30 is set for SDHC and SDXC.
+\ : mmc-sd-sdhc/xc? ( -- sdhc? )
+\   mmc-clear-status
+\   58 0 MMC_RSP_R1 mmc-send-cmd
+\   ." Status: " pl181 mci>status             @ hex. cr
+\   ." Resp 0: " pl181 mmc-response           @ hex. cr
+\   ." Resp 1: " pl181 mmc-response cell+     @ hex. cr
+\   ." Resp 2: " pl181 mmc-response 2 cells + @ hex. cr
+\   ." Resp 3: " pl181 mmc-response 3 cells + @ hex. cr
+\   false ;
+
+\ 5C0
+\ Low 11 bits - static, these latch until cleared.
+\ %101 1100 0000
+\  ||| |||| |||+- CmdCrcFail   Command response received, CRC fail
+\  ||| |||| ||+-- DataCrcFail  Data block sent/received, CRC fail
+\  ||| |||| |+--- CmdTimeOut   Command response timeout
+\  ||| |||| +---- DataTimeOut  Data timeout
+\  ||| ||||
+\  ||| |||+------ TxUnderrun   Transmit FIFO underrun error
+\  ||| ||+------- RxUnderrun   Receive FIFO overrun error
+\  ||| |+-------- CmdRespEnd   Command response received, CRC ok
+\  ||| +--------- CmdSent      Command sent, no response required
+\  |||
+\  ||+----------- DataEnd      Data end (data counter is zero)
+\  |+------------ StartBitErr  Start bit not detected in wide mode?
+\  +------------  DataBlockEnd Data block sent/received, CRC ok
+
+\ High 11 bits - dynamic, these are live values
+\ %00 0000 0000 0
+\  || |||| |||| +-- CmdActive       Command transfer in progress
+\  || |||| ||||
+\  || |||| |||+---- TxActive        Data transmit in progress
+\  || |||| ||+----- RxActive        Date receive in progress
+\  || |||| |+------ TxFifoHalfEmpty Transmit FIFO half empty
+\  || |||| +------- RxFifoHalfFull  Receive FIFO half empty
+\  || ||||
+\  || |||+--------- TxFifoFull      Transmit FIFO full
+\  || ||+---------- RxFifoFull      Receive FIFO full
+\  || |+----------- TxFifoEmpty     Transmit FIFO empty
+\  || +------------ RxFifoEmpty     Receive FIFO empty
+\  ||
+\  |+-------------- TxDataAvbl      Data available in transmit FIFO
+\  +--------------- RxDataAvbl      Data available in receive FIFO
+
+: .mmc-status ( -- )
+  mmc-base mci>status @
+  dup $000001 and IF ." S - Command response CRC failed" cr THEN
+  dup $000002 and IF ." S - Data block CRC failed" cr THEN
+  dup $000004 and IF ." S - Command response timeout" cr THEN
+  dup $000008 and IF ." S - Data timeout" cr THEN
+  dup $000010 and IF ." S - Transmit FIFO underrun error" cr THEN
+  dup $000020 and IF ." S - Receive FIFO overrun error" cr THEN
+  dup $000040 and IF ." S - Command response received, CRC ok" cr THEN
+  dup $000080 and IF ." S - Command sent, no response required" cr THEN
+  dup $000100 and IF ." S - Data end (counter is zero)" cr THEN
+  dup $000200 and IF ." S - Start bit not detected in wide mode?" cr THEN
+  dup $000400 and IF ." S - Data block done, CRC ok" cr THEN
+
+  dup $000800 and IF ." D - Command transfer in progress" cr THEN
+  dup $001000 and IF ." D - Data transmit in progress" cr THEN
+  dup $002000 and IF ." D - Data receive in progress" cr THEN
+  dup $004000 and IF ." D - Transmit FIFO half empty" cr THEN
+  dup $008000 and IF ." D - Receive FIFO half empty" cr THEN
+  dup $010000 and IF ." D - Transmit FIFO full" cr THEN
+  dup $020000 and IF ." D - Receive FIFO full" cr THEN
+  dup $040000 and IF ." D - Transmit FIFO empty" cr THEN
+  dup $080000 and IF ." D - Receive FIFO empty" cr THEN
+  dup $100000 and IF ." D - Data available in transmit FIFO" cr THEN
+      $200000 and IF ." D - Data available in receive FIFO" cr THEN ;
+
+\ Command wrappers ===========================================================
+\ CMD0, 0 arg, no response.
+: mmc-cmd-go-idle ( -- ) 0 0 0 mmc-send-cmd ;
+
+\ CMD8, $1aa, R7 response
+: mmc-cmd-send-if-cond ( -- match? )
+  8 $1aa MMC_RSP_R7 mmc-send-cmd
+  \ Expects to get $1aa back in the low 12 bits to match an SDv2 card.
+  mmc-response @   $3ff and   $1aa = ;
+
+\ ACMD41 (55+41), set bit 30 on for high capacity support + voltage, R1 response
+: mmc-cmd-app-send-op-cond ( -- ready? )
+  55 0       0          mmc-send-cmd   \ CMD55, 0, no response (ACMD prefix)
+  mmc-clear-status
+  \ CMD41 with HCS bit + voltage window. Borrowed this value from embox.
+  \ TODO: Real hardware will need that set properly.
+  41   OCR_HCS $ff8000 or   MMC_RSP_R1 mmc-send-cmd
+  mmc-response @
+  ." ACMD41 response: " dup hex.
+  1 31 lshift and 0<> ." READY bit " dup . ;
+
+: mmc-poll-initialize ( -- done? )
+  mmc-cmd-app-send-op-cond ;
+
+
+\ Repeatedly sends ACMD41 until the card replies it's ready.
+\ Times out at 2 seconds.
+: mmc-sd-init ( -- ? )
+  \ ticks @ >R
+  5 BEGIN
+    100 ms mmc-poll-initialize 0=
+  WHILE \ Not initialized yet
+    1- dup 0= IF drop 203 throw THEN
+  REPEAT drop true ;
+
+\ Reads the CID register, identifying the SD controller.
+\ Long response, so it lives in the response buffer.
+: mmc-cid@ ( -- )
+  SD_CMD_ALL_SEND_CID 0 MMC_RSP_R2 mmc-send-cmd ; \ CMD2, 0, R2
+
+: .spacer ( -- )
+  ." ==========================================" cr ;
+
+: month>short-name ( month-0-based -- c-addr u )
+  3 *
+  S" JanFebMarAprMayJunJulAugSepOctNovDec" ( month-offset c-addr u-all )
+  drop +   3 ;
+
+: th-resp@ ( 0..3 -- x )
+  cells mmc-base mci>response0 + @ ;
+
+\ Prints the CID details from the MCI response cells.
+: .mmc-cid ( -- )
+  .spacer
+  ." MMC CID: raw " 4 0 DO i th-resp@ hex. LOOP cr
+  ." Manufacturer ID: " 0 th-resp@ 24 rshift hex. cr
+  ." OEM/OID:         " 0 th-resp@ 8  rshift $ffff and hex. cr
+  ." Product name:    "
+    0 th-resp@ $ff and emit
+    1 th-resp@
+      dup 24 rshift $ff and emit
+      dup 16 rshift $ff and emit
+      dup  8 rshift $ff and emit
+                    $ff and emit cr
+  ." Revision:        " 2 th-resp@ 24 rshift $ff and hex. cr
+  ." Serial number:   "
+    2 th-resp@ $ffffff and 8 lshift
+    3 th-resp@ 24 rshift $ff and   or hex. cr
+
+  ." Date:            "
+  \ ssssssss  DDDDDDDD yyyymmmm ________
+  3 th-resp@          \ D=decade, y=year of decade, m=month (0=Jan)
+  8 rshift $ffff and
+  dup $f and >R                 ( DDym   R: month-0-based )
+  dup 8 rshift 10 *             ( DDym decade-years   R: month-0-based )
+  swap 4 rshift $f and + 2000 + ( year   R: month-0-based )
+  R> month>short-name type space . cr ;
+
+
+\ CMD3, 0, R6 - gets the RCA for the card.
+: mmc-send-relative-addr ( -- rca )
+  3 0 MMC_RSP_R6 mmc-send-cmd
+  0 th-resp@ 16 rshift $ffff and ;
+
+\ In SDHC and SDXC cards, there's a size field in the low byte of resp[1] and
+\ upper 2 bytes of resp[2] that is the number of 512KiB units minus 1.
+\ 24 bits shifted up by 19 makes a 43-bit number, so it's double cell.
+: mmc-size-high ( -- ud-bytes )
+  1 th-resp@ $ff and 16 lshift
+  2 th-resp@ 16 rshift $ffff and or   1+    ( 512KiB-units )
+  \ Shifting up by 19, but that overflows. Low cell is that shift, high cell is
+  \ shifted right by 13.
+  dup 19 lshift   swap 13 rshift ;
+
+\ In SDSC, it's the low 10 bits of resp[1], +1, times 4, times 256KiB blocks.
+\ That's a shift of 12 bits by 20 = 32 bits, so the high cell is always 0.
+: mmc-size-std ( -- ud-bytes )
+  1 th-resp@ $3ff and   1+   20 lshift   0 ;
+
+: mmc-csd@ ( rca -- ud-bytes hc/xc? )
+  \ CMD9, rca<<16, R2 - get the CSD describing the inserted card.
+  16 lshift   9 swap   MMC_RSP_R2 mmc-send-cmd
+  0 th-resp@ OCR_HCS and IF \ High capacity
+    mmc-size-high true ELSE mmc-size-std false THEN ;
+
+CREATE test-buf 512 chars allot
+
+\ MCIDataCtrl: bbbb DsRE - block size 2^b, (D)MA, (s)tream, (R)ead, (E)nable
+\ For a read we want: 512B (b = 2^9), read (1) and enable (1)
+$93         CONSTANT mci-read-settings
+
+1 21 lshift CONSTANT mci-status-data-avbl
+
+: mmc-read-block ( buffer blk# -- )
+  \ CMD17 to read a block, arg is offset - blocks or bytes? R1 + data.
+  17 swap   MMC_RSP_R1B MMC_DATA_READ or   mmc-send-cmd
+  .spacer
+  ." Read command sent!" cr
+  .mmc-status mmc-clear-status
+  512 mmc-base mci>data-length !             \ Data length is 512 bytes
+  mci-read-settings mmc-base mci>data-ctrl ! \ And set the read config
+  \ Now loop to read the words out.
+  512 BEGIN ( buffer remaining )
+    \ Busy-wait for the receive flag.
+    BEGIN mmc-base mci>status @   mci-status-data-avbl and UNTIL
+    \ Read a word ( buffer remaining )
+    >R   mmc-base mci>fifo0 @   over !   cell+ R> ( buffer' remaining )
+    cell -
+  ?dup 0= UNTIL ( buffer' ) drop ;
+
+: mmc-go ( -- )
+  pl181 TO mmc-base
+  pl181 mci-init-controller
+  \ Setup process for PL181 SD cards:
+  \ - [x] GO IDLE
+  \ - [x] SEND_IF_COND, $1aa, R7, check response is also $1aa.
+  \ - 5x retry:
+  \   - [x] Wait 10ms
+  \   - [x] Send ACMD41 with the voltage and HC/XC support bit, R3
+  \   - [x] Expect the OCR_READY bit in reply
+  \ - [x] Check the voltage window in the ACMD41 response - TODO: real hardware
+  \ - [x] Send CMD2, 0, R2 and read the CID manufacturer etc.
+  \ - [x] Print that for debugging.
+  \ - [ ] Send SEND_RELATIVE_ADDR, 0, R6 to get the RCA of the card.
+  \ - [ ] Send CSD to get card details, SEND_CSD, rca<<16, R2
+  \ - [ ] Dump that for debugging.
+  \ - [ ] V2 cards return bit 30 set in resp[0], use block addressing.
+  \   - V1 cards don't, use byte addressing.
+  \ - [ ] Either way, compute the card size and print it.
+  \ - [ ] Configure the OS's block device with the total size, block size, etc.
+  \ - [ ] Send SELECT_CARD, rca<<16, R1B to get ready to use the card.
+
+  mmc-cmd-go-idle
+  mmc-cmd-send-if-cond   0= IF 202 throw THEN
+  mmc-sd-init ." SD init: " . cr
+  100 ms
+  mmc-cid@ .mmc-cid
+
+  mmc-send-relative-addr ( rca )
+  ." SD card RCA: " dup hex. cr
+  mmc-csd@   ( ud-bytes hc/xc? )
+  ." SDHC/SDXC? " . cr
+  ." SD card size: "
+    2dup hex <# #s #> type
+    4 spaces decimal <# #s #> type cr
+;
+
+  \ mmc-sd-sdhc/xc? ." SDHC/SDHX: " . cr
+  \ .mmc-status   mmc-clear-status
+  \ test-buf 0 mmc-read-block
+  \ .mmc-status   mmc-clear-status
+
+\ XXX: START HERE: I think we can try to read a block. Maybe should set the
+\ size with a CMD16 first? Ah, the MCI handles that.

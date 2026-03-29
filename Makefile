@@ -10,8 +10,10 @@ DCPU_DISK ?= /dev/null
 
 MULTITASKING_TESTS ?= test/linked.ft
 
+EXTRA_FILES ?=
+
 ARM_QEMU ?= qemu-system-arm -M versatilepb -m 128M -nographic
-ARM_QEMU_FLAGS ?= -drive if=sd,format=raw,file=test_arm_sd.img
+ARM_QEMU_FLAGS ?= -drive if=sd,format=raw,file=test_arm_sd.img -d guest_errors --trace events=qemu.trace
 #ARM_QEMU_FLAGS ?= -D log.txt -d exec,cpu,int
 ARM_PREFIX ?= arm-none-eabi-
 
@@ -134,23 +136,23 @@ test-mocha86k: forth-mocha86k.bin test_single.disk test-long.dcs FORCE
 		forth-mocha86k.bin
 
 # ARMv7 32-bit (bare metal) ==================================================
-forth-arm.bin: host/*.ft arm/*.ft shared/*.ft
+forth-arm.bin: host/*.ft arm/*.ft shared/*.ft $(EXTRA_FILES)
 	$(FORTH) arm/preamble.ft -e "' spaces::single IS default-spaces!" \
-		arm/system.ft -e 'host :noname S" $@" ; IS tcforth-output' \
+		arm/system.ft $(EXTRA_FILES) -e 'host :noname S" $@" ; IS tcforth-output' \
 		arm/finalize.ft -e 'bye'
 
-forth-arm-separate.bin: host/*.ft arm/*.ft shared/*.ft
+forth-arm-separate.bin: host/*.ft arm/*.ft shared/*.ft $(EXTRA_FILES)
 	$(FORTH) arm/preamble.ft -e "' spaces::separate IS default-spaces!" \
-		arm/system.ft -e 'host :noname S" $@" ; IS tcforth-output' \
+		arm/system.f $(EXTRA_FILES) -e 'host :noname S" $@" ; IS tcforth-output' \
 		arm/finalize.ft -e 'bye'
 
-forth-arm-copying.bin: host/*.ft arm/*.ft shared/*.ft
+forth-arm-copying.bin: host/*.ft arm/*.ft shared/*.ft $(EXTRA_FILES)
 	$(FORTH) arm/preamble.ft -e "' spaces::copying IS default-spaces!" \
-		arm/system.ft -e 'host :noname S" $@" ; IS tcforth-output' \
+		arm/system.f $(EXTRA_FILES) -e 'host :noname S" $@" ; IS tcforth-output' \
 		arm/finalize.ft -e 'bye'
 
 arm: forth-arm.bin forth-arm-separate.bin forth-arm-copying.bin
-run-arm: forth-arm.bin
+run-arm: forth-arm.bin FORCE
 	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel $<
 run-arm-separate: forth-arm-separate.bin
 	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel $<
@@ -177,6 +179,15 @@ test-arm: forth-arm-tests.bin test_multi.disk FORCE
 test-arm-separate: forth-arm-separate-tests.bin test_multi.disk FORCE
 	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel $<
 test-arm-copying: forth-arm-copying-tests.bin test_multi.disk FORCE
+	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel $<
+
+# ARM OS with Hardware =======================================================
+forth-armos.bin: host/*.ft arm/*.ft arm/os/*.ft arm/os/**/*.ft shared/*.ft
+	$(FORTH) arm/preamble.ft -e "' spaces::single IS default-spaces!" \
+		arm/system.ft arm/os/main.ft -e 'host :noname S" $@" ; IS tcforth-output' \
+		arm/finalize.ft -e 'bye'
+
+run-armos: forth-armos.bin FORCE
 	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel $<
 
 # Commodore 64 ===============================================================

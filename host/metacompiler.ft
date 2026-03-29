@@ -55,16 +55,19 @@ no-target? off
 : T'   ( "name" -- target-xt )   (T') mirror>txt @ ;
 : [T'] ( C: "name" --    X: -- target-xt ) T' postpone literal ; IMMEDIATE
 
-\ Parses a target name (immediately, like [']) and then does the mirror compile
-\ action for that word. This means [tcompile] works properly with forward refs.
-: [tcompile] ( "name" -- )
+\ Inner helper for [tcompile] below.
+: <tcompile> ( mirror-xt -- )
   \ Save the HOST STATE, then force it to 1 to pretend we're compiling.
-  state @ >R   1 state !
-  <T'>   ?dup 0= IF 1 ABORT" Bad [TCOMPILE]" THEN
-  execute
-  R> state !
-; IMMEDIATE
+  state @ >R   1 state !   execute   R> state ! ;
 
+\ Parses a target name (immediately, like [']) and then compiles code into
+\ the host action which will compile the relevant target word when the host
+\ action runs. This means [tcompile] works properly with forward refs.
+: [tcompile] ( "name" -- )
+  <T'>   ?dup 0= IF 1 ABORT" Bad [TCOMPILE]" THEN
+  postpone LITERAL
+  postpone <tcompile>
+; IMMEDIATE
 
 
 \ Runs in the HOST. Replaces the metainterpretation action for the most-recent
@@ -182,6 +185,9 @@ host definitions
 (T') 2dup  'mirror !   act 2dup
 (T') 2drop 'mirror !   act 2drop
 (T') 2swap 'mirror !   act 2swap
+
+(T') lshift  'mirror !   act lshift
+(T') rshift  'mirror !   act rshift
 
 \ Not all machines define * in kernel code.
 <T'> * [IF] (T') * 'mirror ! act * [THEN]

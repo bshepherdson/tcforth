@@ -1,0 +1,94 @@
+\ ARM PrimeCell PL080 DMA Controller
+\ VersatilePB boards are equipped with this DMAC, which is pretty capable.
+
+\ Notes from the PL080 TRM:
+\ - No writes to DMA channels once enabled.
+\ - Take care with different widths - might apply here?
+\ - With an MMU, the scatter/gather linked lists span virtual and physical
+\   address space.
+
+\ Operation
+\ - There's a master enable bit E in DMACConfigurationRegister.
+\ - Program the channel to be used for a transfer (see below)
+\ - Enable that channel.
+\ - It will auto-disable when the transfer is complete.
+
+\ Programming a Channel
+\ - Channel 0 has highest priority and 7 has the lowest.
+\   - 6 and 7 also have a yielding behaviour that won't tie up the bus.
+\ - Clear any pending interrupts for the channel with DMACIntTCClear and
+\   DMACIntErrClr registers.
+\ - Write the source address into DMACCxSrcAddr for the channel.
+\ - Write the destination address to DMACCxDestAddr.
+\ - Write the address of the next LLI (linked list) into DMACCxLLI; 0 for none.
+\ - Write control info to DMACCxControl register.
+\ - Write channel config info to DMACCxConfiguration
+\   - If the Enable bit is set, the channel is enabled and transfer begins.
+
+\ Errors =====================================================================
+220 CONSTANT err-bad-dma-width
+221 CONSTANT err-bad-burst-size
+
+
+\ Global registers ===========================================================
+BEGIN-STRUCTURE [pl080-dmac]
+  FIELD: pl080>int-status           \ R  Interrupt status
+  FIELD: pl080>int-tc-status        \ R  Interrupt terminal count status
+  FIELD: pl080>int-tc-clear         \  W Interrupt terminal count clear
+  FIELD: pl080>int-error-status     \ R  Interrupt error status
+  FIELD: pl080>int-error-clear      \  W Interrupt error clear
+  FIELD: pl080>raw-int-tc-status    \ R  Raw interrupt terminal count status
+  FIELD: pl080>raw-int-error-status \ R  Raw interrupt error status
+  FIELD: pl080>enabled-channels     \ R  Enabled channels
+  FIELD: pl080>soft-burst-req       \ RW Software burst request
+  FIELD: pl080>soft-single-req      \ RW Software single request
+  FIELD: pl080>soft-last-burst-req  \ RW Software last burst request
+  FIELD: pl080>soft-last-single-req \ RW Software last single request
+  FIELD: pl080>config               \ RW Configuration
+  FIELD: pl080>sync                 \ RW Synchronization
+END-STRUCTURE
+
+\ Per-channel registers ======================================================
+BEGIN-STRUCTURE [pl080-channel]
+  FIELD: pl080chan>src              \ RW Source address
+  FIELD: pl080chan>dst              \ RW Destination address
+  FIELD: pl080chan>link             \ RW Linked list address
+  FIELD: pl080chan>control          \ RW Channel control
+  FIELD: pl080chan>config           \ RW Channel configuration
+  drop $20 \ Override the size, the channels are on round $20 addresses.
+END-STRUCTURE
+
+\ Channel 0 is at offset $100.
+: th-channel ( base-addr chan# -- chan-addr ) $20 * $100 + + ;
+
+\ Channel control registers ==================================================
+1 31 lshift CONSTANT CXCTRL-INTERRUPTS
+1 27 lshift CONSTANT CXCTRL-DST-INC
+1 26 lshift CONSTANT CXCTRL-SRC-INC
+1 25 lshift CONSTANT CXCTRL-DST-BUS
+1 24 lshift CONSTANT CXCTRL-SRC-BUS
+21          CONSTANT CXCTRL-DST-WIDTH<<
+18          CONSTANT CXCTRL-SRC-WIDTH<<
+15          CONSTANT CXCTRL-DST-/BURST<<
+12          CONSTANT CXCTRL-SRC-/BURST<<
+0           CONSTANT CXCTRL-/XFER<<
+
+\ Bits per transfer unit.
+: bits>width ( #bits -- width-field )
+  CASE
+  8  OF 0 ENDOF
+  16 OF 1 ENDOF
+  32 OF 2 ENDOF
+  drop err-bad-dma-width throw ENDCASE ;
+
+: units>xfer-size ( #units -- size-field )
+  dup 1 = IF drop 0 EXIT THEN \ 1 unit is a special case.
+  8 1 DO ( units )
+    1 i 1+ lshift  ( units i-units )
+    over = IF drop i UNLOOP EXIT THEN
+  LOOP drop err-bad-burst-size throw ;
+
+\ Canned transfer settings ===================================================
+\ The PL181 MCI generates DMA requests and they could be used for this.
+\ TODO: Figure out how practical it is to use DMA for reading and writing to
+\ the block devices without tying up the CPU.

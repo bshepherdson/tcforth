@@ -158,7 +158,9 @@ target :F ACTION-OF ( "name" -- xt )
 target :F TO ( I: x "name" --    C: "name" --   X: x -- )
     ' >body   state @ IF postpone LITERAL postpone ! ELSE ! THEN ; IMMEDIATE
   host acts:
-    state @ IF T' t>body tliteral [tcompile] ! ELSE
+    state @ IF T' ." Compiling TO at " code-space @ hex. ." - xt " dup hex.
+      t>body ." body " dup hex. tliteral [tcompile] !   cr
+    ELSE
       T' t>body tdata! THEN ; IMPERATIVE-BOTH
 
 target :F ['] ( C: "name" --    X: -- xt )
@@ -375,3 +377,10 @@ target : */    ( n1 n2 n3 -- n4 ) */MOD nip ;
 
 target :F :noname ( C: -- xt ) here ,docol postpone ] ;
   host acts: code-space @ ,docol   postpone target meta] ;
+
+
+\ REQUIRE ====================================================================
+\ This isn't actually supported on the target, but it's helpful to stay in
+\ target mode all the time and be able to call a HOST REQUIRE + back to TARGET.
+target : REQUIRE ( ... "name" -- ... ) parse-name 2drop   66 throw ;
+  host acts: require ;

@@ -89,6 +89,7 @@ BEGIN-STRUCTURE [pl181]   \  Wdth Rst Name            Use
   FIELD: mci>mask1        \ RW 22   0 MCIMask1        Interrupt 1 mask reg
   FIELD: mci>select       \ RW  4   0 MCISelect       SD card select reg
   FIELD: mci>fifo-cnt     \ R  15   0 MCIFifoCnt      FIFO counter
+  drop $080
   FIELD: mci>fifo0        \ RW 32   0 MCIFIFO         16 words of FIFO
   drop $fe0
   FIELD: mci>periph-id0   \ R   8 $80 MCIPeriphID0    Peripheral ID reg  7:0
@@ -444,30 +445,42 @@ CREATE mmc-response 4 cells allot
   0 th-resp@ OCR_HCS and IF \ High capacity
     mmc-size-high true ELSE mmc-size-std false THEN ;
 
+\ TODO: Hard-coding this to a single card.
+: mmc-select-card ( rca -- )
+  16 lshift   SD_CMD_SELECT_CARD swap   MMC_RSP_R1B mmc-send-cmd ;
+
+
 CREATE test-buf 512 chars allot
 
 \ MCIDataCtrl: bbbb DsRE - block size 2^b, (D)MA, (s)tream, (R)ead, (E)nable
 \ For a read we want: 512B (b = 2^9), read (1) and enable (1)
-$93         CONSTANT mci-read-settings
+\ TODO: Embox uses 8 = 256 rather than rather than 9 = 512? Trying that.
+$83         CONSTANT mci-read-settings
 
 1 21 lshift CONSTANT mci-status-data-avbl
 
 : mmc-read-block ( buffer blk# -- )
   \ CMD17 to read a block, arg is offset - blocks or bytes? R1 + data.
   17 swap   MMC_RSP_R1B MMC_DATA_READ or   mmc-send-cmd
-  .spacer
-  ." Read command sent!" cr
-  .mmc-status mmc-clear-status
   512 mmc-base mci>data-length !             \ Data length is 512 bytes
   mci-read-settings mmc-base mci>data-ctrl ! \ And set the read config
   \ Now loop to read the words out.
   512 BEGIN ( buffer remaining )
     \ Busy-wait for the receive flag.
+    \ ." Waiting for data to be available..." cr
     BEGIN mmc-base mci>status @   mci-status-data-avbl and UNTIL
+    \ ." Data ready! Reading a word to " over hex. ." remaining " dup . cr
     \ Read a word ( buffer remaining )
-    >R   mmc-base mci>fifo0 @   over !   cell+ R> ( buffer' remaining )
+    >R   mmc-base mci>fifo0 @
+    \ ." Got word: " dup hex. cr
+    over !   cell+
+    R> ( buffer' remaining )
     cell -
-  ?dup 0= UNTIL ( buffer' ) drop ;
+  dup 0= UNTIL 2drop ;
+
+\ XXX: START HERE: Got it! I successfully read a block from the disk!
+\ Some tidying of the code is probably in order and then I'll consider how
+\ to rig up block devices more concretely.
 
 : mmc-go ( -- )
   pl181 TO mmc-base
@@ -482,14 +495,14 @@ $93         CONSTANT mci-read-settings
   \ - [x] Check the voltage window in the ACMD41 response - TODO: real hardware
   \ - [x] Send CMD2, 0, R2 and read the CID manufacturer etc.
   \ - [x] Print that for debugging.
-  \ - [ ] Send SEND_RELATIVE_ADDR, 0, R6 to get the RCA of the card.
-  \ - [ ] Send CSD to get card details, SEND_CSD, rca<<16, R2
-  \ - [ ] Dump that for debugging.
-  \ - [ ] V2 cards return bit 30 set in resp[0], use block addressing.
+  \ - [x] Send SEND_RELATIVE_ADDR, 0, R6 to get the RCA of the card.
+  \ - [x] Send CSD to get card details, SEND_CSD, rca<<16, R2
+  \ - [x] Dump that for debugging.
+  \ - [x] V2 cards return bit 30 set in resp[0], use block addressing.
   \   - V1 cards don't, use byte addressing.
-  \ - [ ] Either way, compute the card size and print it.
+  \ - [x] Either way, compute the card size and print it.
   \ - [ ] Configure the OS's block device with the total size, block size, etc.
-  \ - [ ] Send SELECT_CARD, rca<<16, R1B to get ready to use the card.
+  \ - [x] Send SELECT_CARD, rca<<16, R1B to get ready to use the card.
 
   mmc-cmd-go-idle
   mmc-cmd-send-if-cond   0= IF 202 throw THEN
@@ -499,17 +512,18 @@ $93         CONSTANT mci-read-settings
 
   mmc-send-relative-addr ( rca )
   ." SD card RCA: " dup hex. cr
-  mmc-csd@   ( ud-bytes hc/xc? )
+  dup mmc-csd@   ( rca ud-bytes hc/xc? )
   ." SDHC/SDXC? " . cr
   ." SD card size: "
     2dup hex <# #s #> type
-    4 spaces decimal <# #s #> type cr
+    4 spaces decimal <# #s #> type cr  ( rca )
+  mmc-select-card
+
+  test-buf 0 mmc-read-block
+  10 ms
+  .mmc-status   mmc-clear-status
+
+  .spacer
+  test-buf 512 type
+  cr .spacer cr
 ;
-
-  \ mmc-sd-sdhc/xc? ." SDHC/SDHX: " . cr
-  \ .mmc-status   mmc-clear-status
-  \ test-buf 0 mmc-read-block
-  \ .mmc-status   mmc-clear-status
-
-\ XXX: START HERE: I think we can try to read a block. Maybe should set the
-\ size with a CMD16 first? Ah, the MCI handles that.

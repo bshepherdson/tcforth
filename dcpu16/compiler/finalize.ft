@@ -1,5 +1,8 @@
 \ Final file that goes last in the process.
 \ This sets Target's LATEST and DP properly.
+
+-1 '.intro ! \ Dummy intro just to stop some incompatible code from running.
+
 host REQUIRE ../../shared/finalizing.ft
 host definitions
 
@@ -9,9 +12,20 @@ host definitions
 \ host data-space @      dp0 tcode!
 
 \ HACK: For now I'm implementing my basic app in here.
-
 target definitions
-: main ( -- ) ( boot )   12 log ;
+
+\ Interpretive only: inlines the following string into the *code* space.
+\ Returns its ( c-addr u ) interpretively.
+target
+
+S" Hello, World!" STRING greeting
+
+: main ( -- )
+  boot
+  default-colours
+  greeting type cr
+  BEGIN AGAIN
+;
 
 host T' main   entry-point tcode!
 

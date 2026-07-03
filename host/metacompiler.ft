@@ -23,14 +23,25 @@ no-target? off
     parse-name ?dup IF ( c-addr u )
       no-target? @ IF ( c-addr u )
         \ ." no-target? true, skipping over '" 2dup type ." '" cr
-        \ If the string is exactly ";" then turn off no-target.
-        1 =   swap c@ ';' =   and IF
-          \ ."     found semicolon!" cr
+        \ We're skipping the interactive-only body of a :F word (eg. the
+        \ CREATE , in CONSTANT). Two tokens make us resume real compilation:
+        \  - DOES> begins the target does-code, which we DO need even in an
+        \    AOT/non-interactive target (it's how eg. a CONSTANT fetches its
+        \    value). Turn off no-target? and run DOES> so the code after it is
+        \    compiled normally.
+        \  - ; ends the definition. Turn off no-target? and run it.
+        2dup s" DOES>" capscompare 0= IF ( c-addr u )
           no-target? off
-          \ Actually do interpret the semicolon!
-          S" ;" find-name name>int execute
+          find-name name>int execute
+        ELSE ( c-addr u )
+          1 =   swap c@ ';' =   and IF
+            \ ."     found semicolon!" cr
+            no-target? off
+            \ Actually do interpret the semicolon!
+            S" ;" find-name name>int execute
+          THEN
+          \ And compile nothing else.
         THEN
-        \ And compile nothing else.
       ELSE
         2dup find-name ( ca u nt|0 ) ?dup IF
           \ Found it. Execute the target word.
@@ -63,6 +74,9 @@ no-target? off
 \ Parses a target name (immediately, like [']) and then compiles code into
 \ the host action which will compile the relevant target word when the host
 \ action runs. This means [tcompile] works properly with forward refs.
+\ NOTE: Prefer this over the phrase   [T'] FOO TCOMPILE,   because this calls
+\ the mirror>compile code path rather than doing a naive target xt + compile.
+\ That means [tcompile] works for immediate words, inlined native code, etc.
 : [tcompile] ( "name" -- )
   <T'>   ?dup 0= IF 1 ABORT" Bad [TCOMPILE]" THEN
   postpone LITERAL

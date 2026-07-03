@@ -1,7 +1,7 @@
 \ Error message strings for the various errors.
 target definitions
 
-host keyboard-output? [IF]
+host has-dictionary? keyboard-input? AND [IF]
 
 target
 CREATE (abortmsg) 0 , 0 ,

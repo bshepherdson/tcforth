@@ -193,8 +193,10 @@ target :F DO ( m i -- )
     (loop-top) @ swap (loop-top) !  ( C: old-jump-addr )
     ; IMMEDIATE
   host acts:
-    [T'] (DO) tcompile,   1 tliteral   0branch,
+    [tcompile] (DO)   1 tliteral   0branch,
     [T'] (loop-top) t>body >R  ( top-slot   R: 'loop-top )
+    \ Swap our top with (loop-top) and leave the old one on the stack.
+    \ This is reading from a TARGET VARIABLE, so we use tdata@ and tdata!
     R@ tdata@ swap ( old-top top-slot   R: 'loop-top ) R> tdata!  ( old-top )
     ; IMPERATIVE
 
@@ -219,17 +221,19 @@ target :F DO ( m i -- )
 
 host definitions
 : (+LOOP)
-  [T'] (loop-end) tcompile,   0BRANCH, ( old-top bottom-slot )
+  [tcompile] (loop-end)   0BRANCH, ( old-top bottom-slot )
   \ The target for the bottom jump is the top of the loop body; AFTER the slot
   \ stored in (loop-top).
   [T'] (loop-top) t>body dup >R   tdata@ dest>post swap ( old-top body bottom-slot)
   !dest ( old-top   R: 'top )
   \ Now HERE is after the bottom of the loop, and should be put with !dest
-  \ at (loop-top).
+  \ at (loop-top). The compiling location is in code space, but we need tdata@
+  \ to read from (loop-top), a TARGET VARIABLE.
   code-space @   R@ tdata@ !dest
   \ Finally, put the old-top back into (loop-top).
   R> tdata!
-  [T'] unloop tcompile, ;
+  \ And compile UNLOOP
+  [tcompile] unloop ;
 
 target definitions
 
@@ -290,8 +294,10 @@ DEFER release
 0 VALUE termlock
 
 \ Default, non-multitasking CLAIM and RELEASE are simply drop.
-' drop IS CLAIM
-' drop IS RELEASE
+\ Wrap it in a colon definition to be inlining-safe.
+: <dropper> drop ;
+' <dropper> IS CLAIM
+' <dropper> IS RELEASE
 
 \ Shorthand from claiming and releasing the termlock.
 target : T[ ( -- ) termlock claim ;

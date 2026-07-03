@@ -52,8 +52,9 @@
   (TCREATE) :noname ;
 
 : ;I ( -- )
-  postpone ;   ( host-xt )
-  'mirror @ mirror>compile ! ; IMMEDIATE
+  postpone ;   ( host-xt )   'mirror @ mirror>compile !
+  -1 'mirror @ mirror>txt !   \ Signals that this word has no target XT!
+; IMMEDIATE
 
 \ Arithmetic =================================================================
 :I +        pop peek add, ;I

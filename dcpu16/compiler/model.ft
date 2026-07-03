@@ -36,7 +36,11 @@ $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
 : poprsp,  ( lhs -- ) [rsp] 2swap ( rhs lhs ) set,   1 # rsp add, ;
 
 \ Compile a JSR to the literal xt!
-: tcompile,   ( t-xt -- )    # jsr, ;
+\ If the t-xt is -1, we're trying to naively compile an inlined word.
+: tcompile,   ( t-xt -- )
+  dup -1 = IF 94 throw THEN
+  # jsr, ;
+
 \ To decompile the slot, take the arg from the next word.
 : tdecompile  ( slot -- t-xt ) 1+ tcode@ ;
 
@@ -108,7 +112,8 @@ $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
 : ,docol ( -- ) pop pushrsp, ;
 
 \ Effectively the default does-code for CREATEd words without a DOES>.
-\ Called by a JSR dovar, so the
+\ Called by a JSR dovar, so the saved PC on the stack is the pfa, and under
+\ it is the real ret-addr back to the word that called the CREATEd word.
 label DOVAR ( ret-addr pfa -- parameter-field )
   pop ra   set,  \ Pop PFA into A
   pop rb   set,  \ Pop return address into B
@@ -127,14 +132,22 @@ label DOVAR ( ret-addr pfa -- parameter-field )
 \ Overwrites the code field (address) of the word at word-xt to point to the
 \ ;CODE or DOES> at does-xt.
 \ On DTC DCPU-16, this compiles JSR does-xt as two words: $7c20 does-xt
-: !dodoes ( does-xt word-xt -- ) $7c20 over tcode!   tcell+ tcode! ;
+: !dodoes ( does-xt word-xt -- )
+  ." !dodoes "   base @ >R hex .s R> base ! cr
+  $7c20 over tcode!   tcell+ tcode! ;
 
 \ Compile a literal. Simply pushes the literal with one instruction.
 : tliteral ( x --    X: -- x ) # push set, ;
 
-\ TODO: I think this can be generic based on config flags now - /codeword
+\ There's a generic `: t>body  t>pfa tpfa@ ;` that expects t>pfa to advance to
+\ either the body itself (data direct) or a pointer to the body (indirect).
+\ For the native DCPU, data is direct and a variable is compiled as:
+\ [ JSR long-lit | DOVAR | <data> ]
+\ so it's 2 cells later.
 : t>pfa ( target-xt -- target-body ) 2 tcells + ;
 
+\ TODO: This isn't necessarily required...
+: TDOES, ;
 
 \ Stacks and tasks ===========================================================
 128 tcells CONSTANT default/rs

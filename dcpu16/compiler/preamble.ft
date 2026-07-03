@@ -31,9 +31,15 @@ REQUIRE ../../host/spaces.ft
 ' <be16!> IS <tc!*>
 
 rom-application!
-headless!
+\ No dictionary, no input, but has output.
+headless! true TO keyboard-output?
 split-spaces!
 
 $0000 code-space ORG!   $0000 code-space space>offset !
 $4000 data-space ORG!   -1    data-space space>offset !
 $8000 name-space ORG!   -1    name-space space>offset !
+
+\ TODO: Should this perhaps be part of rom-application! ?
+\ Oh no wait, I'm trying to make it possible for the author to specify bespoke
+\ target spaces so they can handle things that need to be initialized and not.
+data-space copied!

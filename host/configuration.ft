@@ -79,6 +79,7 @@ false  VALUE no-data-init?    \ When true, nonzero *writable* data is banned.
   standalone! in-rom! ;
 
 : headless! ( -- )
+  standalone!
   false TO keyboard-input?
   false TO keyboard-output? ;
 

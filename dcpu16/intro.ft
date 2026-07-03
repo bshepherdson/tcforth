@@ -1,6 +1,6 @@
 target definitions
 
-host keyboard-output? [IF]
+host keyboard-input? [IF]
   target
   \  01234567890123456789012345678901
   S"        TC-FORTH version 7       " STRING header-str
@@ -14,4 +14,5 @@ host keyboard-output? [IF]
 host [THEN]
 target
 
-: init-hardware ( -- ) 10 log init-devices 11 log init-lem 12 log init-serial 13 log init-clock ;
+: init-hardware ( -- )
+  init-devices init-lem init-serial init-clock ;

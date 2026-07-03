@@ -176,12 +176,13 @@ host definitions
 
 \ Some host-side actions for CODE words, like @ and !
 'mirror @
-(T') +     'mirror !   act +
-(T') -     'mirror !   act -
-(T') @     'mirror !   act tdata@
-(T') !     'mirror !   act tdata!
-(T') or    'mirror !   act or
-(T') and   'mirror !   act and
+(T') +       'mirror !   act +
+(T') -       'mirror !   act -
+(T') @       'mirror !   act tdata@
+(T') !       'mirror !   act tdata!
+(T') or      'mirror !   act or
+(T') and     'mirror !   act and
+(T') invert  'mirror !   act invert
 
 \ TODO: Perhaps the below should not be hard-coded? GBA wants this too -
 \ compiling into ROM data or different RAM spaces. Maybe a core system for it

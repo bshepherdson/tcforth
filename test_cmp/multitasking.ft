@@ -1,0 +1,75 @@
+multi
+32 cells task ponger
+
+: pong ( -- ) ponger ACTIVATE BEGIN
+    T[ ." Pong waiting: " message @ sender @ hex.s 2drop cr ]T
+    receive
+    T[ ." Pong! Got " swap . ." from " hex. cr ]T
+AGAIN ;
+
+: ping ( msg -- )
+  T[ ." Pinging with " dup . cr ]T
+  ponger send
+  T[ ." Ping sent. " hex.s cr ]T ;
+
+
+CREATE whirligig
+char | green fg c,
+char / green fg c,
+char - green fg c,
+char \ green fg c,
+
+vram 31 + CONSTANT corner
+
+32 cells task whirler
+: whirl whirler ACTIVATE
+  0 BEGIN whirligig over + c@   corner !   1+ 3 and   pause AGAIN ;
+
+\ Thread ring of 8 tasks passing values around to each other.
+30 CONSTANT laps
+8  CONSTANT #tasks
+
+CREATE counters   #tasks cells allot
+CREATE task-ring  #tasks cells allot
+
+USER ring-index
+
+VARIABLE host-task
+
+: ring-task ( index -- )
+  32 cells newtask        ( index task )
+  2dup ring-index swap 's !
+
+  over cells task-ring + ! ( index )
+  cells counters +   off ;
+
+: count++ ( -- ) 1   ring-index @ cells counters + +! ;
+: successor ( -- task )
+  ring-index @ 1+   dup #tasks < IF cells task-ring + @ ELSE drop host-task @ THEN ;
+
+: ringed ( index -- )
+  cells task-ring + @ ACTIVATE
+  BEGIN
+    receive drop   ( msg )
+    count++   successor send
+  AGAIN ;
+
+\ Call CREATE-RING once, then start-ring, run-ring, and stop-ring many times.
+: create-ring ( -- ) #tasks 0 DO i ring-task LOOP ;
+: start-ring  ( -- ) #tasks 0 DO i ringed LOOP ;
+: stop-ring   ( -- ) #tasks 0 DO i cells task-ring + @ SLEEP LOOP ;
+
+: run-ring    ( -- )
+  up@ host-task !
+  laps 0 DO
+    i   task-ring @ send
+    \ #tasks 1- cells task-ring + @
+    receive ( msg task ) drop
+    i <> ABORT" Task ring passed back a bad value!"
+    $2e emit
+  LOOP ;
+
+: .counters ( -- ) #tasks 0 DO i cells counters + @ . LOOP ;
+
+\ TODO: Create a way to mark tasks as deleted, and reclaim their memory if a
+\ suffix is all disused? That's only really useful for testing, though.

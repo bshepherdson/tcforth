@@ -14,18 +14,10 @@ host definitions
 \ HACK: For now I'm implementing my basic app in here.
 target definitions
 
-\ Interpretive only: inlines the following string into the *code* space.
-\ Returns its ( c-addr u ) interpretively.
-target
-
-S" Hello, World!" STRING greeting
-
 : main ( -- )
   boot
-  default-colours
-  greeting type cr
-  BEGIN AGAIN
-;
+  run-test-suite
+  BEGIN AGAIN ;
 
 host T' main   entry-point tcode!
 

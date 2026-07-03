@@ -393,8 +393,8 @@ DEFER <C,>
 
 \ For compiling mutable data into a CREATEd word's parameter field:
 \ rwdata   CREATE foo   1 , 2 , 3 ,
-: rwdata ( -- ) tdata, IS <,>   tdata-c, IS <C,> ;
+: rwdata ( -- ) ['] tdata, IS <,>   ['] tdata-c, IS <C,> ;
 
 \ For compiling read-only data into code space, eg. a character map:
 \ rodata   here   1 , 2 , 3 ,   CONSTANT foo
-: rodata ( -- ) tcode, IS <,>   tcode-c, IS <C,> ;
+: rodata ( -- ) ['] tcode, IS <,>   ['] tcode-c, IS <C,> ;

@@ -1,0 +1,22 @@
+host rwdata
+target definitions
+REQUIRE harness.ft
+
+
+REQUIRE basics.ft
+REQUIRE comparisons.ft
+REQUIRE arithmetic.ft
+\ Deliberately skipping parsing.ft since this isn't for interactive Forths.
+REQUIRE rest.ft
+
+S" Tests complete" STRING "complete"
+
+: run-test-suite ( -- )
+  ['] error1 error-xt !
+
+  test-suite-basics
+  test-suite-comparisons
+  test-suite-arithmetic
+  test-suite-rest
+
+  cr "complete" type cr ;

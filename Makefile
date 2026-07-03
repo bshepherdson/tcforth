@@ -82,6 +82,17 @@ app-dcpu16-nc.bin: host/*.ft dcpu16/*.ft dcpu16/**/*.ft shared/*.ft exp/*.ft
 run-dcpu16-nc: app-dcpu16-nc.bin FORCE
 	$(EMULATOR) -disk $(DCPU_DISK) $<
 
+test-dcpu16-nc.bin: host/*.ft dcpu16/*.ft dcpu16/**/*.ft shared/*.ft exp/*.ft test_cmp/*.ft
+	$(FORTH) dcpu16/compiler/preamble.ft \
+		dcpu16/compiler/system.ft \
+		-e 'host definitions :noname S" $@" ; IS tcforth-output' \
+		test_cmp/suite.ft \
+		dcpu16/compiler/finalize.ft -e 'bye'
+
+
+test-dcpu16-nc: test-dcpu16-nc.bin FORCE
+	$(EMULATOR) -turbo -disk $(DCPU_DISK) -script test-cmp.dcs $<
+
 # Risque-16 ==================================================================
 # My RISC-style, Thumb-inspired "competitor" in the DCPU cinematic universe.
 forth-rq16.bin: host/*.ft rq16/*.ft shared/*.ft dcpu16/*.ft

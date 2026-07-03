@@ -1,0 +1,46 @@
+\ Test harness for compiling onto the target.
+\ This is **metacompiled code** and results in a bunch of definitions being
+\ compiled onto the target.
+\ target definitions
+
+VARIABLE actual-depth
+CREATE actual-results 32 cells allot
+VARIABLE start-depth
+VARIABLE error-xt
+
+\ Error handlers
+: error error-xt @ execute ;
+
+: empty-stack
+  depth start-depth @ < IF
+    depth start-depth @ swap
+      DO 0 LOOP THEN
+    depth start-depth @ > IF
+      depth start-depth @
+      DO drop LOOP THEN ;
+
+\ TODO: Better error reporting?
+: error1 type ( source type ) cr   empty-stack ;
+
+\ Test words
+: T{ depth start-depth ! ;
+
+: -> depth dup actual-depth !
+  start-depth @ > IF
+    depth start-depth @ - 0 DO
+      actual-results i cells + ! LOOP
+  THEN ;
+
+S" INCORRECT RESULT: "        STRING "incorrect"
+S" WRONG NUMBER OF RESULTS: " STRING "miscount"
+
+: }T
+  depth actual-depth @ = IF
+    depth start-depth @ > IF
+      depth start-depth @ - 0 DO
+        actual-results i cells + @ <> IF
+          "incorrect" error LEAVE THEN LOOP
+    THEN
+  ELSE
+    "miscount" error
+  THEN $2e emit ;

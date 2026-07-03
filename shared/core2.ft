@@ -1,8 +1,8 @@
 \ Advanced core words, loaded post-input.
 target definitions
 
-: HEX 16 base ! ;
-: DECIMAL 10 base ! ;
+target : HEX 16 base ! ;      host act hex
+target : DECIMAL 10 base ! ;  host act decimal
 
 \ (CREATE) builds a blank header, no code field.
 \ But there's a pointer to the code field if the code and name spaces are

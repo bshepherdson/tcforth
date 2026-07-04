@@ -158,8 +158,7 @@ target :F ACTION-OF ( "name" -- xt )
 target :F TO ( I: x "name" --    C: "name" --   X: x -- )
     ' >body   state @ IF postpone LITERAL postpone ! ELSE ! THEN ; IMMEDIATE
   host acts:
-    state @ IF T' ." Compiling TO at " code-space @ hex. ." - xt " dup hex.
-      t>body ." body " dup hex. tliteral [tcompile] !   cr
+    state @ IF T' t>body tliteral   [tcompile] !   cr
     ELSE
       T' t>body tdata! THEN ; IMPERATIVE-BOTH
 

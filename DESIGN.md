@@ -627,3 +627,127 @@ turned into config parameters easily, just the number of bits.
 
 This really sucks; it's a complex routine. But perhaps it's the best approach.
 I should at least try it once and see what the impact is.
+
+
+## Native code compiler
+
+The DCPU-16 has been expanded with a native code compiling version of this
+Forth system. All the core has been annotated with `:F` vs. `:` to allow the
+system to omit words that are only necessary on the host and on *interactive*
+Forth targets (that's the `F` in `:F`). You don't need `INTERPRET`, dictionary
+lookup, and loads more if you aren't interpreting Forth code at runtime. If the
+whole app lives in ROM, compiler ahead-of-time, as a GBA game would be, then
+there's no need to have all that code.
+
+### Basic compilation
+
+The DCPU-16 implementation (in `dcpu16/compiler/*`) is a pretty naive compiler.
+It has some inlined primitives and some callable primitives, plus nonprimitives
+written as essentially subroutine threaded code.
+
+It's far from the most efficient code, since it does no register allocation and
+isn't even smart enough right now to do tail calls or avoid pushing some
+register only to immediately read it again.
+
+### Buffered compilation
+
+There are essentially two approaches to optimizing the output code:
+
+1. buffering an IR inside the compiler, and writing out literal opcodes as a
+   second phase, or
+2. writing literal opcodes, but then taking a second pass to simplify redundant
+   neighbours.
+
+Both approaches favour an IR, so that we can use a host pointer from the IR
+of a jump to the IR of its target, without having to compute literal offsets
+until the last moment. That IR roughly corresponds to Forth primitives: jumps,
+arithmetic, fetch and store, etc.
+
+Some architectures can combine a few of the operations together, so there's a
+"superinstructions" mechanism that looks for adjacent combos. Things like
+`cells + @`, that can be used to keep track of realistic values. The mirror word
+pointers make an excellent key for this.
+
+One last point here: we need to keep the IR of all the words we compile in the
+host's memory! That enables inlining, which is *the* optimization if we're
+chasing speed rather than compact size.
+
+
+#### What about incoming pointers?
+
+A tour of the uses of the `code-space` pointer show that it's basically only
+used for three things:
+- between definitions, looking up the `xt` for the new word
+- in control structures like `BEGIN`, `REPEAT` and `IF`
+- in *model* machinery like `DOES,` that is part of the compiler anyway
+
+That means that futzing with the generated code, but keeping it *starting* at
+the same place, fits in neatly.
+
+
+### Notes from hand-compiled nonprimitives
+
+I looked at a bunch of words from my Z-machine implementation for representative
+nonprimitives and compiled them by hand. It proves the value of this approach
+for speed, since they were generally 10% more compact and at least 2x faster.
+
+- Inlining is *critical*, doubly so in Forth since it favours tiny words and
+  highly factored code.
+- Tail calls are also extremely common - that applies to `foo EXIT` too!
+- Different platforms will have different rules about the "exchange rate"
+  between inlining and a call - speed vs. space, the call overhead, etc.
+- Using literals (e.g. a CONSTANT) straight into the following opcode is very
+  powerful.
+- Adjacent words isn't really cutting it, there's things like `foo cells + @`
+  that can be turned into a register, pre-indexed, shifted ARM read in one
+  instruction!
+  - Hence the use of superinstructions, using the mirror word pointers as keys.
+
+### On locations and values
+
+There are three moving parts to the values and locations:
+- two "logical" stacks, used for the compiler's bookkeeping
+- *locations*, which describe the different places a value might be
+- *values*, which might be in several locations at once
+
+The locations form a doubly linked list connecting all the aliases of that
+particular value, which makes it easy to scan for the most suitable.
+
+Value lifetimes and register allocation are the trickiest part of the whole
+operation! The key is to split things up into separate passes. Each "register"
+in the original IR is unallocated and abstract initially. Then when the time
+comes to allocate them to actual registers, we can collect constraints from
+all producers and consumers of that register, building up the graph of deps
+and then trying to solve it. If we can't solve it, we have to spill one to
+a stack value. Fortunately most architectures have excellent stack indexing
+reads as well as straight push and pop. (Thumb has an 8-bit `SP` offset, so
+does ARM, DCPU-16 has `PICK`)
+
+If a word has a dynamic stack effect, the allocator can always fall back to
+real stacking like a vanilla Forth.
+
+### Alternative implementations
+
+One logistical problem here is that the metacompiler has some built-in logic
+that might not be suitable for the compiled form. Control structures are one
+obvious case, but there may be others. The straightforward but heavy-handed
+way to adapt that is to have an alternative implementation of those structures
+and have the `system.ft` for the target require that instead of the standard
+one.
+
+The biggest pain point is dealing with CREATEd words on the host side that can
+be more efficiently inlined into the code. Their `call` IRs can be examined and
+their `DOES>` code inlined more or less like any other word.
+
+### Development process
+
+Okay, this needs a breakdown into measured steps to avoid becoming a nightmare.
+
+1. Buffer the DCPU-16 compilation, but otherwise keep it as-is.
+2. Shake out any control points or other issues.
+3. Inlining! At least get the basics working for this, including the chained
+   locations.
+4. Superinstructions: replace sequences of IR with faster, combo operations.
+   Note that this should happen after inlining, since inlining across word
+   boundaries sucks.
+5. Register allocation!

@@ -26,6 +26,8 @@ headless!
 \ TODO: Probably support multitasking in GBA? But for now it's extra setup
 \ complexity we can avoid.
 false TO multitasking?
+false TO keyboard-input?
+false TO keyboard-output?
 
 ?stack-clear
 
@@ -66,3 +68,6 @@ iwram blank-space!                             \ Not in the ROM.
 
 \ Use IWRAM as the default Forth data space.
 iwram TO data-space
+
+data-space copied! \ TODO: Remove this! But for now it's needed for CONSTANTs
+\ and VALUEs to work properly.

@@ -23,6 +23,10 @@ HOST DEFINITIONS
 : HERE ( -- ) 99 throw ;
 : DP   ( -- ) 98 throw ;
 
+\ Returns the xt for the *next* definition, the one we're about to start
+\ compiling. Usually the code-space address, though it can be something else.
+: CUR-XT ( -- t-xt ) code-space @ ;
+
 \ First line of code, the entry point. It'll be a jump to COLD eventually.
 $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
 

@@ -45,6 +45,28 @@
 \ Alternatively, could use I or J as RSP empty-descending, and STD/STI?
 \ Then RSP pushes and pops are 1 word, 2 cycles.
 
+\ Buffered compilation =======================================================
+\ I think a general kind of indirection, for use across the models, is a good
+\ way to tackle this. It's definitely weird for the compilation to be so low-
+\ level from the POV of the metacompiler.
+\ Let me do a deep dive on how it fits together, and extract some pieces.
+
+\ First try, off the dome: No promises about addresses, instead it should be
+\ returning compilation tokens and execution tokens, which are abstract tokens
+\ and not necessarily addresses.
+\ The load order has the model loaded before the metacompiler, so part of the
+\ model's job could be to define tcompile, and friends.
+\ It also might make sense to include an "extras" pointer on the mirror words?
+
+\ Let me think through these tokens a bit more: each word has host and target
+\ compilation and execution tokens. Each of them can be turned in for its
+\ intended effect to the appropriate word, which should be defined by each
+\ model: `execute` and `compile,`, or `tcompile,` on the host.
+\ Gforth has `COMP'` and `[COMP']` to get the compilation token of a named word,
+\ in parallel with `'` and `[']` for xts. It also has `POSTPONE,` with a comma
+\ which *compiles* the compilation semantics.
+\ I think this refactor makes a lot of sense, and should come first.
+
 \ Inlined native code ========================================================
 \ This word defines a new mirror with the given name, and makes the following
 \ (host) colon definition its mirror>compile.

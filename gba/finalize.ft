@@ -13,8 +13,12 @@ host
 \ For now, just putting the stacks and user variables at the top of IWRAM.
 \ The interrupt handler stack is at $03007F00 and up; the Forth stacks go below.
 $03007F00 CONSTANT game-iwram-top
-game-iwram-top              'rp0 tcode!
-game-iwram-top default/rs - 'sp0 tcode!
+
+game-iwram-top                  'rp0 tcode!
+game-iwram-top default/rs - dup 'sp0 tcode!
+t/user @ -   $100 cells -   dup 'up0 tcode!
+." UP0 " hex. cr
+
 
 \ This needs to be the last lines in the target compilation.
 host latest         latest0 tcode!

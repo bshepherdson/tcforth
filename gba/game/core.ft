@@ -13,13 +13,9 @@ target definitions
 
 : game-start ( -- )
   boot
-  io-dispcnt spin
   init-display
   the-frame
   expose
   main-loop ;
-
-\ XXX: START HERE: It doesn't look like my edits to the registers are sticking?
-\ Not sure what's up with that. See if my edits to DISPCNT etc. are working.
 
 host T' game-start entry-point tcode!

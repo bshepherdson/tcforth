@@ -751,3 +751,6 @@ Okay, this needs a breakdown into measured steps to avoid becoming a nightmare.
    Note that this should happen after inlining, since inlining across word
    boundaries sucks.
 5. Register allocation!
+
+XXX: START HERE: Need to figure out how the buffering interacts with the forward
+declarations, but I can't brain.

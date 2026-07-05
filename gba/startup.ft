@@ -1,12 +1,14 @@
 \ Main =======================================================================
 label 'sp0     0 asm, \ These get filled in by gba/finalize.ft
 label 'rp0     0 asm,
+label 'up0     0 asm,
 
 label 'gba-ime $04000208 asm,
 label 'gba-ie  $04000200 asm,
 label 'gba-if  $04000202 asm,
 
 label main
+  'up0            up ldr-pc,    \ Initialize UP
   'rp0           rsp ldr-pc,    \ Main RP0  -> rsp
   trp0  # up [+] rsp str,       \           -> RP0 field
   'sp0            sp ldr-pc,    \ Main SP0  -> sp

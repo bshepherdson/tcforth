@@ -183,13 +183,13 @@ end-code
 
 code H@
   \ tos [] tos ldrh,
-  $e1daa0b0 asm,
+  $e1daa0b0 asm-word,
 end-code
 
 code H!
   {{ r0 }}  pop,
   \ tos [] r0 strh,
-  $e1ca00b0 asm,
+  $e1ca00b0 asm-word,
   {{ tos }} pop,
 end-code
 
@@ -239,8 +239,8 @@ end-code
 
 \ Variables and core states ==================================================
 \ Values in ROM giving the initial LATEST and DP.
-label dp0     0 asm,
-label latest0 0 asm,
+label dp0     0 asm-word,
+label latest0 0 asm-word,
 
 \ Space in the RAM for system variables.
 TVARIABLE var_dp
@@ -258,7 +258,7 @@ TVARIABLE var_source_id
 data-space @ CONSTANT input-buf   128 tdata-allot
 
 
-label dp-indirect   var_dp asm,
+label dp-indirect   var_dp asm-word,
 code DP
   {{ tos }}       push,
   dp-indirect r0  nearby,
@@ -293,7 +293,7 @@ end-code
 
 
 : var-pusher ( var "name" -- )
-  code-space @ >R   asm,   code
+  code-space @ >R   asm-word,   code
   {{ tos }} push,
   R>    r0  nearby,
   r0 [] tos ldr,
@@ -428,8 +428,8 @@ end-code
 
 \ MOVEs ======================================================================
 \ XXX: remove me
-label uart0dr $101f1000 asm,
-label 'deadbeef $deadbeef asm,
+label uart0dr   $101f1000 asm-word,
+label 'deadbeef $deadbeef asm-word,
 
 
 code MOVE< ( src dst u -- ) \ Copies from low addresses to high.

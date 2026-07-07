@@ -39,11 +39,11 @@
 \ For a prompt PAUSE we can hijack the codeword of EXIT to a new word that
 \ does an EXIT and a (PAUSE) right after.
 
-label 'main-task   task-area0  asm,
-label timer-intclr $101e200c   asm, \ Set to 1 to clear the interrupt flag.
+label 'main-task   task-area0  asm-word,
+label timer-intclr $101e200c   asm-word, \ Set to 1 to clear the interrupt flag.
 
 TVARIABLE ticks
-label 'ticks ticks asm,
+label 'ticks ticks asm-word,
 
 TVARIABLE kernel-task
 
@@ -51,7 +51,7 @@ label interrupt-return
   {{ r0 r1 r2 r3 r4   r9 r10 r11 r12 lr }} pop,
   4 # lr  pc  S sub,       \ LR is 4 bytes too far for hardware reasons.
 
-label 'var_handler   var_handler asm,
+label 'var_handler   var_handler asm-word,
 
 \ Simple timer interrupt handler: clear the timer interrupt, bump ticks, return.
 \ The complex Forth-task-switching handler that was here before has an IRQ mode
@@ -71,8 +71,8 @@ label interrupt-handler
 
 
 \ Main =======================================================================
-label 'sp0     0 asm, \ These get filled in by arm/finalize.ft
-label 'rp0     0 asm,
+label 'sp0     0 asm-word, \ These get filled in by arm/finalize.ft
+label 'rp0     0 asm-word,
 
 \ IF01 mmmm
 \ These have the modes, plus IRQ + FIQ masking and the res1 bit.

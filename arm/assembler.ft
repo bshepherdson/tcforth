@@ -6,8 +6,9 @@
 
 : hex.s base @ >R   hex .s   R> base ! ;
 
-: asm,      ( w -- ) tcode, ;
+: asm-word, ( w -- ) tcode, ;
 : asm-byte, ( b -- ) tcode-c, ;
+: asm-half, ( h -- ) dup tcode-c,   8 rshift tcode-c, ;
 
 : label ( "name" --    X: -- t-addr ) code-space @ CONSTANT ;
 
@@ -98,7 +99,8 @@ VARIABLE S?   0 S? !
 
 \ BX =========================================================================
 \ cccc 0001 0010 1111 1111 1111 0001 nnnn
-: bx, ( r 0 -- ) ?reg $012fff10 or +cond asm, ;
+DEFER bx,
+: arm:bx, ( r 0 -- ) ?reg $012fff10 or +cond asm-word, ;
 
 \ B and BL ===================================================================
 \ cccc 101L signed-24-offset
@@ -110,10 +112,12 @@ VARIABLE S?   0 S? !
   dup 3 and 0<> ABORT" B and BL addresses must be word-aligned"
   code-space @ 8 +   - ( delta-bytes ) 2/ 2/ ( delta-words )
   dup   -1 $7fffff invert and   $800000   within 0= ABORT" Branch too far"
-  $ffffff and R> or $0a000000 or   +cond asm, ;
+  $ffffff and R> or $0a000000 or   +cond asm-word, ;
 
-: b,   0         (b) ;
-: bl,  $01000000 (b) ;
+DEFER b,
+DEFER bl,
+: arm:b,   0         (b) ;
+: arm:bl,  $01000000 (b) ;
 
 
 \ Data Processing ============================================================
@@ -163,7 +167,7 @@ VARIABLE S?   0 S? !
   21 lshift >R
   ?reg 12 lshift R> or >R
   ?reg 16 lshift R> or >R ( op2   R: op )
-  (op2) R> or +S +cond asm, ;
+  (op2) R> or +S +cond asm-word, ;
 
 \ 3-argument regular operations
 : (dp3) ( opcode "name" --      X: op2 rn 0 rd 0 -- )
@@ -203,14 +207,14 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
   spec-reg >R
   IF   dup ?u8 $ff and   $0321f000   \ Immediate form: I=1
   ELSE            $0f and   $0121f000   \ Register form:  I=0
-  THEN or R> or +cond asm, ;
+  THEN or R> or +cond asm-word, ;
 
 \ MRS only applies for CPSR into a register.
 \ cccc 0001 0S00 1111 dddd 0000 0000 0000
 \ S is 0 for CPSR, 1 for SPSR_current
 : mrs, ( spec 2 reg 0 )
   ?reg 12 lshift >R   spec-reg R> or
-  $010f0000 or +cond asm, ;
+  $010f0000 or +cond asm-word, ;
 
 
 \ Multiply ===================================================================
@@ -224,8 +228,9 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
   ?reg           R> or >R
   ?reg  8 lshift R> or +S +cond $90 or ;
 
-: mul, ( rs 0 rm 0 rd 0 -- ) (mul) asm, ;
-: mla, ( rn 0 rs 0 rm 0 rd 0 -- ) (mul) >R ?reg 8 lshift R> or asm, ;
+DEFER mul,
+: arm:mul, ( rs 0 rm 0 rd 0 -- ) (mul) asm-word, ;
+: mla, ( rn 0 rs 0 rm 0 rd 0 -- ) (mul) >R ?reg 8 lshift R> or asm-word, ;
 
 
 \ Multiply Long ==============================================================
@@ -239,7 +244,7 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
   ?reg 16 lshift R> or >R
   ?reg           R> or >R
   ?reg  8 lshift R> or
-  +S +cond $00800090 or asm, ;
+  +S +cond $00800090 or asm-word, ;
 
 : umull, ( rs 0 rm 0 rdhi 0 rdlo 0 -- ) 0         (mull) ;
 : smull, ( rs 0 rm 0 rdhi 0 rdlo 0 -- ) $00400000 (mull) ;
@@ -298,15 +303,21 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
 : []-  ( op2 rn 0 -- op2 rn 0 UpW ) $00200000 ([]) ;
 
 : (ldr) ( encoded-addr rd 0 flags -- )
-  >R ?reg 12 lshift R> or or $04000000 or +cond asm, ;
+  >R ?reg 12 lshift R> or or $04000000 or +cond asm-word, ;
 
-: ldr,  ( encoded-addr rd 0 -- ) $00100000 (ldr) ;
-: str,  ( encoded-addr rd 0 -- ) $00000000 (ldr) ;
-: ldrb, ( encoded-addr rd 0 -- ) $00500000 (ldr) ;
-: strb, ( encoded-addr rd 0 -- ) $00400000 (ldr) ;
+DEFER ldr,
+DEFER str,
+DEFER ldrb,
+DEFER strb,
+
+: arm:ldr,  ( encoded-addr rd 0 -- ) $00100000 (ldr) ;
+: arm:str,  ( encoded-addr rd 0 -- ) $00000000 (ldr) ;
+: arm:ldrb, ( encoded-addr rd 0 -- ) $00500000 (ldr) ;
+: arm:strb, ( encoded-addr rd 0 -- ) $00400000 (ldr) ;
 
 \ Does a PC-relative load of an absolute address.
-: ldr-pc, ( value rd 0 -- )
+DEFER ldr-pc,
+: arm:ldr-pc, ( value rd 0 -- )
   \ We want ultimately to have:  delta # pc 0 [-]/[+] rd 0 ldr,
   \ PC counts from 8 bytes ahead.
   2>R             ( abs )
@@ -330,7 +341,7 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
 \ oo=10        LDRSB Rd,<addr> (sign-extended)
 \ oo=11        STRSH Rd,<addr> (sign-extended)
 : (ldrh) ( encoded-addr rd 0 flags -- )
-  >R ?reg 12 lshift R> or or $00000090 or +cond asm, ;
+  >R ?reg 12 lshift R> or or $00000090 or +cond asm-word, ;
 
 \ TODO: These don't work - the I=0 logic is inverted from ldr.
 \ : ldrh,  ( encoded-addr rd 0 -- ) $00100020 (ldrh) ;
@@ -349,28 +360,32 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
 
 \ The inner LDM/STM operation:
 : (ldm/stm) ( reg-bits rn 0 flags -- )
-  >R ?reg 16 lshift R> or or +cond $08000000 or asm, ;
+  >R ?reg 16 lshift R> or or +cond $08000000 or asm-word, ;
 
 \ Now working through all 16 combinations: PU-WL
-:  stmda,  ( reg-bits rn 0 -- ) $08000000 (ldm/stm) ; \ puwl
-:  ldmda,  ( reg-bits rn 0 -- ) $08100000 (ldm/stm) ; \ puwL
-: !stmda,  ( reg-bits rn 0 -- ) $08200000 (ldm/stm) ; \ puWl
-: !ldmda,  ( reg-bits rn 0 -- ) $08300000 (ldm/stm) ; \ puWL
-:  stmia,  ( reg-bits rn 0 -- ) $08800000 (ldm/stm) ; \ pUwl
-:  ldmia,  ( reg-bits rn 0 -- ) $08900000 (ldm/stm) ; \ pUwL
-: !stmia,  ( reg-bits rn 0 -- ) $08a00000 (ldm/stm) ; \ pUWl
-: !ldmia,  ( reg-bits rn 0 -- ) $08b00000 (ldm/stm) ; \ pUWL
-:  stmdb,  ( reg-bits rn 0 -- ) $09000000 (ldm/stm) ; \ Puwl
-:  ldmdb,  ( reg-bits rn 0 -- ) $09100000 (ldm/stm) ; \ PuwL
-: !stmdb,  ( reg-bits rn 0 -- ) $09200000 (ldm/stm) ; \ PuWl
-: !ldmdb,  ( reg-bits rn 0 -- ) $09300000 (ldm/stm) ; \ PuWL
-:  stmib,  ( reg-bits rn 0 -- ) $09800000 (ldm/stm) ; \ PUwl
-:  ldmib,  ( reg-bits rn 0 -- ) $09900000 (ldm/stm) ; \ PUwL
-: !stmib,  ( reg-bits rn 0 -- ) $09a00000 (ldm/stm) ; \ PUWl
-: !ldmib,  ( reg-bits rn 0 -- ) $09b00000 (ldm/stm) ; \ PUWL
+DEFER !ldmia
+DEFER !stmia
+:  stmda,     ( reg-bits rn 0 -- ) $08000000 (ldm/stm) ; \ puwl
+:  ldmda,     ( reg-bits rn 0 -- ) $08100000 (ldm/stm) ; \ puwL
+: !stmda,     ( reg-bits rn 0 -- ) $08200000 (ldm/stm) ; \ puWl
+: !ldmda,     ( reg-bits rn 0 -- ) $08300000 (ldm/stm) ; \ puWL
+:  stmia,     ( reg-bits rn 0 -- ) $08800000 (ldm/stm) ; \ pUwl
+:  ldmia,     ( reg-bits rn 0 -- ) $08900000 (ldm/stm) ; \ pUwL
+: arm:!stmia, ( reg-bits rn 0 -- ) $08a00000 (ldm/stm) ; \ pUWl
+: arm:!ldmia, ( reg-bits rn 0 -- ) $08b00000 (ldm/stm) ; \ pUWL
+:  stmdb,     ( reg-bits rn 0 -- ) $09000000 (ldm/stm) ; \ Puwl
+:  ldmdb,     ( reg-bits rn 0 -- ) $09100000 (ldm/stm) ; \ PuwL
+: !stmdb,     ( reg-bits rn 0 -- ) $09200000 (ldm/stm) ; \ PuWl
+: !ldmdb,     ( reg-bits rn 0 -- ) $09300000 (ldm/stm) ; \ PuWL
+:  stmib,     ( reg-bits rn 0 -- ) $09800000 (ldm/stm) ; \ PUwl
+:  ldmib,     ( reg-bits rn 0 -- ) $09900000 (ldm/stm) ; \ PUwL
+: !stmib,     ( reg-bits rn 0 -- ) $09a00000 (ldm/stm) ; \ PUWl
+: !ldmib,     ( reg-bits rn 0 -- ) $09b00000 (ldm/stm) ; \ PUWL
 
-: push, ( reg-bits -- ) sp !stmdb, ;
-: pop,  ( reg-bits -- ) sp !ldmia, ;
+DEFER push,
+DEFER pop,
+: arm:push, ( reg-bits -- ) sp !stmdb, ;
+: arm:pop,  ( reg-bits -- ) sp !ldmia, ;
 
 
 \ SWP ========================================================================
@@ -381,7 +396,7 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
   ?reg 12 lshift R> or >R
   ?reg           R> or >R
   ?reg 16 lshift R> or
-  $01000090 or +cond asm, ;
+  $01000090 or +cond asm-word, ;
 
 : swp,  ( rn 0 rm 0 rd 0 -- ) 0         (swp) ;
 : swpb, ( rn 0 rm 0 rd 0 -- ) $00400000 (swp) ;
@@ -397,10 +412,31 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
 
 \ Resolve expects a loc on the stack, and resolves it to point to here.
 \ We need to retain the condition code of the existing branch opcode.
-: resolve ( loc -- )
+DEFER resolve
+: arm:resolve ( loc -- )
   code-space @ >R
   dup tcode@ $f0000000 and >R  ( loc   R: real-space cond )
   code-space !
   R> condition !   ( R: real-space )
   R@ b,
   R> code-space ! ;
+
+
+: arm ( -- )
+  arm:bx,     IS bx,
+  arm:b,      IS b,
+  arm:bl,     IS bl,
+  arm:mul,    IS mul,
+  arm:ldr,    IS ldr,
+  arm:str,    IS str,
+  arm:ldrb,   IS ldrb,
+  arm:strb,   IS strb,
+  arm:ldr-pc, IS ldr-pc,
+  arm:!stmia, IS !stmia,
+  arm:!ldmia, IS !ldmia,
+  arm:push,   IS push,
+  arm:pop,    IS pop,
+  arm:resolve IS resolve ;
+
+\ Defaulting to ARM.
+arm

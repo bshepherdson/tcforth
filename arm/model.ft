@@ -165,7 +165,7 @@ $00800000 CONSTANT task-area0
 256 tcells CONSTANT default/rs
 512 tcells CONSTANT default/ds
 
-label entry-point 0 asm,
+label entry-point 0 asm-word,
 
 \ Space for : and ; ==========================================================
 \ : :   (CREATE) ,docol smudge ] exit    5 cells and the codeword

@@ -159,6 +159,16 @@ VARIABLE 'EXIT   \ These get populated later.
 : t>pfa ( target-xt -- target-body ) tcell+ ;
 
 
+\ Forward references =========================================================
+\ Compile a call to a forward ref, returning an opaque token.
+: forward-ref ( -- token )
+  code-space @
+  $fade tcompile, ;
+
+: resolve-ref ( token real-t-xt -- )
+  swap tcode! ;
+
+
 \ Stacks and tasks ===========================================================
 128 tcells CONSTANT default/rs
 256 tcells CONSTANT default/ds

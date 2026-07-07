@@ -18,8 +18,9 @@ host definitions
 : 0BRANCH,    [T'] (0BRANCH) tcompile,   code-space @   0 tcode, ;
 : BRANCH,     [T'] (BRANCH)  tcompile,   code-space @   0 tcode, ;
 : !DEST       tcode! ;
-: DEST>BRANCH 1- ;
-: DEST>POST   tcell+ ;
+: >DEST       code-space @ ;
+: SLOT>BEFORE 1- ;
+: SLOT>AFTER  tcell+ ;
 
 \ Then the target side; with HOST ACTS: calling the above.
 target definitions
@@ -32,6 +33,7 @@ target : BRANCH,
     [ host T' (BRANCH) tliteral target ] compile,   here 0 , ;
   host acts: branch, ;
 
-target : !DEST ( dest slot -- ) !  ;   host acts: !dest ;
-target : DEST>BRANCH            1- ;   host acts: dest>branch ;
-target : DEST>POST              1+ ;   host acts: dest>post ;
+target : !DEST ( dest slot -- )        ! ;   host acts: !dest       ;
+target : >DEST ( -- dest )          here ;   host acts: >dest       ;
+target : SLOT>BEFORE ( slot -- dest ) 1- ;   host acts: slot>before ;
+target : SLOT>AFTER  ( slot -- dest ) 1+ ;   host acts: slot>after  ;

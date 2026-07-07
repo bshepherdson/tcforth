@@ -26,7 +26,7 @@ VICE_C64_FLAGS ?= -nativemonitor \
 		  -fs8 .
 
 # DCPU-16 ====================================================================
-forth-dcpu16.bin: host/*.ft dcpu16/**/*.ft shared/*.ft
+forth-dcpu16.bin: host/*.ft dcpu16/*.ft dcpu16/**/*.ft shared/*.ft
 	$(FORTH) dcpu16/preamble.ft \
 		-e "' spaces::single IS default-spaces!" \
 		dcpu16/system.ft dcpu16/disks.ft \

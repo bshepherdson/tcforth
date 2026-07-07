@@ -411,5 +411,13 @@ resolve
 end-code         \ And done!
 
 
+
+\ Interrupts =================================================================
+\ Most of the interrupt handling is in code_words.ft but these are not since
+\ they get inlined by the native build.
+code IRQ+ ( -- )   0 # iaq,   end-code \ Interrupts on  = queueing disabled
+code IRQ- ( -- )   1 # iaq,   end-code \ Interrupts off = queueing enabled
+
+
 REQUIRE kernel/code_words.ft
 REQUIRE kernel/init.ft

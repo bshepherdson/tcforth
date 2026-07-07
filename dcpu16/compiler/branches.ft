@@ -1,25 +1,139 @@
-\ The slots returned by 0/BRANCH, and consumed by !DEST are arbitrary but must
-\ be compatible. They are distinct from the HERE values used as the targets
-\ for branches. On ITC and DTC, they'll generally be the address of the
-\ cell after the `(BRANCH)` instruction, which holds an absolute target.
-\ Then !DEST is simply T!.
+\ Abstract branching =========================================================
+\ Making the Forth control structures portable is a tricky business, but it can
+\ be done!
+\ These deal in two abstract things:
+\ - A `slot` is an abstract branch instruction, and needs its `dest` defined.
+\ - A `dest` is a location in the code, where we intend to branch.
 
-\ On some machines, the branch might be relative or encoded into an instruction.
-\ It might also matter whether the word in question was a conditional or
-\ unconditional branch, since they might be implemented very differently.
+\ In a basic ITC or DTC machine, these are usually absolute addresses and can
+\ be easily adjusted. But with buffered compilation or any optimization, it's
+\ more complex than that. Each target has to define a little batch of words for
+\ both the host and target to hide the implementation details.
 
-\ On the target side, BRANCH, means compiling the necessary and leaving HERE
-\ on the stack. It can easily be written in Forth in this file.
-\ On the host side, it can be implemented using host words like the assembler.
+\ Note that dests and slots are sometimes resolved in either order, so if they
+\ are not simple addresses then they must be able to support a branch forward
+\ that appears before its destination address is known!
+
+\ Compiled DCPU-16 ===========================================================
+\ For the DCPU-16 native compiler specifically, to support buffered compilation
+\ both slots and dests are the pointers of `[bufword]`s.
+\ A `[destination]` is a dummy bufword that doesn't compile anything, but makes
+\ note of its true address.
+\ Slots are a `[branch]` bufword, which has a `conditional?` flag and compiles
+\ the actual branches.
+
+\ For a forward branch, at "compile" time (assembling the bufwords) each dest
+\ has a pointer to an incoming slot, which are connected into a linked list.
+\ When the dest is "assembled" (generating real machine code) its proper address
+\ is threaded back through all the incoming slots so they can be rewritten.
 
 \ First the host side words.
 host definitions
 
-: BRANCH,     code-space @ tcell+   $beef # pc set, ;
-: 0BRANCH,    0 # pop ife,   branch, ;
-: !DEST       tcode! ;
-: DEST>BRANCH 1- ;
-: DEST>POST   tcell+ ;
+begin-structure [branch] \ = a `slot`, in the abstract parlance.
+  [bufword] +
+  FIELD: branch>cond?     \ True when this branch is conditional
+  FIELD: branch>dest      \ pointer to the [destination] bufword
+  FIELD: branch>slot-addr \ code-space pointer for the target address
+  FIELD: branch>sibling   \ pointer to the sibling [branch] targeting the same
+                          \ forward branch
+end-structure
+
+begin-structure [destination] \ = a `dest` in the abstract parlance.
+  [bufword] +
+  FIELD: dest>address     \ Target address in code-space to jump to!
+                          \ 0 if the destination isn't resolved yet.
+  FIELD: dest>forwarding  \ Pointer to a [branch] that was already assembled,
+                          \ and needs its target address updated.
+end-structure
+
+7 CONSTANT buftype-branch
+8 CONSTANT buftype-destination
+
+:noname ( branch-bufword -- )
+  dup branch>cond? @ IF ." 0BRANCH " ELSE ." BRANCH " THEN
+  ." to "           dup branch>dest      @ hex.
+  ." slot "         dup branch>slot-addr @ hex.
+  ." with sibling "     branch>sibling   @ hex.
+; buftype-branch PRINTER!
+
+:noname ( dest-bufword -- )
+  ." DEST at " dup dest>address @ hex.
+  ." first forwarder " dest>forwarding @ hex.
+; buftype-destination PRINTER!
+
+
+\ Returns the destination's real target address.
+\ If the destination isn't yet known, adds this [branch] into the forwarding
+\ list and returns $beef as a placeholder (forcing a long literal on DCPU-16).
+: the-dest ( branch-bufword -- t-xt )
+  dup branch>dest @ dest>address @ ?dup IF nip ( t-xt ) EXIT THEN
+  \ Not defined yet! ( branch-bufword )
+  dup branch>dest @ dest>forwarding @ ( branch-bufword forwarding )
+  over branch>sibling !               ( branch-bufword )
+  dup branch>dest @ dest>forwarding ! ( )
+  $beef ;
+
+: assemble:branch ( bufword -- )
+  dup branch>cond? @ IF 0 # pop ife, THEN \ Compile the extra instruction
+  code-space @ tcell+   over branch>slot-addr ! \ Save the slot address.
+  the-dest # pc set,  ( bufword )
+;
+
+\ "Patches" a forward branch to set its actual destination.
+\ On the DCPU-16, that's only a foward
+: patch-branch ( target-xt branch-bufword -- )
+  branch>slot-addr @ tcode! ;
+
+: assemble:destination ( bufword -- )
+  code-space @   over dest>address !   \ Save the current address.
+  \ Then run through all incoming forward branches and patch them to point here.
+  code-space @ swap ( target-xt dest-bufword )
+  dest>forwarding @ ( target-xt branch-bufword|0 )
+  BEGIN dup WHILE ( target-xt branch-bufword )
+    2dup patch-branch
+    branch>sibling @
+  REPEAT ( target-xt 0 )
+  2drop ;
+
+\ Appends a [branch] and returns it.
+: new-branch  ( conditional? -- branch-bufword )
+  buftype-branch ['] assemble:branch [branch] new-bufnode ( cond? bufword )
+  tuck branch>cond? ! ;
+
+\ These append a [branch] bufword and return it as the `slot`.
+: BRANCH,     ( -- slot ) false new-branch ;
+: 0BRANCH,    ( -- slot ) true  new-branch ;
+
+\ Resolves a slot to point to this dest. Sets the `branch>dest` pointer.
+: !DEST ( dest slot -- ) branch>dest ! ;
+
+
+
+\ Creates a new [destination], but **does not enqueue it** yet.
+: <dest> ( -- dest )
+  [destination] allocate throw
+  buftype-destination        over bufnode>type !
+  ['] assemble:destination   over bufnode>assemble ! ;
+
+\ Returns a `dest` for the current location in the code stream.
+\ This is `here` for directly compiled models but for the
+: >DEST ( -- dest ) <dest>   dup comp+ ;
+
+\ Given a `slot`, returns a `dest` for right before this branch instruction.
+\ Used by the DO LOOP machinery.
+: SLOT>BEFORE ( slot -- dest )
+  <dest> swap ( dest slot )
+  2dup insert-before
+  drop ;
+
+\ Given a `slot`, returns a `dest` for right after it.
+\ Used by the DO LOOP machinery.
+: SLOT>AFTER  ( slot -- dest )
+  <dest> swap   ( dest slot )
+  2dup insert-after
+  drop ;
+
 
 \ Then the target side; with HOST ACTS: calling the above.
 target definitions
@@ -32,6 +146,8 @@ target :F BRANCH,
     [ host T' (BRANCH) tliteral target ] compile,   here 0 , ;
   host acts: branch, ;
 
-target :F !DEST ( dest slot -- ) !  ;   host acts: !dest ;
-target :F DEST>BRANCH            1- ;   host acts: dest>branch ;
-target :F DEST>POST              1+ ;   host acts: dest>post ;
+target :F !DEST ( dest slot -- )       !  ;   host acts: !dest ;
+
+target :F >DEST ( -- dest )          here ;   host acts: >dest ;
+target :F SLOT>BEFORE ( slot -- dest ) 1- ;   host acts: slot>before ;
+target :F SLOT>AFTER  ( slot -- dest ) 1+ ;   host acts: slot>after ;

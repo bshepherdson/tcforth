@@ -1,11 +1,11 @@
 \ Main =======================================================================
-label 'sp0     0 asm, \ These get filled in by gba/finalize.ft
-label 'rp0     0 asm,
-label 'up0     0 asm,
+label 'sp0     0 asm-word, \ These get filled in by gba/finalize.ft
+label 'rp0     0 asm-word,
+label 'up0     0 asm-word,
 
-label 'gba-ime $04000208 asm,
-label 'gba-ie  $04000200 asm,
-label 'gba-if  $04000202 asm,
+label 'gba-ime $04000208 asm-word,
+label 'gba-ie  $04000200 asm-word,
+label 'gba-if  $04000202 asm-word,
 
 label main
   'up0            up ldr-pc,    \ Initialize UP

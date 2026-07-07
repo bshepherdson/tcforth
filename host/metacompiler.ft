@@ -125,43 +125,44 @@ T' =         CONSTANT T=
 
 \ Forward references =========================================================
 \ These are implemented as a mirror word with an alternative compile action.
-\ The Target xt slot holds the most recent forward reference.
-\ When the code tries to compile the forward-referenced word, it compiles the
-\ most recent reference into the Target, then saves that location into the xt
-\ slot.
+\ The Target xt slot holds a model-defined value representing the most recent
+\ forward reference.
+\ The mirror>compile action assembles a linked list in the host that keeps track
+\ of all the references to the stub, using the target-xt slot as its head.
 \ When we come to resolve the ref, this chain is followed, replacing each with
-\ the real xt. When we get to the end (0), save the xt into the mirror word, and
-\ reset its compile-xt field to the standard mirror-compile.
+\ a real call. When we get to the end (0), the real xt is saved into the mirror
+\ word, and the mirror>compile field is reset to the standard mirror-compile.
 host definitions
 
 \ Runs when we're attempting to compile a forward reference. Grab the mirror
 \ body from >mirror, compile the value from its txt field into the target, and
 \ save this new compilation address to txt.
 : mirror-forward ( -- )
-  code-space @
-  \ ." forward chaining to " dup hex. cr
-  mirror-compile   >mirror @ mirror>txt ! ;
+  >mirror @ mirror>txt @
+  forward-ref ( old-head token )
+  2 cells allocate throw
+  dup >R   2!
+  R> >mirror @ mirror>txt ! ;
 
 : presume ( "name" -- )
   0 mirror
   ['] mirror-forward   'mirror @ mirror>compile ! ;
-
-: (replace-xt) ( xt slot -- )
-  code-space @ >R   code-space !   tcompile,   R> code-space ! ;
 
 \ Resolves a forward reference when we come to define it.
 \ ?forward runs after (TCREATE), so the newest mirror word's txt is the one we
 \ want to use to resolve the forward references.
 \ This only runs if (a) the mirror word exists; and (b) its mirror>compile is
 \ mirror-forward (otherwise we're redefining).
-: resolve-forward ( fwd-mirror-body -- )
-  'mirror @ mirror>txt @ ( fwd-mirror-body real-target-xt )
-  swap mirror>txt @ BEGIN ?dup WHILE ( real-xt fwd-ref )
-    \ ." Resolving forward at " dup hex. ." with " over hex. cr
-    dup tdecompile >R   2dup (replace-xt)   drop R> ( real-xt fwd-ref' )
-  REPEAT drop ;
+: resolve-forwards ( fwd-mirror-body -- )
+  'mirror @ mirror>txt @ >R ( fwd-mirror-body R: real-target-xt )
+  mirror>txt @ BEGIN ( 'pair   R: real-target-xt )
+    dup
+  WHILE
+    2@             ( next token    R: real-target-xt )
+    R@ resolve-ref ( next          R: real-target-xt )
+  REPEAT R> 2drop ;
 
-: ?!forward ( mirror-body|0 -- ) ?dup IF resolve-forward THEN ;
+: ?!forward ( mirror-body|0 -- ) ?dup IF resolve-forwards THEN ;
 
 \ Looks for an existing forward reference, before we create the new one.
 : ?forward ( -- mirror-body|0 )
@@ -171,7 +172,7 @@ host definitions
       drop 0 THEN ( mirror-body|0 )
   THEN ( mirror-body|0 ) ;
 
-\ TODO It would be good for the forward references to detect a dangling one
+\ TODO: It would be good for the forward references to detect a dangling one
 \ that is never resolved.
 
 \ Some host-side actions for CODE words, like @ and !

@@ -1,0 +1,231 @@
+host definitions
+
+\ Buffered compilation =======================================================
+\ What's actually getting collected during compilation of a nonprimitive is a
+\ doubly-linked list of abstract operations. These are platform-specific,
+\ arbitrary structures that hold whatever details are necessary for final
+\ draining into machine code.
+
+\ They're a doubly-linked list because it makes splicing easy: nodes can be
+\ optimized away, a call replaced with its inlined definition, etc. The nodes
+\ are compiler ephemera and don't survive to the target.
+
+\ The `mirror>compile` xts append these nodes to the current definition's list,
+\ rather than emitting machine code directly. At the end of a definition, the
+\ compiler will drain the entries into machine code. The granularity of
+\ compilation is still a single definition, since we need real addresses and so
+\ on between definitions.
+
+\ Defining words like `CONSTANT` need logic in their `HOST ACTS:` that will
+\ adjust the `mirror>compile` of the target words to be a platform-specific
+\ hook for the use of the compiler. That can be a simple `DEFER`ed word in the
+\ mirror vocab, defaulting to a vanilla `mirror>compile` call like it does now.
+
+\ So I think that's the interface here; the things that a `core` or `kernel`
+\ for each platform must define in order to integrate with the metacompiler:
+\ - Primitives are defined with a `mirror>compile` that does the right thing.
+\ - Override the default `mirror>compile` for all `CREATE`d words.
+\ - Override a hook, called from `;` and friends, that ends a definition.
+\   - There may already be something like this in the model, `EXIT,` or so?
+
+\ To support e.g. inlining, we need to be able to map between target xts and
+\ the buffered words. The easiest way to do that is to have a pointer to the
+\ latest word, and it has a dictionary-like chain of pointers to all the
+\ previous words.
+
+\ Reusable buffering machinery first:
+VARIABLE compiling       \ The word being compiled. 0 when not compiling a word.
+VARIABLE last-compiled   \ Points to the bufword most recently created.
+
+
+begin-structure [bufword]
+  \ The previous compiled word. Forms a complete chain with `last-compiled`.
+  FIELD: bufword>prev
+  FIELD: bufword>txt    \ Target xt for this word.
+  FIELD: bufword>head   \ Pointers to both ends of the linked list of nodes.
+  FIELD: bufword>tail
+end-structure
+
+\ Begins compilation of a new word. Throws if there is already a word open,
+\ since that indicates a user bug.
+: begin-comp ( -- )
+  compiling @ ABORT" Cannot start a new compilation with another open"
+  [bufword] allocate throw
+  \ Link it to the chain.
+  last-compiled @   over bufword>prev !
+  \ Start it at the current `code-space`.
+  code-space @   over bufword>txt !
+  \ And it is both the most recent compilation and the current one.
+  dup last-compiled !
+  compiling ! ;
+
+
+\ Prefix of all buffered nodes, with the linked list chain, a type flag, and
+\ the xt to call to assemble the node.
+begin-structure [bufnode]
+  FIELD: bufnode>next
+  FIELD: bufnode>prev
+  FIELD: bufnode>type
+  FIELD: bufnode>assemble  \ ( bufnode -- ) that assembles the necessary code
+end-structure
+
+\ Compiles the entire sequence of nodes until the node>next is 0.
+: drain-node ( bufnode -- )
+  dup bufnode>assemble @ execute ;
+
+CREATE node-printers 16 cells allot
+
+: PRINTER  ( type -- 'xt ) cells node-printers + ;
+: PRINTER! ( xt type -- )  printer ! ;
+
+: .node ( bufnode -- )
+  ." Node " dup hex. ." of type " dup bufnode>type @   dup .
+  printer @ execute    cr ;
+
+
+: drain-nodes ( bufnode -- )
+  ." =========================================" cr
+  ." Draining node " dup hex. ." at: " code-space @ hex. cr
+  BEGIN dup WHILE
+    dup .node
+    dup drain-node
+    bufnode>next @
+  REPEAT drop ;
+
+\ Closes compilation of the current word. Does not add any return or exit, so
+\ that must already have been included.
+: done-comp ( -- )
+  compiling @ 0= ABORT" Cannot close compilation when none is open"
+  \ Drain all the nodes into the machine code.
+  compiling @ bufword>head @ drain-nodes
+  compiling OFF ;
+
+\ Links two nodes, so that left comes before right. DOES NOT update the "outer"
+\ pointers, only the "inner" ones that refer to each other.
+\ Safely handles either of the would-be pointers being 0.
+: xlink ( left right -- )
+  2dup   dup IF bufnode>prev ! ELSE 2drop THEN
+  swap   dup IF bufnode>next ! ELSE 2drop THEN ;
+
+\ Linked list insert-before.
+: insert-before { noob host -- }
+  host bufnode>prev @ noob xlink    \ host's old `prev` now followed by noob,
+  noob                host xlink ;  \ and noob followed by host.
+
+: insert-after { noob host -- }
+  noob    host bufnode>next @ xlink   \ host's old `next` now preceded by noob,
+  host    noob                xlink ; \ and host now followed by noob.
+
+
+: !compiling ( -- ) compiling @ 0= ABORT" Cannot comp+ outside a definition" ;
+
+\ Appends the given node to the current definition.
+: comp+ ( bufnode -- )
+  !compiling
+  compiling @ bufword>tail @ ?dup IF ( bufnode tail )
+    over compiling @ bufword>tail ! ( bufnode tail )
+    insert-after ( )
+  ELSE ( bufnode )
+    dup compiling @ bufword>head 2! \ Both the head and tail.
+  THEN ( ) ;
+
+
+\ Creates and appends a new bufnode with the given type and assemble-xt.
+: new-bufnode ( type assemble-xt size -- bufnode )
+  allocate throw ( type assemble-xt bufnode )
+  dup comp+
+  tuck bufnode>assemble ! ( type bufnode )
+  tuck bufnode>type ! ;
+
+
+\ Caller nodes ===============================================================
+begin-structure [caller]
+  [bufnode] +
+  FIELD: caller>t-xt
+  FIELD: caller>slot   \ Address where the real target address went.
+                       \ Used for resolving forward references.
+end-structure
+
+2 CONSTANT buftype-caller
+
+:noname ( caller -- )
+  ." CALLER " caller>t-xt @ hex.
+; buftype-caller PRINTER!
+
+\ bufnode>assemble word for true, JSR-based calls, as opposed to inlined ones.
+\ This corresponds to a vanilla `tcompile,` on a non-buffered platform.
+: caller:jsr ( bufnode -- )
+  code-space @ tcell+   over caller>slot ! \ Save the location of the target.
+  caller>t-xt @   # jsr, ;
+
+: call, ( t-xt -- caller-bufnode )
+  buftype-caller ['] caller:jsr [caller] new-bufnode
+  tuck caller>t-xt ! ;
+
+\ Create and append a node for a call to a given t-xt.
+: tcompile, ( t-xt -- )
+  call, drop ;
+
+\ Forward references =========================================================
+\ Compile a call to a forward ref, returning an opaque token.
+: forward-ref ( -- token )           $fade call, ;
+: resolve-ref ( token real-t-xt -- )
+  swap 2dup caller>t-xt !   \ Set the real target xt  ( real-t-xt token )
+  \ And if it's already compiled, update the slot.
+  caller>slot @ dup IF tcode! ELSE 2drop THEN ;
+
+
+\ Literal nodes ==============================================================
+begin-structure [literal]
+  [bufnode] +
+  FIELD: literal>value
+end-structure
+
+3 CONSTANT buftype-literal
+
+:noname ( literal -- )
+  ." LITERAL " literal>value @ dup . hex.
+; buftype-literal PRINTER!
+
+\ bufnode>assemble word for pushing a literal onto the stack.
+: literal:push ( bufnode -- )
+  literal>value @   # push set, ;
+
+
+\ Appends a [literal] bufword for the given literal.
+: tliteral ( x --    X: -- x )
+  [literal] allocate throw
+  dup comp+
+  buftype-literal    over bufnode>type !
+  ['] literal:push   over bufnode>assemble !
+  literal>value ! ;
+
+\ Start and end nodes ========================================================
+\ Append a starter node to the current logic.
+4 CONSTANT buftype-starter
+5 CONSTANT buftype-return
+6 CONSTANT buftype-dodoes
+
+:noname ( buftype -- ) drop ." STARTER" ; buftype-starter PRINTER!
+:noname ( buftype -- ) drop ." RETURN"  ; buftype-return  PRINTER!
+:noname ( buftype -- ) drop ." DODOES"  ; buftype-dodoes  PRINTER!
+
+: assemble:starter ( bufnode -- ) drop   pop pushrsp, ;
+: assemble:return  ( bufnode -- )
+  drop
+  ra poprsp,   \ TODO: Make poprsp, in the compiler version a one-liner?
+  ra pc set, ;
+
+: assemble:dodoes ( bufnode -- )
+  drop
+  pop ra   set,  \ Pop PFA into A
+  pop pushrsp,   \ Save the return address in RSP
+  [a] push set,  \ Push parameter field
+;
+
+: +starter ( -- )
+  buftype-starter ['] assemble:starter [bufnode] new-bufnode drop ;
+: +return  ( -- )
+  buftype-return  ['] assemble:return  [bufnode] new-bufnode drop ;
+: +dodoes  ( -- )
+  buftype-dodoes  ['] assemble:dodoes  [bufnode] new-bufnode drop ;

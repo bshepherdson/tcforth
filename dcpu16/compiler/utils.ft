@@ -1,0 +1,9 @@
+host definitions
+
+\ These are pseudooperands that hide what registers are used for what.
+: rsp     ( -- op ) rz  ;
+: [rsp]   ( -- op ) [z] ;
+
+\ Some assembler macros
+: pushrsp, ( rhs -- ) 1 # rsp sub,   ( rhs ) [rsp] set, ;
+: poprsp,  ( lhs -- ) [rsp] 2swap ( rhs lhs ) set,   1 # rsp add, ;

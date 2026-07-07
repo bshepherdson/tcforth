@@ -45,36 +45,39 @@
 \ Alternatively, could use I or J as RSP empty-descending, and STD/STI?
 \ Then RSP pushes and pops are 1 word, 2 cycles.
 
-\ Buffered compilation =======================================================
-\ I think a general kind of indirection, for use across the models, is a good
-\ way to tackle this. It's definitely weird for the compilation to be so low-
-\ level from the POV of the metacompiler.
-\ Let me do a deep dive on how it fits together, and extract some pieces.
-
-\ First try, off the dome: No promises about addresses, instead it should be
-\ returning compilation tokens and execution tokens, which are abstract tokens
-\ and not necessarily addresses.
-\ The load order has the model loaded before the metacompiler, so part of the
-\ model's job could be to define tcompile, and friends.
-\ It also might make sense to include an "extras" pointer on the mirror words?
-
-\ Let me think through these tokens a bit more: each word has host and target
-\ compilation and execution tokens. Each of them can be turned in for its
-\ intended effect to the appropriate word, which should be defined by each
-\ model: `execute` and `compile,`, or `tcompile,` on the host.
-\ Gforth has `COMP'` and `[COMP']` to get the compilation token of a named word,
-\ in parallel with `'` and `[']` for xts. It also has `POSTPONE,` with a comma
-\ which *compiles* the compilation semantics.
-\ I think this refactor makes a lot of sense, and should come first.
-
 \ Inlined native code ========================================================
-\ This word defines a new mirror with the given name, and makes the following
-\ (host) colon definition its mirror>compile.
+\ This word defines a new mirror with the given name. Its `mirror>compile` will
+\ buffer it as an "inlined" node, which will run the following assembler code
+\ directly when drained.
+
+1 CONSTANT buftype-inliner
+
+:noname ( inliner -- )
+  ." INLINER " bufnode>assemble @ hex.
+; buftype-inliner PRINTER!
+
+\ Nameless `CREATE` that wraps the inner inline>xt into a word that will append
+\ a [bufnode] to the current definition; used for the `mirror>compile` of an
+\ inlined primitive.
+: INLINER ( host-xt-raw-inlining -- host-xt-mirror-compile   X: -- )
+    \ Gforth-specific hook that makes the next `CREATE` etc. nameless.
+    noname CREATE ,   latestxt
+  DOES> ( 'xt )
+    @   [bufnode] allocate throw ( raw-xt bufnode )
+    dup comp+
+    buftype-inliner   over bufnode>type !
+    bufnode>assemble ! ;
+
+\ This includes a `drop` to get rid of the `bufnode` the compiler will put on
+\ the stack; these inliners know how to assemble themselves and don't need the
+\ node.
 : :I ( "name" [code...] -- )
-  (TCREATE) :noname ;
+  (TCREATE) :noname   postpone drop ;
 
 : ;I ( -- )
-  postpone ;   ( host-xt )   'mirror @ mirror>compile !
+  postpone ;   ( host-xt-raw )
+  INLINER      ( host-xt-inliner )
+  'mirror @ mirror>compile !
   -1 'mirror @ mirror>txt !   \ Signals that this word has no target XT!
 ; IMMEDIATE
 
@@ -209,10 +212,15 @@
 \ to get a mirror. The default mirror>compile calls TCOMPILE, with the t-xt,
 \ which is exactly what we want!
 
+\ XXX: START HERE: TCOMPILE, is already part of the model, so it can do the
+\ right thing.
+
 : CODE-BARE     ( "name" -- )
   (TCREATE)
   ." CODE " 'mirror @   dup mirror>mirror-nt @ id. ." at " mirror>txt @ hex. cr ;
-: END-CODE-BARE ( -- )        ; \ Does nothing by default.
+
+\ Drain the buffered compilation to the real code-space.
+: END-CODE-BARE ( -- ) ; \ Does nothing by default.
 
 \ By default, CODE words use I as the scratch register for the return address.
 \ That's handy because the threaded version uses I for IP, so a few words that
@@ -220,11 +228,11 @@
 
 \ Use CODE-BARE and END-CODE-BARE if you don't want to put the return address
 \ in I, and then return to it.
-: save-ret,   pop ri set, ;
-: return,     ri  pc set, ;
+: save-ret,      pop ri set, ;
+: code-return,   ri  pc set, ;
 
 : CODE ( "name" -- ) CODE-BARE save-ret, ;
-: END-CODE ( -- )    return, END-CODE-BARE ;
+: END-CODE ( -- )    code-return, END-CODE-BARE ;
 
 
 TVARIABLE var_up
@@ -286,8 +294,12 @@ TVARIABLE var_handler
 \ here.
 
 
-\ EXIT uses the exit, compiler defined by the model.
-:I EXIT ( --   R: addr -- ) exit, ;I
+\ Note that `EXIT,` (which is a model interface word) both compiles a return
+\ *and* ends compilation. It is intended to be called from `;` only.
+\ This inlined `EXIT` really does a direct return.
+:I EXIT ( --   R: addr -- )
+  ra poprsp,
+  ra pc set, ;I
 
 
 \ DO LOOP helpers ============================================================

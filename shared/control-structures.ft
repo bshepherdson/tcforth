@@ -4,22 +4,22 @@ target definitions
 target :F IF   ( ? --     C: -- if-slot ) 0BRANCH, ; IMMEDIATE
   host acts: 0BRANCH, ; IMPERATIVE
 
-target :F THEN ( ? --     C: if-slot -- ) here swap !dest ; IMMEDIATE
-  host acts: code-space @ swap !dest ; IMPERATIVE
+target :F THEN ( ? --     C: if-slot -- ) >dest swap !dest ; IMMEDIATE
+  host acts: >dest swap !dest ; IMPERATIVE
 target :F ELSE ( ? --     C: if-slot -- else-slot )
-    BRANCH,   swap here swap !dest ; IMMEDIATE
-  host acts: BRANCH,   swap code-space @ swap !dest ; IMPERATIVE
+    BRANCH,   swap >dest swap !dest ; IMMEDIATE
+  host acts: BRANCH,   swap >dest swap !dest ; IMPERATIVE
 
-target :F BEGIN  ( --       C: -- top-loc ) here ; IMMEDIATE
-  host acts: code-space @ ; IMPERATIVE
+target :F BEGIN  ( --       C: -- top-loc ) >dest ; IMMEDIATE
+  host acts: >dest ; IMPERATIVE
 target :F AGAIN  ( --       C: top-loc -- ) BRANCH, !dest ; IMMEDIATE
   host acts: BRANCH, !dest ; IMPERATIVE
 target :F WHILE  ( ? --     C: -- while-slot ) 0BRANCH, ; IMMEDIATE
   host acts: 0BRANCH, ; IMPERATIVE
 target :F REPEAT ( --       C: top-loc while-slot )
     swap branch, !dest ( while-slot )
-    here swap !dest ; IMMEDIATE
-  host acts: swap BRANCH, !dest   code-space @ swap !dest ; IMPERATIVE
+    >dest swap !dest ; IMMEDIATE
+  host acts: swap BRANCH, !dest   >dest swap !dest ; IMPERATIVE
 target :F UNTIL  ( ? --     C: top-loc -- ) 0BRANCH, !dest ; IMMEDIATE
   host acts: 0BRANCH,   !dest ; IMPERATIVE
 

@@ -176,15 +176,19 @@ target :F ['] ( C: "name" --    X: -- xt )
 \ ** dest1 points here, after the branch to the top but before the postlude.
 \ UNLOOP
 
-\ (loop-top) holds the current (innermost) loop's slot address, ie. *dest1.
+\ (loop-top) holds the current (innermost) loop's `slot` for the `0branch` at
+\ the top, the one holding dest1 above.
 
 \ It's manipulated in two ways, though, neither of which are portable to STC.
 \ - `cell+` to point after it, ie. at the top of the loop body.
 \ - `1 cells -` to point at the (0BRANCH) at the top.
-\ To make that portable, we need dest>branch and dest>post adjustments in the
+\ To make that portable, we need slot>before and slot>after adjustments in the
 \ branches.ft model code.
 
-target VARIABLE (loop-top)
+\ Host slots and dests might be bigger than the target's, so the host keeps
+\ track of these values separately.
+host   definitions VARIABLE <host-loop-top>
+target definitions VARIABLE (loop-top)
 
 target :F DO ( m i -- )
     ['] (DO) compile,   1 postpone literal
@@ -193,11 +197,8 @@ target :F DO ( m i -- )
     ; IMMEDIATE
   host acts:
     [tcompile] (DO)   1 tliteral   0branch,
-    [T'] (loop-top) t>body >R  ( top-slot   R: 'loop-top )
-    \ Swap our top with (loop-top) and leave the old one on the stack.
-    \ This is reading from a TARGET VARIABLE, so we use tdata@ and tdata!
-    R@ tdata@ swap ( old-top top-slot   R: 'loop-top ) R> tdata!  ( old-top )
-    ; IMPERATIVE
+    <host-loop-top> @   swap <host-loop-top> !
+  ; IMPERATIVE
 
 \ TODO: Figure out conditional compilation of target words.
 
@@ -222,15 +223,15 @@ host definitions
 : (+LOOP)
   [tcompile] (loop-end)   0BRANCH, ( old-top bottom-slot )
   \ The target for the bottom jump is the top of the loop body; AFTER the slot
-  \ stored in (loop-top).
-  [T'] (loop-top) t>body dup >R   tdata@ dest>post swap ( old-top body bottom-slot)
-  !dest ( old-top   R: 'top )
+  \ stored in <host-loop-top>.
+  <host-loop-top> @ slot>after swap ( old-top body bottom-slot )
+  !dest ( old-top )
   \ Now HERE is after the bottom of the loop, and should be put with !dest
   \ at (loop-top). The compiling location is in code space, but we need tdata@
   \ to read from (loop-top), a TARGET VARIABLE.
-  code-space @   R@ tdata@ !dest
-  \ Finally, put the old-top back into (loop-top).
-  R> tdata!
+  >dest   <host-loop-top> @ !dest ( old-top )
+  \ Finally, put the old-top back into <host-loop-top>.
+  <host-loop-top> !
   \ And compile UNLOOP
   [tcompile] unloop ;
 
@@ -238,9 +239,9 @@ target definitions
 
 target :F +LOOP ( step --   C: old-jump-addr )
     ['] (loop-end) compile,   0branch, ( old-top bottom )
-    (loop-top) @ dest>post   ( old-top bottom top-target ) swap !dest ( old-top )
+    (loop-top) @ slot>after   ( old-top bottom top-target ) swap !dest ( old-top )
     \ End of the loop, start of the postlude
-    here (loop-top) @ ( C: old-jump-addr end-addr top-slot )
+    >dest (loop-top) @ ( C: old-jump-addr end-addr top-slot )
     !dest             ( C: old-jump-addr )
     (loop-top) !      ( C: )
     ['] unloop compile, ; IMMEDIATE
@@ -256,9 +257,9 @@ target :F LOOP   1 postpone literal   postpone +LOOP ; IMMEDIATE
 \ removing those parameters.
 target :F LEAVE ( --    R: loop-sys --   C: -- )
     0   postpone literal
-    (loop-top) @ dest>branch   branch, !dest ; IMMEDIATE
+    (loop-top) @ slot>before   branch, !dest ; IMMEDIATE
   host acts:
-    [T'] (loop-top) t>body tcode@ dest>branch
+    <host-loop-top> @ slot>before
     0 tliteral BRANCH, !dest ; IMPERATIVE
 
 \ Miscellany =================================================================

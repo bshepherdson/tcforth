@@ -30,24 +30,9 @@ HOST DEFINITIONS
 \ First line of code, the entry point. It'll be a jump to COLD eventually.
 $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
 
-
-\ These are pseudooperands that hide what registers are used for what.
-: rsp     ( -- op ) rz  ;
-: [rsp]   ( -- op ) [z] ;
-
-\ Some assembler macros
-: pushrsp, ( rhs -- ) 1 # rsp sub,   ( rhs ) [rsp] set, ;
-: poprsp,  ( lhs -- ) [rsp] 2swap ( rhs lhs ) set,   1 # rsp add, ;
-
-\ Compile a JSR to the literal xt!
-\ If the t-xt is -1, we're trying to naively compile an inlined word.
-: tcompile,   ( t-xt -- )
-  dup -1 = IF 94 throw THEN
-  # jsr, ;
-
-\ To decompile the slot, take the arg from the next word.
-: tdecompile  ( slot -- t-xt ) 1+ tcode@ ;
-
+\ XXX: START HERE: The basic buffering is figured out, I think, but it needs
+\ hooks at the start of a nonprimitive `:` and `:noname`, at the end `;`, and
+\ as part of the `DOES>` machinery.
 
 \ TODO: An alternative compilation scheme can make CREATEd words more efficient.
 \ They can be compiled as pushing a literal and then jumping straight to the
@@ -88,10 +73,22 @@ $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
 \ VARIABLE '(DOES>)
 \ VARIABLE 'EXIT   \ These get populated later.
 
-\ Compiles the exit from a nonprimitive: Pop RSP into a register, and return.
-: EXIT, ( -- )
-  ra poprsp,   \ TODO: Make poprsp, in the compiler version a one-liner?
-  ra pc set, ;
+\ Internal helper that compiles a return into a word. This is called by the
+\ inliner for `EXIT` on native code platforms.
+\ Not technically part of the model interface with the metacompiler.
+\ Compiles an exit from a nonprimitive: Pop RSP into a register, and return.
+: return, ( -- )
+  +return ;
+
+\ Ends a nonprimitive definition: compile a return and then end the definition.
+: EXIT, ( -- ) return, done-comp ;
+
+\ Called during the `HOST ACTS:` for a `DOES>`, during Phase 1, i.e. compilation
+\ of a defining word like `CONSTANT`. In general, it must do four things:
+\ 1. Close the current definition, like `;` would.
+\ 2. Open a new definition and capture its xt.
+\ 3. Compile any preamble that the target `DOES>` needs.
+\ 4. Return the target-xt for the dodoes-code.
 
 \ The code calling eg. a VALUE does a JSR some-val.
 \ That pushes the return address, ie. the next bit of real code, to SP.
@@ -100,20 +97,20 @@ $8000 # pc set, \ Forcing a two-word jump. The target will be adjusted later.
 \ the JSR does-code in a CREATEd word's code.
 \ Runtime stack effect: ( ret-addr pfa -- parameter-field )
 : DOES, ( -- xt-does )
-  \ Nothing to compile.
+  \ For a headless target, there's nothing to compile at the end of the current
+  \ definition. Just end the current definition, if any.
+  compiling @ IF done-comp THEN
   code-space @   \ Capture the xt of the does code
-  pop ra   set,  \ Pop PFA into A
-  pop pushrsp,   \ Save the return address in RSP
-  [a] push set,  \ Push parameter field
-;
+  begin-comp   +dodoes ;
 
 
-\ Compiles the entry boilerplate for a nonprimitive's code.
+\ Opens a nonprimitive definition, compiling any boilerplate that it needs.
 \ For threaded code, either the address of DOCOL/ENTER or a jump to it.
 \ For native code, any preamble that's required to handle the return address.
-\ The return address is pushed on the system stack, which is our data stack.
-\ So we pop it and push it to RSP.
-: ,docol ( -- ) pop pushrsp, ;
+\ Begin compilation, then append a "starter" node as the first entry.
+\ For DCPU-16, the return address is on the hardware stack, which is our data
+\ stack. So we pop it and push it to RSP (in the code compiled by +starter).
+: ,docol ( -- ) begin-comp   +starter ;
 
 \ Effectively the default does-code for CREATEd words without a DOES>.
 \ Called by a JSR dovar, so the saved PC on the stack is the pfa, and under
@@ -139,9 +136,6 @@ label DOVAR ( ret-addr pfa -- parameter-field )
 : !dodoes ( does-xt word-xt -- )
   ." !dodoes "   base @ >R hex .s R> base ! cr
   $7c20 over tcode!   tcell+ tcode! ;
-
-\ Compile a literal. Simply pushes the literal with one instruction.
-: tliteral ( x --    X: -- x ) # push set, ;
 
 \ There's a generic `: t>body  t>pfa tpfa@ ;` that expects t>pfa to advance to
 \ either the body itself (data direct) or a pointer to the body (indirect).

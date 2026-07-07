@@ -3,7 +3,10 @@
 \ Little-endian
 
 \ Not targeting an interactive system on the GBA; rather this is using the
-\ metacompiler to target the GBA with a game.
+\ metacompiler to target the GBA with a game. I want to migrate it to using
+\ Thumb and native code compilation.
+
+\ XXX: START HERE: I'm going to work on buffered compilation on the DCPU first.
 
 \ See gba/DESIGN.md for most of the details!
 

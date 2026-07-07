@@ -19,3 +19,8 @@ target definitions
   main-loop ;
 
 host T' game-start entry-point tcode!
+
+\ XXX: START HERE: So what's the next move for the GBA stuff? I can try to
+\ build a game with the current machinery to sort out the GBA stuff, or Thumb,
+\ or native build.
+\ I think the Thumb assembler is the best place to start, honestly.

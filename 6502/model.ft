@@ -53,7 +53,6 @@ $ff   CONSTANT rp0
 \ This is tricky! Compiling a literal value is definitely not the same as compiling a call!
 \ The xt is the code address for the word, so we compile a JSR $xxxx to it.
 : tcompile,  ( xt -- ) $ jsr, ;
-: tdecompile ( slot -- xt ) 1+ tcode@ ;
 
 VARIABLE 'latest
 : LATEST ( -- nt ) 'latest @ ;
@@ -226,6 +225,16 @@ VARIABLE '(DOES>)
 : t>pfa ( target-xt -- target-body ) 3 + ;
 
 label entry-point 0 asm,16
+
+
+\ Forward references =========================================================
+\ Compile a call to a forward ref, returning an opaque token.
+: forward-ref ( -- token )
+  code-space @ 1+
+  $fade tcompile, ;
+
+: resolve-ref ( token real-t-xt -- )
+  swap tcode! ;
 
 
 \ Space for : and ; ==========================================================

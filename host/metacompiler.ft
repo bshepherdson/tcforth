@@ -202,11 +202,10 @@ host definitions
 (T') 2drop 'mirror !   act 2drop
 (T') 2swap 'mirror !   act 2swap
 
-(T') lshift  'mirror !   act lshift
-(T') rshift  'mirror !   act rshift
-
-\ Not all machines define * in kernel code.
-<T'> * [IF] (T') * 'mirror ! act * [THEN]
+\ Not all machines define these words in kernel code.
+<T'> lshift [IF] (T') lshift  'mirror !   act lshift [THEN]
+<T'> rshift [IF] (T') rshift  'mirror !   act rshift [THEN]
+<T'> *      [IF] (T') *       'mirror !   act *      [THEN]
 
 'mirror !
 

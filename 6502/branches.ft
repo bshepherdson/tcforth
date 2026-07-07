@@ -33,8 +33,9 @@ host definitions
 \ That's 9B 15c, which is a little chunky but not too bad.
 
 : !DEST       tcode! ;
-: DEST>BRANCH 1- ;
-: DEST>POST   2 + ;
+: >DEST       code-space @ ;
+: SLOT>BEFORE 1- ;
+: SLOT>AFTER  2 + ;
 
 target definitions
 
@@ -60,5 +61,6 @@ target : BRANCH,
   host acts: branch, ;
 
 target : !DEST ( dest slot -- ) !  ;      host acts: !dest ;
-target : DEST>BRANCH            1- ;      host acts: dest>branch ;
-target : DEST>POST              cell+ ;   host acts: dest>post ;
+target : >DEST ( -- dest )      here ;    host acts: >dest ;
+target : SLOT>BEFORE            1- ;      host acts: slot>before ;
+target : SLOT>AFTER             cell+ ;   host acts: slot>after ;

@@ -398,3 +398,5 @@ DEFER <C,>
 \ For compiling read-only data into code space, eg. a character map:
 \ rodata   here   1 , 2 , 3 ,   CONSTANT foo
 : rodata ( -- ) ['] tcode, IS <,>   ['] tcode-c, IS <C,> ;
+
+rwdata \ Set the default.

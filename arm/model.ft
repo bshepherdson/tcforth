@@ -158,6 +158,17 @@ data-indirect? [IF]
 \ For ARM the code field is always one instruction = 1 cell.
 : t>pfa ( t-xt -- pf-slot ) tcell+ ;
 
+
+\ Forward references =========================================================
+\ Compile a call to a forward ref, returning an opaque token.
+: forward-ref ( -- token )
+  code-space @
+  $deadbeef tcompile, ;
+
+: resolve-ref ( token real-t-xt -- )
+  swap tcode! ;
+
+
 \ Entry point at 64KB, dictionary follows, and tasks start at 8MB.
 $00800000 CONSTANT task-area0
 

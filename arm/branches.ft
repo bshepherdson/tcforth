@@ -17,8 +17,9 @@ host definitions
 : 0BRANCH,    [tcompile] (0BRANCH)   code-space @   0 tcode, ;
 : BRANCH,     [tcompile] (BRANCH)    code-space @   0 tcode, ;
 : !DEST       tcode! ;
-: DEST>BRANCH 1 tcells - ;
-: DEST>POST   tcell+ ;
+: >DEST       code-space @ ;
+: SLOT>BEFORE 1 tcells - ;
+: SLOT>AFTER  tcell+ ;
 
 
 target definitions
@@ -31,5 +32,6 @@ target : BRANCH,
   host acts: branch, ;
 
 target : !DEST ( dest slot -- ) !  ;          host act !dest
-target : DEST>BRANCH            1 cells - ;   host act dest>branch
-target : DEST>POST              cell+ ;       host act dest>post
+target : >DEST ( -- dest )      here ;        host act >dest
+target : SLOT>BEFORE            1 cells - ;   host act slot>before
+target : SLOT>AFTER             cell+ ;       host act slot>after

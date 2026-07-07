@@ -363,8 +363,8 @@ DEFER ldr-pc,
   >R ?reg 16 lshift R> or or +cond $08000000 or asm-word, ;
 
 \ Now working through all 16 combinations: PU-WL
-DEFER !ldmia
-DEFER !stmia
+DEFER !ldmia,
+DEFER !stmia,
 :  stmda,     ( reg-bits rn 0 -- ) $08000000 (ldm/stm) ; \ puwl
 :  ldmda,     ( reg-bits rn 0 -- ) $08100000 (ldm/stm) ; \ puwL
 : !stmda,     ( reg-bits rn 0 -- ) $08200000 (ldm/stm) ; \ puWl
@@ -423,20 +423,20 @@ DEFER resolve
 
 
 : arm ( -- )
-  arm:bx,     IS bx,
-  arm:b,      IS b,
-  arm:bl,     IS bl,
-  arm:mul,    IS mul,
-  arm:ldr,    IS ldr,
-  arm:str,    IS str,
-  arm:ldrb,   IS ldrb,
-  arm:strb,   IS strb,
-  arm:ldr-pc, IS ldr-pc,
-  arm:!stmia, IS !stmia,
-  arm:!ldmia, IS !ldmia,
-  arm:push,   IS push,
-  arm:pop,    IS pop,
-  arm:resolve IS resolve ;
+  ['] arm:bx,     IS bx,
+  ['] arm:b,      IS b,
+  ['] arm:bl,     IS bl,
+  ['] arm:mul,    IS mul,
+  ['] arm:ldr,    IS ldr,
+  ['] arm:str,    IS str,
+  ['] arm:ldrb,   IS ldrb,
+  ['] arm:strb,   IS strb,
+  ['] arm:ldr-pc, IS ldr-pc,
+  ['] arm:!stmia, IS !stmia,
+  ['] arm:!ldmia, IS !ldmia,
+  ['] arm:push,   IS push,
+  ['] arm:pop,    IS pop,
+  ['] arm:resolve IS resolve ;
 
 \ Defaulting to ARM.
 arm

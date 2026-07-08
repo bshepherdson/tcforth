@@ -229,3 +229,24 @@ end-structure
   buftype-return  ['] assemble:return  [bufnode] new-bufnode drop ;
 : +dodoes  ( -- )
   buftype-dodoes  ['] assemble:dodoes  [bufnode] new-bufnode drop ;
+
+\ Locations, values and logical stacks =======================================
+\ Values are either opaque or literals. Opaque values are identified by their
+\ pointers and can be aliased.
+\ Locations are either one of the real stacks, in one of two forms, or the
+\ registers. Registers are initially abstract; each time a value lands in a
+\ register it is a new one, a fresh copy. These are allocated into real
+\ registers in a later step.
+\ The logical stacks hold a list of values, describing what's notionally on
+\ the Forth stacks.
+
+\ Compilation is a multi-step process and goes like this: preload the stacks
+\ with the return value.
+\ Values have a canonical location where they are truly found, and 0 or more
+\ aliases where they have been aliased by e.g. a `DUP` or `OVER`. Those ops
+\ compile nothing and just shuffle the stack bookkeeping by default.
+\ Only when the values are required do they compile anything.
+\
+\ XXX: START HERE: I had a good chat with Claude on my phone about this, review
+\ that and design this up. I can't quite pull it together on an airplane and
+\ after a beer.

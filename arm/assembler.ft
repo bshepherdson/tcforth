@@ -12,6 +12,7 @@
 
 : label ( "name" --    X: -- t-addr ) code-space @ CONSTANT ;
 
+VARIABLE thumb-mode?
 
 \ Condition Fields ===========================================================
 \ These are available on every instruction. These condition code words set a
@@ -91,23 +92,28 @@ VARIABLE regs-used
 
 : +cond ( opcode -- opcode' ) $0fffffff and   condition @ 28 lshift or   al? ;
 
+\ Throw if the mode is wrong.
+: ?thumb ( -- ) thumb-mode? @ 0= ABORT" Thumb-only function in ARM mode" ;
+: ?arm   ( -- ) thumb-mode? @    ABORT" ARM-only function in Thumb mode" ;
+
 \ Many opcodes have an S bit at bit 20
 VARIABLE S?   0 S? !
-: +S    ( opcode -- opcode' ) S? @ or   0 S? ! ;
+: +S    ( opcode -- opcode' ) ?arm   S? @ or   0 S? ! ;
 : S     ( -- ) $00100000 S? ! ;
 
 
 \ BX =========================================================================
 \ cccc 0001 0010 1111 1111 1111 0001 nnnn
 DEFER bx,
-: arm:bx, ( r 0 -- ) ?reg $012fff10 or +cond asm-word, ;
+: arm:bx, ( r 0 -- ) ?arm   ?reg $012fff10 or +cond asm-word, ;
 
 \ B and BL ===================================================================
 \ cccc 101L signed-24-offset
 \ The offset is shifted down by 2, so it only points to word addresses.
 \ The offset is also relative to 2 words after the assembly location.
 
-: (b) ( abs-addr link-mask -- )
+: <b> ( abs-addr link-mask -- )
+  ?arm
   >R
   dup 3 and 0<> ABORT" B and BL addresses must be word-aligned"
   code-space @ 8 +   - ( delta-bytes ) 2/ 2/ ( delta-words )
@@ -116,8 +122,8 @@ DEFER bx,
 
 DEFER b,
 DEFER bl,
-: arm:b,   0         (b) ;
-: arm:bl,  $01000000 (b) ;
+: arm:b,   0         <b> ;
+: arm:bl,  $01000000 <b> ;
 
 
 \ Data Processing ============================================================
@@ -126,6 +132,7 @@ DEFER bl,
 \ I=1             cccc 001o oooS nnnn dddd RRRR iiii iiii
 \ Ops: AND EOR SUB RSB ADD ADC SBC RSC TST TEQ CMP CMN ORR MOV BIC MVN
 : rotate ( x rot -- x' )
+  ?arm
   31 and   2dup 32 swap - lshift >R   rshift R> or   $ffffffff and ;
 
 : find-shift1 ( value -- encoded valid? )
@@ -140,14 +147,14 @@ DEFER bl,
   dup find-shift1 IF nip true EXIT THEN
   drop 1 rotate find-shift1 ;
 
-: (op2-imm) ( value -- encoded )
+: <op2-imm> ( value -- encoded )
   find-shift ( encoded valid? ) 0= ABORT" Op2 immediate doesn't fit" ( encoded )
   $02000000 or ; \ Include the I bit in the encoded field.
 
-: (op2) ( m 0 [ | s 0 $8x | s 1 $8x ] -- encoded )
+: <op2> ( m 0 [ | s 0 $8x | s 1 $8x ] -- encoded )
   \ Simple register assembled as LSL #0: 00000 00 0 rrrr
   dup 0 = IF drop ( r )     EXIT THEN
-  dup 1 = IF drop (op2-imm) EXIT THEN
+  dup 1 = IF drop <op2-imm> EXIT THEN
 
   \ Otherwise, it's a shifted register.
   \ TOS is $80-83, the low nybble is the rotate encoding.
@@ -162,29 +169,29 @@ DEFER bl,
 
 
 \ The actual DP instructions have some with three arguments (eg. add) and some
-\ with only two (eg. cmp, mov). (dp) captures both.
-: (dp)  ( op2 rn 0 rd 0 opcode -- )
+\ with only two (eg. cmp, mov). <dp> captures both.
+: <dp>  ( op2 rn 0 rd 0 opcode -- )
   21 lshift >R
   ?reg 12 lshift R> or >R
   ?reg 16 lshift R> or >R ( op2   R: op )
-  (op2) R> or +S +cond asm-word, ;
+  <op2> R> or +S +cond asm-word, ;
 
 \ 3-argument regular operations
-: (dp3) ( opcode "name" --      X: op2 rn 0 rd 0 -- )
-  CREATE , DOES> @ (dp) ;
-$0 (dp3) and,   $1 (dp3) eor,   $2 (dp3) sub,   $3 (dp3) rsb,
-$4 (dp3) add,   $5 (dp3) adc,   $6 (dp3) sbc,   $7 (dp3) rsc,
-$c (dp3) orr,   $e (dp3) bic,
+: <dp3> ( opcode "name" --      X: op2 rn 0 rd 0 -- )
+  CREATE , DOES> @ <dp> ;
+$0 <dp3> and,   $1 <dp3> eor,   $2 <dp3> sub,   $3 <dp3> rsb,
+$4 <dp3> add,   $5 <dp3> adc,   $6 <dp3> sbc,   $7 <dp3> rsc,
+$c <dp3> orr,   $e <dp3> bic,
 
 \ 2-argument data operations like MOV (no Rn)
-: (dp2) ( opcode "name" --      X: op2 rd 0 -- )
-  CREATE , DOES> @ >R r0 2swap R> ( op2 rn=0 0 rd 0 opcode ) (dp) ;
-$d (dp2) mov,   $f (dp2) mvn,
+: <dp2> ( opcode "name" --      X: op2 rd 0 -- )
+  CREATE , DOES> @ >R r0 2swap R> ( op2 rn=0 0 rd 0 opcode ) <dp> ;
+$d <dp2> mov,   $f <dp2> mvn,
 
 \ 2-argument comparison operations like CMP (no Rd)
-: (dpS) ( opcode "name" --      X: op2 rn 0 -- )
-  CREATE , DOES> @ >R r0 S R> ( op2 rn 0 rd=0 0 opcode ) (dp) ;
-$8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
+: <dpS> ( opcode "name" --      X: op2 rn 0 -- )
+  CREATE , DOES> @ >R r0 S R> ( op2 rn 0 rd=0 0 opcode ) <dp> ;
+$8 <dpS> tst,   $9 <dpS> teq,   $a <dpS> cmp,   $b <dpS> cmn,
 
 
 \ MSR and MRS ================================================================
@@ -223,14 +230,15 @@ $8 (dpS) tst,   $9 (dpS) teq,   $a (dpS) cmp,   $b (dpS) cmn,
 \ rn rs rm rd mla,
 
 \ Helper that sets everything but A and Rn, since that's optional.
-: (mul) ( rs 0 rm 0 rd 0 -- encoded )
+: <mul> ( rs 0 rm 0 rd 0 -- encoded )
+  ?arm
   ?reg 16 lshift >R
   ?reg           R> or >R
   ?reg  8 lshift R> or +S +cond $90 or ;
 
 DEFER mul,
-: arm:mul, ( rs 0 rm 0 rd 0 -- ) (mul) asm-word, ;
-: mla, ( rn 0 rs 0 rm 0 rd 0 -- ) (mul) >R ?reg 8 lshift R> or asm-word, ;
+: arm:mul, ( rs 0 rm 0 rd 0 -- )  <mul> asm-word, ;
+: mla, ( rn 0 rs 0 rm 0 rd 0 -- ) <mul> >R ?reg 8 lshift R> or asm-word, ;
 
 
 \ Multiply Long ==============================================================
@@ -238,7 +246,7 @@ DEFER mul,
 \ UMULL, SMULL, UMLAL, and SMLAL all have the same syntax:
 \ UMULL rdlo, rdhi, rm, rs
 \ The only difference in encoding is the U and A bits.
-: (mull) ( rs 0 rm 0 rdhi 0 rdlo 0 ua )
+: <mull> ( rs 0 rm 0 rdhi 0 rdlo 0 ua )
   >R
   ?reg 12 lshift R> or >R
   ?reg 16 lshift R> or >R
@@ -246,10 +254,10 @@ DEFER mul,
   ?reg  8 lshift R> or
   +S +cond $00800090 or asm-word, ;
 
-: umull, ( rs 0 rm 0 rdhi 0 rdlo 0 -- ) 0         (mull) ;
-: smull, ( rs 0 rm 0 rdhi 0 rdlo 0 -- ) $00400000 (mull) ;
-: umlal, ( rs 0 rm 0 rdhi 0 rdlo 0 -- ) $00200000 (mull) ;
-: smlal, ( rs 0 rm 0 rdhi 0 rdlo 0 -- ) $00600000 (mull) ;
+: umull, ( rs 0 rm 0 rdhi 0 rdlo 0 -- ) 0         <mull> ;
+: smull, ( rs 0 rm 0 rdhi 0 rdlo 0 -- ) $00400000 <mull> ;
+: umlal, ( rs 0 rm 0 rdhi 0 rdlo 0 -- ) $00200000 <mull> ;
+: smlal, ( rs 0 rm 0 rdhi 0 rdlo 0 -- ) $00600000 <mull> ;
 
 
 \ Single Data Transfer =======================================================
@@ -268,10 +276,10 @@ DEFER mul,
 \ - Pre-indexing:  op2 rn [+]  or [+]! for writeback, also [-] [-]! for negative
 \ - Post-indexing: op2 rn []+  or []-   (writeback is implied)
 
-: (ldr-offset) ( op2 -- encoded )
+: <ldr-offset> ( op2 -- encoded )
   \ op2 can be just a register: r 0, or an immediate imm 1,
   \ or a shifted reg. The shifted regs start with $80-$83 on top.
-  dup $80 $84 within IF (op2) $02000000 or EXIT THEN
+  dup $80 $84 within IF <op2> $02000000 or EXIT THEN
   IF ( imm )
     dup 0 $1000 within 0= ABORT" Immediate ldr/str offset too big"
     \ Otherwise it just goes straight in the bottom 12 bits.
@@ -284,13 +292,13 @@ DEFER mul,
 \ [r4, #4]!             4 # r4 [+]!
 \ [r4, + r3 lsr #4]!    r3 4 # lsr   r4 [+]!
 \ [r4, - r3 lsr r5]     r3 r5  lsr   r4 [-]
-: ([]) ( op2 rn 0 flags -- encoded )
-  >R   ?reg 16 lshift R> or >R   (ldr-offset)   R> or ;
+: <[]> ( op2 rn 0 flags -- encoded )
+  >R   ?reg 16 lshift R> or >R   <ldr-offset>   R> or ;
 
-: [+]  ( op2 rn 0 -- op2 rn 0 UPw ) $01800000 ([]) ;
-: [+]! ( op2 rn 0 -- op2 rn 0 UPw ) $01a00000 ([]) ;
-: [-]  ( op2 rn 0 -- op2 rn 0 uPW ) $01000000 ([]) ;
-: [-]! ( op2 rn 0 -- op2 rn 0 uPW ) $01200000 ([]) ;
+: [+]  ( op2 rn 0 -- op2 rn 0 UPw ) $01800000 <[]> ;
+: [+]! ( op2 rn 0 -- op2 rn 0 UPW ) $01a00000 <[]> ;
+: [-]  ( op2 rn 0 -- op2 rn 0 uPw ) $01000000 <[]> ;
+: [-]! ( op2 rn 0 -- op2 rn 0 uPW ) $01200000 <[]> ;
 
 \ Shorthand for the common case of no indexing.
 \ r3 []   is equivalent to 0 # r3 [+]
@@ -299,27 +307,28 @@ DEFER mul,
 \ Post-indexing modes, used like this relative to classic ARM syntax:
 \ [r4], #4            4 # r4 []+
 \ [r4], r3 lsl #2     r3 2 # lsl r4 []+
-: []+  ( op2 rn 0 -- op2 rn 0 UpW ) $00a00000 ([]) ;
-: []-  ( op2 rn 0 -- op2 rn 0 UpW ) $00200000 ([]) ;
+: []+  ( op2 rn 0 -- op2 rn 0 UpW ) $00800000 <[]> ;
+: []-  ( op2 rn 0 -- op2 rn 0 UpW ) $00000000 <[]> ;
 
-: (ldr) ( encoded-addr rd 0 flags -- )
-  >R ?reg 12 lshift R> or or $04000000 or +cond asm-word, ;
+: <ldr> ( encoded-addr rd 0 flags -- )
+  ?arm   >R ?reg 12 lshift R> or or $04000000 or +cond asm-word, ;
 
 DEFER ldr,
 DEFER str,
 DEFER ldrb,
 DEFER strb,
 
-: arm:ldr,  ( encoded-addr rd 0 -- ) $00100000 (ldr) ;
-: arm:str,  ( encoded-addr rd 0 -- ) $00000000 (ldr) ;
-: arm:ldrb, ( encoded-addr rd 0 -- ) $00500000 (ldr) ;
-: arm:strb, ( encoded-addr rd 0 -- ) $00400000 (ldr) ;
+: arm:ldr,  ( encoded-addr rd 0 -- ) $00100000 <ldr> ;
+: arm:str,  ( encoded-addr rd 0 -- ) $00000000 <ldr> ;
+: arm:ldrb, ( encoded-addr rd 0 -- ) $00500000 <ldr> ;
+: arm:strb, ( encoded-addr rd 0 -- ) $00400000 <ldr> ;
 
 \ Does a PC-relative load of an absolute address.
 DEFER ldr-pc,
 : arm:ldr-pc, ( value rd 0 -- )
   \ We want ultimately to have:  delta # pc 0 [-]/[+] rd 0 ldr,
   \ PC counts from 8 bytes ahead.
+  ?arm
   2>R             ( abs )
   code-space @ 8 + -   ( delta )
   dup 0< IF negate # pc [-] ELSE # pc [+] THEN ( +delta # pc 0 [+]/[-] )
@@ -330,22 +339,48 @@ DEFER ldr-pc,
 \ I=0  shifted reg offset cccc 000P UIWL nnnn dddd 0000 1oo1 mmmm
 \ I=1  immediate offset   cccc 000P UIWL nnnn dddd iiii 1oo1 iiii
 
-\ L=0 (str):
-\ oo=00        (reserved)
-\ oo=01        STRH  Rd,<addr>
-\ oo=10        LDRD  Rd,<addr>
-\ oo=11        STRD  Rd,<addr>
-\ L=1 (ldr):
-\ oo=00        (reserved)
-\ oo=01        LDRH  Rd,<addr> (zero-extended)
-\ oo=10        LDRSB Rd,<addr> (sign-extended)
-\ oo=11        STRSH Rd,<addr> (sign-extended)
-: (ldrh) ( encoded-addr rd 0 flags -- )
-  >R ?reg 12 lshift R> or or $00000090 or +cond asm-word, ;
+\ oo   L=0    L=1
+\ 0    SWAP   (reserved)   Not really part of this
+\ 1    STRH   LDRH         Unsigned (zero-extended) halfwords
+\ 2    LDRD   LDRSB        Load doubleword; Load sign-extended byte
+\ 3    STRD   LDRSH        Store doubleword; Load sign-extended halfword
 
-\ TODO: These don't work - the I=0 logic is inverted from ldr.
-\ : ldrh,  ( encoded-addr rd 0 -- ) $00100020 (ldrh) ;
-\ : strh,  ( encoded-addr rd 0 -- ) $00000020 (ldrh) ;
+\ Reusing the assembler operands for the main LDR and STR: a few pieces differ:
+\ - I bit is moved **and inverted**
+\ - No shifts allowed; throws if ss != 0
+\ - 8-bit unsigned immediate, rather than 12-bit unsigned
+\
+\ I=0  immediate offset   cccc 01IP UBWL nnnn dddd iiii iiii iiii
+\ I=1  shifted reg offset cccc 01IP UBWL nnnn dddd ssss ssss mmmm
+
+: <ldrh-imm> ( ldr-encoded-addr -- ldrh-encoded-addr )
+  dup $f00 and ABORT" Immediate too large for 8-bit slot of LDRH/STRH"
+  dup $f0 and 4 lshift     ( ldr-encoded-addr upper-imm-bits )
+  swap $01bf000f and or    ( ldrh-encoded-addr )
+  $00400000 or ;           \ Include the I bit
+
+: <ldrh-reg> ( ldr-encoded-addr -- ldrh-encoded-addr )
+  dup $ff0 and ABORT" LDRH/STRH cannot have a shifted register offset"
+  $01bf000f and ;
+
+: <ldrh-reencode> ( ldr-encoded-addr -- ldrh-encoded-addr )
+  \ Check the I bit of the LDR encoding. It's inverted!
+  dup $02000000 and IF <ldrh-reg> ELSE <ldrh-imm> THEN ;
+
+: <ldrh> ( encoded-addr rd 0 flags -- )
+  >R ?reg 12 lshift R> or   ( encoded-addr flags+Rd )
+  swap <ldrh-reencode> or +cond asm-word, ;
+
+DEFER ldrh,
+DEFER ldrsb,
+DEFER ldrsh,
+DEFER strh,
+
+: arm:ldrh,  ( encoded-addr rd 0 -- ) $001000b0 <ldrh> ;
+: arm:ldrsb, ( encoded-addr rd 0 -- ) $001000d0 <ldrh> ;
+: arm:ldrsh, ( encoded-addr rd 0 -- ) $001000f0 <ldrh> ;
+: arm:strh,  ( encoded-addr rd 0 -- ) $000000b0 <ldrh> ;
+
 
 \ Block Data Transfer ========================================================
 \ cccc 100P USWL nnnn rrrr rrrr rrrr rrrr
@@ -359,28 +394,28 @@ DEFER ldr-pc,
   0 >R BEGIN 0= WHILE 1 swap lshift R> or >R REPEAT R> ;
 
 \ The inner LDM/STM operation:
-: (ldm/stm) ( reg-bits rn 0 flags -- )
+: <ldm/stm> ( reg-bits rn 0 flags -- )
   >R ?reg 16 lshift R> or or +cond $08000000 or asm-word, ;
 
 \ Now working through all 16 combinations: PU-WL
 DEFER !ldmia,
 DEFER !stmia,
-:  stmda,     ( reg-bits rn 0 -- ) $08000000 (ldm/stm) ; \ puwl
-:  ldmda,     ( reg-bits rn 0 -- ) $08100000 (ldm/stm) ; \ puwL
-: !stmda,     ( reg-bits rn 0 -- ) $08200000 (ldm/stm) ; \ puWl
-: !ldmda,     ( reg-bits rn 0 -- ) $08300000 (ldm/stm) ; \ puWL
-:  stmia,     ( reg-bits rn 0 -- ) $08800000 (ldm/stm) ; \ pUwl
-:  ldmia,     ( reg-bits rn 0 -- ) $08900000 (ldm/stm) ; \ pUwL
-: arm:!stmia, ( reg-bits rn 0 -- ) $08a00000 (ldm/stm) ; \ pUWl
-: arm:!ldmia, ( reg-bits rn 0 -- ) $08b00000 (ldm/stm) ; \ pUWL
-:  stmdb,     ( reg-bits rn 0 -- ) $09000000 (ldm/stm) ; \ Puwl
-:  ldmdb,     ( reg-bits rn 0 -- ) $09100000 (ldm/stm) ; \ PuwL
-: !stmdb,     ( reg-bits rn 0 -- ) $09200000 (ldm/stm) ; \ PuWl
-: !ldmdb,     ( reg-bits rn 0 -- ) $09300000 (ldm/stm) ; \ PuWL
-:  stmib,     ( reg-bits rn 0 -- ) $09800000 (ldm/stm) ; \ PUwl
-:  ldmib,     ( reg-bits rn 0 -- ) $09900000 (ldm/stm) ; \ PUwL
-: !stmib,     ( reg-bits rn 0 -- ) $09a00000 (ldm/stm) ; \ PUWl
-: !ldmib,     ( reg-bits rn 0 -- ) $09b00000 (ldm/stm) ; \ PUWL
+:  stmda,     ( reg-bits rn 0 -- ) $08000000 <ldm/stm> ; \ puwl
+:  ldmda,     ( reg-bits rn 0 -- ) $08100000 <ldm/stm> ; \ puwL
+: !stmda,     ( reg-bits rn 0 -- ) $08200000 <ldm/stm> ; \ puWl
+: !ldmda,     ( reg-bits rn 0 -- ) $08300000 <ldm/stm> ; \ puWL
+:  stmia,     ( reg-bits rn 0 -- ) $08800000 <ldm/stm> ; \ pUwl
+:  ldmia,     ( reg-bits rn 0 -- ) $08900000 <ldm/stm> ; \ pUwL
+: arm:!stmia, ( reg-bits rn 0 -- ) $08a00000 <ldm/stm> ; \ pUWl
+: arm:!ldmia, ( reg-bits rn 0 -- ) $08b00000 <ldm/stm> ; \ pUWL
+:  stmdb,     ( reg-bits rn 0 -- ) $09000000 <ldm/stm> ; \ Puwl
+:  ldmdb,     ( reg-bits rn 0 -- ) $09100000 <ldm/stm> ; \ PuwL
+: !stmdb,     ( reg-bits rn 0 -- ) $09200000 <ldm/stm> ; \ PuWl
+: !ldmdb,     ( reg-bits rn 0 -- ) $09300000 <ldm/stm> ; \ PuWL
+:  stmib,     ( reg-bits rn 0 -- ) $09800000 <ldm/stm> ; \ PUwl
+:  ldmib,     ( reg-bits rn 0 -- ) $09900000 <ldm/stm> ; \ PUwL
+: !stmib,     ( reg-bits rn 0 -- ) $09a00000 <ldm/stm> ; \ PUWl
+: !ldmib,     ( reg-bits rn 0 -- ) $09b00000 <ldm/stm> ; \ PUWL
 
 DEFER push,
 DEFER pop,
@@ -391,19 +426,26 @@ DEFER pop,
 \ SWP ========================================================================
 \ cccc 0001 0B00 nnnn dddd 0000 1001 mmmm
 \ rn rm rd swp,   reads from [Rn], writing rm to memory and the memory to rd.
-: (swp) ( rn 0 rm 0 rd 0 flags -- )
+: <swp> ( rn 0 rm 0 rd 0 flags -- )
   >R
   ?reg 12 lshift R> or >R
   ?reg           R> or >R
   ?reg 16 lshift R> or
   $01000090 or +cond asm-word, ;
 
-: swp,  ( rn 0 rm 0 rd 0 -- ) 0         (swp) ;
-: swpb, ( rn 0 rm 0 rd 0 -- ) $00400000 (swp) ;
+: swp,  ( rn 0 rm 0 rd 0 -- ) 0         <swp> ;
+: swpb, ( rn 0 rm 0 rd 0 -- ) $00400000 <swp> ;
 
 
-\ TODO SWI if I need it.
+\ SWI ========================================================================
+\ cccc oooo nnnn nnnn nnnn nnnn nnnn nnnn
+\ oooo = 1111 for SWI; 0001 for BKPT
+\ nn = comment field, ignored by processor
+DEFER swi,
+: arm:swi, ( n -- ) $ffffff and   $0f000000 or   +cond asm-word, ;
 
+\ Alternative name, newer ARM assembler syntax.
+: svc, ( n -- ) swi, ;
 
 \ Control structures =========================================================
 \ Branch ops already take an absolute target; easy enough to use LABEL.
@@ -423,6 +465,7 @@ DEFER resolve
 
 
 : arm ( -- )
+  thumb-mode? OFF
   ['] arm:bx,     IS bx,
   ['] arm:b,      IS b,
   ['] arm:bl,     IS bl,
@@ -432,10 +475,15 @@ DEFER resolve
   ['] arm:ldrb,   IS ldrb,
   ['] arm:strb,   IS strb,
   ['] arm:ldr-pc, IS ldr-pc,
+  ['] arm:ldrh,   IS ldrh,
+  ['] arm:ldrsb,  IS ldrsb,
+  ['] arm:ldrsh,  IS ldrsh,
+  ['] arm:strh,   IS strh,
   ['] arm:!stmia, IS !stmia,
   ['] arm:!ldmia, IS !ldmia,
   ['] arm:push,   IS push,
   ['] arm:pop,    IS pop,
+  ['] arm:swi,    IS swi,
   ['] arm:resolve IS resolve ;
 
 \ Defaulting to ARM.

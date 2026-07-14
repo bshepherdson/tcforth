@@ -30,7 +30,8 @@ REQUIRE ../host/spaces.ft
   single-space!
 
   \ The QEMU ARM system loads the user code at $10000.
-  $10000   code-space ORG! ;
+  $10000   code-space ORG!
+  0        code-space space>offset ! ;
 
 : spaces::separate ( -- )
   true TO data-indirect?

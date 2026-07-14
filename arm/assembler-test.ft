@@ -11,20 +11,22 @@ error? off
 
 : error error? on   type source type cr ;
 
-: T{ 0 code-space !   depth start-depth ! ;
+: code-base ( -- tgt-addr ) code-space space>org @ ;
+
+: T{ code-base code-space !   depth start-depth ! ;
 
 : -> depth start-depth @ <> IF S" Stack not clean during assembly " error THEN ;
 
 : }T depth start-depth @ <= IF S" Empty expectation " error THEN
-  code-space @ BEGIN instr-width    - dup 0>= WHILE ( ... exp tgt-addr )
+  code-space @ BEGIN instr-width    - dup code-base >= WHILE ( ... exp tgt-addr )
     tuck tcode@ <> IF S" Mismatch " error THEN ( ... tgt-addr )
   REPEAT drop
   depth start-depth @ swap - IF S" Expectation longer than actual " error THEN ;
 
 \ Branches ===================================================================
-T{ 0        b, -> $eafffffe }T
-T{ $100     b, -> $ea00003e }T
-T{ $100 ne? b, -> $1a00003e }T
+T{ code-base            b, -> $eafffffe }T
+T{ code-base $100 +     b, -> $ea00003e }T
+T{ code-base $100 + ne? b, -> $1a00003e }T
 
 
 \ Data Processing ============================================================
@@ -69,9 +71,82 @@ T{ $abc #     r4 [+]! r8 strb, -> $e5e48abc }T  \ UBWl
 T{ $abc #     r4 [+]! r8 ldrb, -> $e5f48abc }T  \ UBWL
 
 \ PC-relative loads ==========================================================
-T{ $978 r3 ldr-pc,             -> $e59f3970 }T
-T{ -16  r3 ldr-pc,             -> $e51f3018 }T
+T{ code-space space>org @   $978 +   r3 ldr-pc, -> $e59f3970 }T
+T{ code-space space>org @   16   -   r3 ldr-pc, -> $e51f3018 }T
 
+
+\ Halfwords - LDRH and STRH ==================================================
+\ Register offset:  cccc 000P UIWL nnnn dddd 0000 1oo1 mmmm
+\ Immediate offset: cccc 000P UIWL nnnn dddd iiii 1oo1 iiii
+\ oo   L=0      L=1
+\ 0    SWAP     (reserved)   Not really part of this
+\ 1    STRH     LDRH         Unsigned (zero-extended) halfwords
+\ 2    (dword)  LDRSB        Load sign-extended byte
+\ 3    (dword)  LDRSH        Load sign-extended halfword
+
+\ LDRH
+T{       r4 []    r8 ldrh,  -> $e1d480b0 }T \ Default: Pre, Imm=$00, PUIwL
+T{  ne?  r4 []    r8 ldrh,  -> $11d480b0 }T \ Same, with a condition
+T{ $67 # r4 [+]   r8 ldrh,  -> $e1d486b7 }T \ Pre,  Imm=$67, PUIwL
+T{ $67 # r4 [+]!  r8 ldrh,  -> $e1f486b7 }T \ Pre,  Imm=$67, PUIWL
+T{ $67 # r4 [-]   r8 ldrh,  -> $e15486b7 }T \ Pre,  Imm=$67, PuIwL
+T{ $67 # r4 [-]!  r8 ldrh,  -> $e17486b7 }T \ Pre,  Imm=$67, PuIWL
+T{ $67 # r4 []+   r8 ldrh,  -> $e0d486b7 }T \ Post, Imm=$67, pUIwL
+T{ $67 # r4 []-   r8 ldrh,  -> $e05486b7 }T \ Post, Imm=$67, puIwL
+T{ r5    r4 [+]   r8 ldrh,  -> $e19480b5 }T \ Pre,  Reg r5,  PUiwL
+T{ r5    r4 [+]!  r8 ldrh,  -> $e1b480b5 }T \ Pre,  Reg r5,  PUiWL
+T{ r5    r4 [-]   r8 ldrh,  -> $e11480b5 }T \ Pre,  Reg r5,  PuiwL
+T{ r5    r4 [-]!  r8 ldrh,  -> $e13480b5 }T \ Pre,  Reg r5,  PuiWL
+T{ r5    r4 []+   r8 ldrh,  -> $e09480b5 }T \ Post, Reg r5,  pUiwL
+T{ r5    r4 []-   r8 ldrh,  -> $e01480b5 }T \ Post, Reg r5,  puiwL
+
+\ LDRSH
+T{       r4 []    r8 ldrsh, -> $e1d480f0 }T \ Default: Pre, Imm=$00, PUIwL
+T{  ne?  r4 []    r8 ldrsh, -> $11d480f0 }T \ Same, with a condition
+T{ $67 # r4 [+]   r8 ldrsh, -> $e1d486f7 }T \ Pre,  Imm=$67, PUIwL
+T{ $67 # r4 [+]!  r8 ldrsh, -> $e1f486f7 }T \ Pre,  Imm=$67, PUIWL
+T{ $67 # r4 [-]   r8 ldrsh, -> $e15486f7 }T \ Pre,  Imm=$67, PuIwL
+T{ $67 # r4 [-]!  r8 ldrsh, -> $e17486f7 }T \ Pre,  Imm=$67, PuIWL
+T{ $67 # r4 []+   r8 ldrsh, -> $e0d486f7 }T \ Post, Imm=$67, pUIwL
+T{ $67 # r4 []-   r8 ldrsh, -> $e05486f7 }T \ Post, Imm=$67, puIwL
+T{ r5    r4 [+]   r8 ldrsh, -> $e19480f5 }T \ Pre,  Reg r5,  PUiwL
+T{ r5    r4 [+]!  r8 ldrsh, -> $e1b480f5 }T \ Pre,  Reg r5,  PUiWL
+T{ r5    r4 [-]   r8 ldrsh, -> $e11480f5 }T \ Pre,  Reg r5,  PuiwL
+T{ r5    r4 [-]!  r8 ldrsh, -> $e13480f5 }T \ Pre,  Reg r5,  PuiWL
+T{ r5    r4 []+   r8 ldrsh, -> $e09480f5 }T \ Post, Reg r5,  pUiwL
+T{ r5    r4 []-   r8 ldrsh, -> $e01480f5 }T \ Post, Reg r5,  puiwL
+
+\ LDRSB
+T{       r4 []    r8 ldrsb, -> $e1d480d0 }T \ Default: Pre, Imm=$00, PUIwL
+T{  ne?  r4 []    r8 ldrsb, -> $11d480d0 }T \ Same, with a condition
+T{ $67 # r4 [+]   r8 ldrsb, -> $e1d486d7 }T \ Pre,  Imm=$67, PUIwL
+T{ $67 # r4 [+]!  r8 ldrsb, -> $e1f486d7 }T \ Pre,  Imm=$67, PUIWL
+T{ $67 # r4 [-]   r8 ldrsb, -> $e15486d7 }T \ Pre,  Imm=$67, PuIwL
+T{ $67 # r4 [-]!  r8 ldrsb, -> $e17486d7 }T \ Pre,  Imm=$67, PuIWL
+T{ $67 # r4 []+   r8 ldrsb, -> $e0d486d7 }T \ Post, Imm=$67, pUIwL
+T{ $67 # r4 []-   r8 ldrsb, -> $e05486d7 }T \ Post, Imm=$67, puIwL
+T{ r5    r4 [+]   r8 ldrsb, -> $e19480d5 }T \ Pre,  Reg r5,  PUiwL
+T{ r5    r4 [+]!  r8 ldrsb, -> $e1b480d5 }T \ Pre,  Reg r5,  PUiWL
+T{ r5    r4 [-]   r8 ldrsb, -> $e11480d5 }T \ Pre,  Reg r5,  PuiwL
+T{ r5    r4 [-]!  r8 ldrsb, -> $e13480d5 }T \ Pre,  Reg r5,  PuiWL
+T{ r5    r4 []+   r8 ldrsb, -> $e09480d5 }T \ Post, Reg r5,  pUiwL
+T{ r5    r4 []-   r8 ldrsb, -> $e01480d5 }T \ Post, Reg r5,  puiwL
+
+\ STRH
+T{       r4 []    r8 strh,  -> $e1c480b0 }T \ Default: Pre, Imm=$00, PUIwl
+T{  ne?  r4 []    r8 strh,  -> $11c480b0 }T \ Same, with a condition
+T{ $67 # r4 [+]   r8 strh,  -> $e1c486b7 }T \ Pre,  Imm=$67, PUIwl
+T{ $67 # r4 [+]!  r8 strh,  -> $e1e486b7 }T \ Pre,  Imm=$67, PUIWl
+T{ $67 # r4 [-]   r8 strh,  -> $e14486b7 }T \ Pre,  Imm=$67, PuIwl
+T{ $67 # r4 [-]!  r8 strh,  -> $e16486b7 }T \ Pre,  Imm=$67, PuIWl
+T{ $67 # r4 []+   r8 strh,  -> $e0c486b7 }T \ Post, Imm=$67, pUIwl
+T{ $67 # r4 []-   r8 strh,  -> $e04486b7 }T \ Post, Imm=$67, puIwl
+T{ r5    r4 [+]   r8 strh,  -> $e18480b5 }T \ Pre,  Reg r5,  PUiwl
+T{ r5    r4 [+]!  r8 strh,  -> $e1a480b5 }T \ Pre,  Reg r5,  PUiWl
+T{ r5    r4 [-]   r8 strh,  -> $e10480b5 }T \ Pre,  Reg r5,  Puiwl
+T{ r5    r4 [-]!  r8 strh,  -> $e12480b5 }T \ Pre,  Reg r5,  PuiWl
+T{ r5    r4 []+   r8 strh,  -> $e08480b5 }T \ Post, Reg r5,  pUiwl
+T{ r5    r4 []-   r8 strh,  -> $e00480b5 }T \ Post, Reg r5,  puiwl
 
 
 \ Multiple Data Transfer - LDM and STM =======================================
@@ -106,14 +181,19 @@ T{ r1 r2 r4     swpb, -> $e1414092 }T
 T{ r1 r2 r4 ne? swpb, -> $11414092 }T
 
 
+\ SWI ========================================================================
+T{ $123456 swi, -> $ef123456 }T
+T{ $123456 svc, -> $ef123456 }T
+
+
 \ MSR and MRS ==================================================================
 T{ cpsr     r0 mrs, -> $e10f0000 }T
 T{ cpsr     r3 mrs, -> $e10f3000 }T
 T{ spsr     r5 mrs, -> $e14f5000 }T
-T{ $c0 # cpsr msr, -> $e321f0c0 }T
-T{  r0   cpsr msr, -> $e121f000 }T
-T{  r3   cpsr msr, -> $e121f003 }T
-T{  r5   spsr msr, -> $e161f005 }T
+T{ $c0 #  cpsr msr, -> $e321f0c0 }T
+T{  r0    cpsr msr, -> $e121f000 }T
+T{  r3    cpsr msr, -> $e121f003 }T
+T{  r5    spsr msr, -> $e161f005 }T
 
 : tests-done cr error? @ IF ." Tests failed!" ELSE ." Tests complete" THEN cr ;
 tests-done bye

@@ -231,22 +231,126 @@ end-structure
   buftype-dodoes  ['] assemble:dodoes  [bufnode] new-bufnode drop ;
 
 \ Locations, values and logical stacks =======================================
-\ Values are either opaque or literals. Opaque values are identified by their
-\ pointers and can be aliased.
-\ Locations are either one of the real stacks, in one of two forms, or the
-\ registers. Registers are initially abstract; each time a value lands in a
-\ register it is a new one, a fresh copy. These are allocated into real
-\ registers in a later step.
-\ The logical stacks hold a list of values, describing what's notionally on
-\ the Forth stacks.
+\ Values are either opaque or literals. Opaque values are unique in the
+\ compiler's memory. Values can exist in one or more *locations*, with one of
+\ those locations considered "canonical".
 
-\ Compilation is a multi-step process and goes like this: preload the stacks
-\ with the return value.
-\ Values have a canonical location where they are truly found, and 0 or more
-\ aliases where they have been aliased by e.g. a `DUP` or `OVER`. Those ops
-\ compile nothing and just shuffle the stack bookkeeping by default.
-\ Only when the values are required do they compile anything.
-\
-\ XXX: START HERE: I had a good chat with Claude on my phone about this, review
-\ that and design this up. I can't quite pull it together on an airplane and
-\ after a beer.
+\ Consider `DUP` - logically it creates a copy of a value, but it does not need
+\ to be directly realized in the code. Any operation might destroy a register,
+\ or might preserve it, and that's platform-specific. So a `DUP` might be
+\ realized by popping the stack into a register, using it non-destructively
+\ twice, and then not mentioning it again.
+\ Each *usage* of a value in an operation can flip through the various aliases
+\ (= locations) where the value can be found and can use whichever of them is
+\ most convenient.
+\ TODO: Is a "ref count" useful here? We need to know if a value can be
+\ destroyed or if something still needs it.
+
+\ Literals are fully abstract, and should support things like constant folding.
+\ They don't get realized until they are used, since it's a last-minute call
+\ whether it goes in a literal field, a constant pool, etc.
+
+\ Locations are one of:
+\ - The real data stack
+\   - Addressed using an offset relative to the SP at the start of this word.
+\ - The real return stack
+\   - Likewise, offset from RSP at the start.
+\ - A real register (e.g. `lr` holds the return address)
+\ - An abstract register, yet to be allocated.
+
+\ So on entry to a non-primitive, the logical return stack holds the return
+\ address, whose proper location is in the real `lr` register.
+
+REQUIRE objects.fs \ The Gforth library
+
+
+\ Locations ==================================================================
+\ These track the various places a value can live, and point to their value.
+object class
+  cell% field loc-contents \ Pointer to the Value object.
+  selector register? ( loc -- ? )
+end-class location
+
+location class
+  double% field reg-operand
+  :noname ( loc -- ? ) true ; overrides register?
+
+  :noname ( operand loc -- ) reg-operand 2! ; overrides construct
+end-class register
+
+: new-lr ( -- loc ) lr register heap-new ;
+
+\ The offset is in cells, where 0 is TOS at the start of a non-primitive, and
+\ 1 represents NOS. Negative values are those added to the stack later. The
+\ compiler also keeps track of the stack pointer as the same kind of offset.
+\ Therefore the true location in memory is actually (offset - sp) cells from
+\ the hardware SP.
+location class
+  cell% field offset
+end-class abs-stacked
+
+abs-stacked class   end-class stacked
+abs-stacked class   end-class return-stacked
+
+\ Values =====================================================================
+\ Abstract value descriptors. These have a set of 0 or more locations, of which
+\ one is considered canonical. The exception is that a literal might not have
+\ a location, if nothing ever needs it to have one. Literals are sometimes not
+\ reified, instead getting used directly as immediate operands. If a literal has
+\ to go in a literal pool, that becomes its canonical location.
+object class
+  cell% field canonical   \ Canonincal location
+  cell% field aliases     \ A linked list of aliased locations
+end-class value-descriptor
+
+value-descriptor class
+  cell% field the-value
+end-class litvalue
+
+value-descriptor class
+end-class opaque-value
+
+
+
+\ Compiler state =============================================================
+\ Bookkeeping state for the compiler when compiling a non-primitive.
+
+8 CONSTANT /comp-stacking
+object class
+  cell% inst-var hw-offset
+  cell% inst-var stack
+  m: ( stack -- )
+    \ Allocate /comp-stacking cells in both directions.
+    /comp-stacking 2* cells allocate throw
+    \ Then point into the middle
+    /comp-stacking cells +    ( 'tos )
+    stack !
+    0 hw-offset !
+  ;m overrides construct
+
+  \ Gets the *pointer* to the value descriptor at the given depth a value at the given depth on this stack. The depth is relative to the
+  \ current notional stack pointer, not the hardware offset.
+  :m at ( depth stack -- 'value-descriptor )
+    cells stack @ + ;m
+
+  :m pickx ( depth stack -- value-descriptor )
+    this at @ ;m
+
+  :m popx ( stack -- value-descriptor )
+    0 this grab   cell stack +! ;m
+
+  :m pushx ( value-descriptor stack -- )
+    -1 cells stack +!   0 this at ! ;m
+end-class comp-stack
+
+object class
+  cell% inst-value data-stack
+  cell% inst-value return-stack
+  cell% inst-value literal-pool    \ Linked list of literals in the pool.
+
+  :noname ( cs -- )
+    comp-stack heap-new [to-inst] data-stack
+    comp-stack heap-new [to-inst] return-stack
+    0 [to-inst] literal-pool
+  ; overrides construct
+end-class comp-state

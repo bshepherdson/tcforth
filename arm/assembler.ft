@@ -84,10 +84,13 @@ VARIABLE regs-used
 
 \ Helpers ====================================================================
 \ These throw if the range is exceeded.
-: ?u4 ( imm -- ) 0 16  within 0= ABORT" Out of U4 range" ;
-: ?u8 ( imm -- ) 0 256 within 0= ABORT" Out of U8 range" ;
+: ?u3 ( imm -- imm ) dup 0 8   within 0= ABORT" Out of U3 range" ;
+: ?u4 ( imm -- imm ) dup 0 16  within 0= ABORT" Out of U4 range" ;
+: ?u5 ( imm -- imm ) dup 0 32  within 0= ABORT" Out of U5 range" ;
+: ?u8 ( imm -- imm ) dup 0 256 within 0= ABORT" Out of U8 range" ;
 
 : ?reg  ( 0 -- ) 0<>   ABORT" Expected register" ;
+: ?imm  ( 1 -- ) 1 <>  ABORT" Expected immediate value" ;
 : ?spec ( 2 -- ) 2 <>  ABORT" Expected special register" ;
 
 : +cond ( opcode -- opcode' ) $0fffffff and   condition @ 28 lshift or   al? ;
@@ -179,19 +182,37 @@ DEFER bl,
 \ 3-argument regular operations
 : <dp3> ( opcode "name" --      X: op2 rn 0 rd 0 -- )
   CREATE , DOES> @ <dp> ;
-$0 <dp3> and,   $1 <dp3> eor,   $2 <dp3> sub,   $3 <dp3> rsb,
-$4 <dp3> add,   $5 <dp3> adc,   $6 <dp3> sbc,   $7 <dp3> rsc,
-$c <dp3> orr,   $e <dp3> bic,
+$0 <dp3> arm:and,   $1 <dp3> arm:eor,   $2 <dp3> arm:sub,   $3 <dp3> arm:rsb,
+$4 <dp3> arm:add,   $5 <dp3> arm:adc,   $6 <dp3> arm:sbc,   $7 <dp3> arm:rsc,
+$c <dp3> arm:orr,   $e <dp3> arm:bic,
+
+DEFER and,   DEFER eor,   DEFER sub,   DEFER rsb,
+DEFER add,   DEFER adc,   DEFER sbc,   DEFER rsc,
+DEFER orr,   DEFER bic,
 
 \ 2-argument data operations like MOV (no Rn)
 : <dp2> ( opcode "name" --      X: op2 rd 0 -- )
   CREATE , DOES> @ >R r0 2swap R> ( op2 rn=0 0 rd 0 opcode ) <dp> ;
-$d <dp2> mov,   $f <dp2> mvn,
+$d <dp2> arm:mov,   $f <dp2> arm:mvn,
+
+DEFER mov,   DEFER mvn,
 
 \ 2-argument comparison operations like CMP (no Rd)
 : <dpS> ( opcode "name" --      X: op2 rn 0 -- )
   CREATE , DOES> @ >R r0 S R> ( op2 rn 0 rd=0 0 opcode ) <dp> ;
-$8 <dpS> tst,   $9 <dpS> teq,   $a <dpS> cmp,   $b <dpS> cmn,
+$8 <dpS> arm:tst,
+$9 <dpS> teq,
+$a <dpS> arm:cmp,
+$b <dpS> arm:cmn,
+
+DEFER tst,   DEFER cmp,   DEFER cmn,
+
+: <arm-alu-ops> ( -- )
+  ['] arm:and, IS and,   ['] arm:eor, IS eor,   ['] arm:sub, IS sub,
+  ['] arm:rsb, IS rsb,   ['] arm:add, IS add,   ['] arm:adc, IS adc,
+  ['] arm:sbc, IS sbc,   ['] arm:rsc, IS rsc,   ['] arm:orr, IS orr,
+  ['] arm:bic, IS bic,   ['] arm:mov, IS mov,   ['] arm:mvn, IS mvn,
+  ['] arm:tst, IS tst,   ['] arm:cmp, IS cmp,   ['] arm:cmn, IS cmn, ;
 
 
 \ MSR and MRS ================================================================
@@ -212,7 +233,7 @@ $8 <dpS> tst,   $9 <dpS> teq,   $a <dpS> cmp,   $b <dpS> cmn,
 
 : msr, ( value 0|1 spec 2 )
   spec-reg >R
-  IF   dup ?u8 $ff and   $0321f000   \ Immediate form: I=1
+  IF   ?u8 $ff and   $0321f000          \ Immediate form: I=1
   ELSE            $0f and   $0121f000   \ Register form:  I=0
   THEN or R> or +cond asm-word, ;
 
@@ -466,6 +487,7 @@ DEFER resolve
 
 : arm ( -- )
   thumb-mode? OFF
+  <arm-alu-ops>
   ['] arm:bx,     IS bx,
   ['] arm:b,      IS b,
   ['] arm:bl,     IS bl,

@@ -2,26 +2,11 @@ REQUIRE preamble.ft
 default-spaces!
 REQUIRE assembler.ft
 
-VARIABLE start-depth
+4 CONSTANT instr-width
+: instr@ ( tgt-addr -- opcode ) tcode@ ;
 
-4 CONSTANT instr-width \ TODO: This should probably just be removed?
+REQUIRE asm-test-harness.ft
 
-VARIABLE error?
-error? off
-
-: error error? on   type source type cr ;
-
-: code-base ( -- tgt-addr ) code-space space>org @ ;
-
-: T{ code-base code-space !   depth start-depth ! ;
-
-: -> depth start-depth @ <> IF S" Stack not clean during assembly " error THEN ;
-
-: }T depth start-depth @ <= IF S" Empty expectation " error THEN
-  code-space @ BEGIN instr-width    - dup code-base >= WHILE ( ... exp tgt-addr )
-    tuck tcode@ <> IF S" Mismatch " error THEN ( ... tgt-addr )
-  REPEAT drop
-  depth start-depth @ swap - IF S" Expectation longer than actual " error THEN ;
 
 \ Branches ===================================================================
 T{ code-base            b, -> $eafffffe }T
@@ -195,5 +180,5 @@ T{  r0    cpsr msr, -> $e121f000 }T
 T{  r3    cpsr msr, -> $e121f003 }T
 T{  r5    spsr msr, -> $e161f005 }T
 
-: tests-done cr error? @ IF ." Tests failed!" ELSE ." Tests complete" THEN cr ;
+
 tests-done bye

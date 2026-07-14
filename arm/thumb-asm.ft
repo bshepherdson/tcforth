@@ -1,0 +1,137 @@
+\ Thumb assembly counterpart to the ARM assembler.
+\ These could be separate vocabularies, or they could be DEFERed words.
+\ I think DEFERed words are the most tractable, since the vocabularies are
+\ so intertwined for the metacompiler anyway.
+
+REQUIRE assembler.ft
+
+: <?loreg> ( r -- r ) dup 8 >= ABORT" Thumb registers must be r0 to r7" ;
+
+: ?loreg ( r 0 -- r ) ?reg <?loreg> ;
+
+\ Thumb 1: Move shifted register =============================================
+\ 000o oSSS SSss sddd   Rd, Rs, S=u5 shift amount
+\ oo 0=LSL, 1=LSR, 2=ASR, 3=(reserved)
+: <thumb1> ( oo "name" --    X: shift-u5 Rsrc Rdst -- )
+  CREATE , DOES>
+    ?thumb
+    @ >R
+    ?loreg >R ?loreg 3 lshift R> or >R ( imm 1   R: opcode src+dst )
+    ?imm ?u5 6 lshift   R> or R> or
+    asm-half, ;
+
+$0000 <thumb1> lsl-imm,
+$0800 <thumb1> lsr-imm,
+$1000 <thumb1> asr-imm,
+
+
+\ Thumb 2: Add/Subtract ======================================================
+\ 0001 1ISn nnss sddd - nnn is either a lo register or u3 immediate.
+\ I=1 for immediate op2; S=1 for subtraction
+: <thumb:add-sub-bin> ( Op2=Rn|imm3 Rs Rd opcode -- )
+  >R ?loreg R> or >R   ( op2 Rs   R: opcode )
+  ?loreg 3 lshift R> or >R  ( op2 R: opcode )
+  IF ( imm ) ?u3 $0400 ELSE <?loreg> 0 THEN
+  swap 6 lshift R> or or   asm-half, ;
+
+\ Thumb 3: ALU immediates ====================================================
+\ 001o oddd iiii iiii - i=u8 immediate and d=Rd
+\ oo: 0=MOV(S), 1=CMP, 2=ADD(S), 3=SUB(S)
+: <thumb:alu-imm8> ( imm8 Rd opcode -- )
+  >R ?loreg >R    ( imm8   R: opcode dst )
+  ?imm ?u8        ( u8     R: opcode dst )
+  R> 8 lshift or
+  R> or
+  asm-half, ;
+
+
+\ ADD and SUB allow three formats:
+\ Rn   Rs Rd       Rd = Rs + Rn
+\ imm3 Rs Rd       Rd = Rs + u3
+\ imm8    Rd       Rd = Rd + u8
+: thumb:add, ( Op2=Rn|imm3 Rs Rd | imm8 Rd -- )
+  2 pick IF \ imm8 version
+    $3000 <thumb:alu-imm8>
+  ELSE      \ 2-arg version
+    $1800 <thumb:add-sub-bin>
+  THEN ;
+
+: thumb:sub, ( Op2=Rn|imm3 Rs Rd | imm8 Rd -- )
+  2 pick IF \ imm8 version
+    $3800 <thumb:alu-imm8>
+  ELSE      \ 2-arg version
+    $1a00 <thumb:add-sub-bin>
+  THEN ;
+
+
+: thumb:mov, ( imm8|Rs Rd -- )
+  2 pick IF
+    $2000 <thumb:alu-imm8>
+  ELSE
+    2>R 2>R   0 #   2R> 2R>   thumb:add,
+  THEN ;
+
+
+
+\ Thumb 4: ALU on registers ==================================================
+\ 0100 00oo ooss sddd
+: <thumb:alu-rr> ( op "name" --    X: Rs Rd -- )
+  CREATE 6 lshift   $4000 or ,   DOES>
+    @ >R
+    ?loreg R> or >R   ( Rs   R: opcode )
+    ?loreg 3 lshift R> or
+    asm-half, ;
+
+$0 <thumb:alu-rr> thumb:and,      $1 <thumb:alu-rr> thumb:eor,
+$2 <thumb:alu-rr> lsl-rr,         $3 <thumb:alu-rr> lsr-rr,
+$4 <thumb:alu-rr> asr-rr,         $5 <thumb:alu-rr> thumb:adc,
+$6 <thumb:alu-rr> thumb:sbc,      $7 <thumb:alu-rr> ror,
+$8 <thumb:alu-rr> thumb:tst,      $9 <thumb:alu-rr> neg,
+$a <thumb:alu-rr> thumb:cmp-rr,   $b <thumb:alu-rr> thumb:cmn,
+$c <thumb:alu-rr> thumb:orr,      $d <thumb:alu-rr> thumb:mul,
+$e <thumb:alu-rr> thumb:bic,      $f <thumb:alu-rr> thumb:mvn,
+
+: thumb:cmp, ( imm8|Rs Rd -- )
+  2 pick IF $2800 <thumb:alu-imm8> ELSE thumb:cmp-rr, THEN ;
+
+
+: thumb ( -- )
+  thumb-mode? ON
+  ['] thumb:add,    IS add,
+  ['] thumb:sub,    IS sub,
+  ['] thumb:mov,    IS mov,
+  ['] thumb:cmp,    IS cmp,
+
+  ['] thumb:and,    IS and,
+  ['] thumb:eor,    IS eor,
+  ['] thumb:adc,    IS adc,
+  ['] thumb:sbc,    IS sbc,
+  ['] thumb:tst,    IS tst,
+  ['] thumb:cmn,    IS cmn,
+  ['] thumb:orr,    IS orr,
+  ['] thumb:mul,    IS mul,
+  ['] thumb:bic,    IS bic,
+  ['] thumb:mvn,    IS mvn,
+
+  \ ['] thumb:bx,     IS bx,
+  \ ['] thumb:b,      IS b,
+  \ ['] thumb:bl,     IS bl,
+  \ ['] thumb:mul,    IS mul,
+  \ ['] thumb:ldr,    IS ldr,
+  \ ['] thumb:str,    IS str,
+  \ ['] thumb:ldrb,   IS ldrb,
+  \ ['] thumb:strb,   IS strb,
+  \ ['] thumb:ldr-pc, IS ldr-pc,
+  \ ['] thumb:ldrh,   IS ldrh,
+  \ ['] thumb:ldrsb,  IS ldrsb,
+  \ ['] thumb:ldrsh,  IS ldrsh,
+  \ ['] thumb:strh,   IS strh,
+  \ ['] thumb:!stmia, IS !stmia,
+  \ ['] thumb:!ldmia, IS !ldmia,
+  \ ['] thumb:push,   IS push,
+  \ ['] thumb:pop,    IS pop,
+  \ ['] thumb:swi,    IS swi,
+  \ ['] thumb:resolve IS resolve
+  ;
+
+thumb

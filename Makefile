@@ -192,9 +192,13 @@ test-arm-separate: forth-arm-separate-tests.bin test_multi.disk FORCE
 test-arm-copying: forth-arm-copying-tests.bin test_multi.disk FORCE
 	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel $<
 
-# Bonus tests for ARM assembler
+# Bonus tests for ARM and Thumb assemblers
 test-arm-asm: arm/*.ft host/*.ft shared/*.ft FORCE
 	$(FORTH) arm/assembler-test.ft
+
+test-thumb-asm: arm/*.ft host/*.ft shared/*.ft FORCE
+	$(FORTH) arm/thumb-asm-test.ft
+
 
 # ARM OS with Hardware =======================================================
 forth-armos.bin: host/*.ft arm/*.ft arm/os/*.ft arm/os/**/*.ft shared/*.ft

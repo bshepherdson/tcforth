@@ -48,10 +48,10 @@ T{ r6 r4 tst,    -> $4234 }T \ TST r4, r6
 T{ r6 r4 neg,    -> $4274 }T \ NEG r4, r6
 T{ r6 r4 cmp,    -> $42b4 }T \ CMP r4, r6
 T{ r6 r4 cmn,    -> $42f4 }T \ CMN r4, r6
-T{ r6 r4 orr,    -> $4334 }T \ TST r4, r6
-T{ r6 r4 mul,    -> $4374 }T \ NEG r4, r6
-T{ r6 r4 bic,    -> $43b4 }T \ CMP r4, r6
-T{ r6 r4 mvn,    -> $43f4 }T \ CMN r4, r6
+T{ r6 r4 orr,    -> $4334 }T \ ORR r4, r6
+T{ r6 r4 mul,    -> $4374 }T \ MUL r4, r6
+T{ r6 r4 bic,    -> $43b4 }T \ BIC r4, r6
+T{ r6 r4 mvn,    -> $43f4 }T \ MVN r4, r6
 
 
 tests-done bye

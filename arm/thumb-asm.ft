@@ -45,17 +45,26 @@ $1000 <thumb1> asr-imm,
   asm-half, ;
 
 
-\ ADD and SUB allow three formats:
+\ ADD supports four formats:
 \ Rn   Rs Rd       Rd = Rs + Rn
 \ imm3 Rs Rd       Rd = Rs + u3
 \ imm8    Rd       Rd = Rd + u8
-: thumb:add, ( Op2=Rn|imm3 Rs Rd | imm8 Rd -- )
+\ Rs      Rd       Rd = Rd + Rs  (at least one hi reg)
+: thumb:add, ( Op2=Rn|imm3 Rs Rd | imm8 Rd | Rs Rd -- )
   2 pick IF \ imm8 version
     $3000 <thumb:alu-imm8>
-  ELSE      \ 2-arg version
-    $1800 <thumb:add-sub-bin>
+  ELSE      \ Registers style, so check the regs
+    over 8 and   4 pick 8 and   or IF \ At least one high register
+      $4400 thumb:alu-hi,
+    ELSE
+      $1800 <thumb:add-sub-bin>
+    THEN
   THEN ;
 
+\ SUB supports three formats:
+\ Rn   Rs Rd       Rd = Rs + Rn
+\ imm3 Rs Rd       Rd = Rs + u3
+\ imm8    Rd       Rd = Rd + u8
 : thumb:sub, ( Op2=Rn|imm3 Rs Rd | imm8 Rd -- )
   2 pick IF \ imm8 version
     $3800 <thumb:alu-imm8>
@@ -64,10 +73,14 @@ $1000 <thumb1> asr-imm,
   THEN ;
 
 
+\ MOV supports two sets of arguments, and compiles to 3 forms.
+\ Reg-to-reg also supports all 16 registers, but the immediate form is lo only.
 : thumb:mov, ( imm8|Rs Rd -- )
   2 pick IF
     $2000 <thumb:alu-imm8>
   ELSE
+    over 8 and   4 pick 8 and   or IF \ At least one hi reg
+      $4600
     2>R 2>R   0 #   2R> 2R>   thumb:add,
   THEN ;
 
@@ -93,6 +106,10 @@ $e <thumb:alu-rr> thumb:bic,      $f <thumb:alu-rr> thumb:mvn,
 
 : thumb:cmp, ( imm8|Rs Rd -- )
   2 pick IF $2800 <thumb:alu-imm8> ELSE thumb:cmp-rr, THEN ;
+
+
+\ Thumb 5: Hi reg ops and BX, BLX ============================================
+\ 0100 01oo DSss sddd    Dddd and Ssss are the full registers.
 
 
 : thumb ( -- )

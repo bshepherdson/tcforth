@@ -20,4 +20,13 @@ error? off
   REPEAT drop
   depth start-depth @ swap - IF S" Expectation longer than actual " error THEN ;
 
+\ Exception capture
+: X{ ( -- ) T{ :noname ;
+
+: }X ( C: -- )
+  postpone ;   ( xt )
+  catch        ( errno )
+  0= IF S" Expected assembly to throw but it did not " error THEN
+; IMMEDIATE
+
 : tests-done cr error? @ IF ." Tests failed!" ELSE ." Tests complete" THEN cr ;

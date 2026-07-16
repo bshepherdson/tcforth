@@ -1,154 +1,508 @@
 \ Thumb assembly counterpart to the ARM assembler.
-\ These could be separate vocabularies, or they could be DEFERed words.
-\ I think DEFERed words are the most tractable, since the vocabularies are
-\ so intertwined for the metacompiler anyway.
-
+\ All the `foo,` assembler words are DEFERed and the `arm` and `thumb` words
+\ toggle between them.
 REQUIRE assembler.ft
 
 : <?loreg> ( r -- r ) dup 8 >= ABORT" Thumb registers must be r0 to r7" ;
 
 : ?loreg ( r 0 -- r ) ?reg <?loreg> ;
 
-\ Thumb 1: Move shifted register =============================================
-\ 000o oSSS SSss sddd   Rd, Rs, S=u5 shift amount
-\ oo 0=LSL, 1=LSR, 2=ASR, 3=(reserved)
-: <thumb1> ( oo "name" --    X: shift-u5 Rsrc Rdst -- )
-  CREATE , DOES>
-    ?thumb
-    @ >R
-    ?loreg >R ?loreg 3 lshift R> or >R ( imm 1   R: opcode src+dst )
-    ?imm ?u5 6 lshift   R> or R> or
-    asm-half, ;
 
-$0000 <thumb1> lsl-imm,
-$0800 <thumb1> lsr-imm,
-$1000 <thumb1> asr-imm,
+\ ADC ========================================================================
+\ ADC Rd, Rs           4  5   0100 0001 01ss sddd
+: thumb:adc, ( Rs Rd -- )
+  ?loreg >R
+  ?loreg 3 lshift
+  R> or   $4140 or   asm-half, ;
 
 
-\ Thumb 2: Add/Subtract ======================================================
-\ 0001 1ISn nnss sddd - nnn is either a lo register or u3 immediate.
-\ I=1 for immediate op2; S=1 for subtraction
-: <thumb:add-sub-bin> ( Op2=Rn|imm3 Rs Rd opcode -- )
-  >R ?loreg R> or >R   ( op2 Rs   R: opcode )
-  ?loreg 3 lshift R> or >R  ( op2 R: opcode )
-  IF ( imm ) ?u3 $0400 ELSE <?loreg> 0 THEN
-  swap 6 lshift R> or or   asm-half, ;
+\ ADD2 ========================================================================
+\ ADD Rd, #u8          3  2   0011 0ddd iiii iiii
+\ ADD Rd, Rs           5  0   0100 0100 DSss sddd   Must have at least one r8+
+\ ADD SP, #u7         13  0   1011 0000 oiii iiii   o=0 for ADD
 
-\ Thumb 3: ALU immediates ====================================================
-\ 001o oddd iiii iiii - i=u8 immediate and d=Rd
-\ oo: 0=MOV(S), 1=CMP, 2=ADD(S), 3=SUB(S)
-: <thumb:alu-imm8> ( imm8 Rd opcode -- )
-  >R ?loreg >R    ( imm8   R: opcode dst )
-  ?imm ?u8        ( u8     R: opcode dst )
-  R> 8 lshift or
-  R> or
+: hi-reg? ( r 0 -- ? ) 0= >R   8 >=   R> and ;
+: lo-reg? ( r 0 -- ? ) 0= >R   8 <    R> and ;
+
+: <thumb:add-13-sp> ( u7 1 12 0 -- )
+  2drop ?imm ?u7 ( u7 )
+  $b000 or asm-half, ;
+
+: <thumb:hi-regs> ( Rs Rd opcode -- )
+  >R
+  ?reg   dup 8 and 4 lshift   ( Rs d d-hi      R: opcode )
+  swap 7 and                  ( Rs d-hi d-lo   R: opcode )
+  or R> or >R                 ( Rs             R: opcode )
+  ?reg 3 lshift R> or         ( opcode )
   asm-half, ;
 
+: <thumb:format3> ( imm8 Rd opcode -- )
+  >R ?loreg 8 lshift R> or >R
+  ?imm ?u8   R> or
+  asm-half, ;
 
-\ ADD supports four formats:
-\ Rn   Rs Rd       Rd = Rs + Rn
-\ imm3 Rs Rd       Rd = Rs + u3
-\ imm8    Rd       Rd = Rd + u8
-\ Rs      Rd       Rd = Rd + Rs  (at least one hi reg)
-: thumb:add, ( Op2=Rn|imm3 Rs Rd | imm8 Rd | Rs Rd -- )
-  2 pick IF \ imm8 version
-    $3000 <thumb:alu-imm8>
-  ELSE      \ Registers style, so check the regs
-    over 8 and   4 pick 8 and   or IF \ At least one high register
-      $4400 thumb:alu-hi,
-    ELSE
-      $1800 <thumb:add-sub-bin>
-    THEN
-  THEN ;
+: add2,
+  over   sp drop =                        IF <thumb:add-13-sp>     EXIT THEN \ 13
+  2dup hi-reg? >R   2over hi-reg?   R> or IF $4400 <thumb:hi-regs> EXIT THEN \ 5
+  $3000 <thumb:format3> ;  \ 3
 
-\ SUB supports three formats:
-\ Rn   Rs Rd       Rd = Rs + Rn
-\ imm3 Rs Rd       Rd = Rs + u3
-\ imm8    Rd       Rd = Rd + u8
-: thumb:sub, ( Op2=Rn|imm3 Rs Rd | imm8 Rd -- )
-  2 pick IF \ imm8 version
-    $3800 <thumb:alu-imm8>
-  ELSE      \ 2-arg version
-    $1a00 <thumb:add-sub-bin>
-  THEN ;
+\ ADD3 =======================================================================
+\ ADD Rd, Rs, Rn       2  0   0001 100n nnss sddd
+\ ADD Rd, Rs, #u3      2  2   0001 110i iiss sddd
+: add3, ( imm3|Rn Rs Rd -- )
+  ?loreg >R
+  ?loreg 3 lshift R> or >R
+  dup IF ?imm ?u3 $1c00 ELSE ?loreg $1800 THEN ( n/i op-base   R: op-regs )
+  swap 6 lshift or R> or   asm-half, ;
 
+: thumb:add, ( -- )
+  1 ABORT" Thumb has no ADD opcode, use add2, add3, or lea, instead" ;
 
-\ MOV supports two sets of arguments, and compiles to 3 forms.
-\ Reg-to-reg also supports all 16 registers, but the immediate form is lo only.
-: thumb:mov, ( imm8|Rs Rd -- )
-  2 pick IF
-    $2000 <thumb:alu-imm8>
-  ELSE
-    over 8 and   4 pick 8 and   or IF \ At least one hi reg
-      $4600
-    2>R 2>R   0 #   2R> 2R>   thumb:add,
-  THEN ;
+\ LEA ========================================================================
+\ This one is ambiguous so it's handled explicitly as a "load effective address"
+\ pseudoinstruction, rather than an ADD3.
+\ ADD Rd, PC/SP, #u8  12  *   1010 Sddd iiii iiii   S=0 for PC; S=1 for SP
+\ TODO: It's actually not ambiguous as an ADD3, so it could be folded back in.
+: lea, ( imm8 Rpc/Rsp Rd -- )
+  ?loreg  8 lshift >R
+  ?reg   CASE
+    pc drop OF 0     ENDOF
+    sp drop OF $0800 ENDOF
+    1 ABORT" Bad register operand for Thumb LEA"
+  ENDCASE R> or >R ( imm8   R: opcode )
+  ?imm ?u8   R> or
+  $a000 or asm-half, ;
 
 
-
-\ Thumb 4: ALU on registers ==================================================
-\ 0100 00oo ooss sddd
-: <thumb:alu-rr> ( op "name" --    X: Rs Rd -- )
-  CREATE 6 lshift   $4000 or ,   DOES>
+\ AND ========================================================================
+\ AND Rd, Rs           4  0   0100 0000 00ss sddd
+: <thumb:alu-rr> ( opcode "name" --    X: Rs Rd -- )
+  CREATE 6 lshift $4000 or ,
+  DOES>
     @ >R
-    ?loreg R> or >R   ( Rs   R: opcode )
+    ?loreg R> or >R
     ?loreg 3 lshift R> or
     asm-half, ;
 
-$0 <thumb:alu-rr> thumb:and,      $1 <thumb:alu-rr> thumb:eor,
-$2 <thumb:alu-rr> lsl-rr,         $3 <thumb:alu-rr> lsr-rr,
-$4 <thumb:alu-rr> asr-rr,         $5 <thumb:alu-rr> thumb:adc,
-$6 <thumb:alu-rr> thumb:sbc,      $7 <thumb:alu-rr> ror,
-$8 <thumb:alu-rr> thumb:tst,      $9 <thumb:alu-rr> neg,
-$a <thumb:alu-rr> thumb:cmp-rr,   $b <thumb:alu-rr> thumb:cmn,
-$c <thumb:alu-rr> thumb:orr,      $d <thumb:alu-rr> thumb:mul,
-$e <thumb:alu-rr> thumb:bic,      $f <thumb:alu-rr> thumb:mvn,
+$0 <thumb:alu-rr> thumb:and,
+
+
+\ ASR ========================================================================
+\ ASR Rd, Rs, #u5      1  2   0001 0SSS SSss sddd
+\ ASR Rd, Rs           4  4   0100 0001 00ss sddd
+$4 <thumb:alu-rr> asr2,
+
+: <shift3> ( imm5 Rs Rd opcode -- )
+  >R
+  ?loreg >R
+  ?loreg 3 lshift R> or >R
+  ?imm ?u5 6 lshift R> or
+  R> or   asm-half, ;
+
+: asr3, ( imm5 Rs Rd -- ) $1000 <shift3> ;
+
+
+\ B ==========================================================================
+\ B  label (nearby)    18 -   1110 0ttt tttt tttt
+
+: <branch-target> ( abs-addr lo hi -- halfword-offset )
+  2>R
+  dup 1 and ABORT" Branch target must be an even address"
+  code-space @ 4 +   -   2/ ( halfword-offset )
+  dup 2R> WITHIN 0= ABORT" Branch target is too far away" ;
+
+
+\ The t field is an 11-bit signed offset from $+4, in steps of 2.
+\ It must be an even address.
+: thumb:b, ( abs-addr -- )
+  -2048 2048 <branch-target> ( halfword-offset )
+  $7ff and $e000 or asm-half, ;
+
+\ BEQ et al ==================================================================
+\ BEQ label            16 *   1101 cccc tttt tttt
+\ t is a signed offset from $+4 in steps of 2.
+: <thumb:bcond> ( opcode "name" --    X: abs-addr -- )
+  CREATE   8 lshift   $d000 or ,
+  DOES>
+    @ >R   ( abs-addr   R: opcode )
+    -256 256 <branch-target> ( halfword-offset )
+    $ff and R> or asm-half, ;
+
+$0 <thumb:bcond> beq,   $1 <thumb:bcond> bne,
+$2 <thumb:bcond> bcs,   $3 <thumb:bcond> bcc,
+$4 <thumb:bcond> bmi,   $5 <thumb:bcond> bpl,
+$6 <thumb:bcond> bvs,   $7 <thumb:bcond> bvc,
+$8 <thumb:bcond> bhi,   $9 <thumb:bcond> bls,
+$a <thumb:bcond> bge,   $b <thumb:bcond> blt,
+$c <thumb:bcond> bgt,   $d <thumb:bcond> ble,
+\ $e is unused; $f is SWI.
+
+\ BIC ========================================================================
+\ BIC Rd, Rs           4  14  0100 0011 01ss sddd
+$e <thumb:alu-rr> thumb:bic,
+
+
+\ BL =========================================================================
+\ BL  label            19 1   1111 0ttt tttt tttt   1111 1ttt tttt tttt
+: thumb:bl, ( abs-addr -- )
+  $400000 dup negate swap <branch-target> ( halfword-offset )
+  dup   11 rshift   $7ff and   $f000 or asm-half,
+                    $7ff and   $f800 or asm-half, ;
+
+\ BLX ========================================================================
+\ BLX label            19 0   1111 0ttt tttt tttt   111o 1ttt tttt tttt
+\ TODO: This is ARM9+ and not part of the original GBA. Skipping it.
+
+\ BX =========================================================================
+\ BX Rs                5  3   0100 0111 0Sss s000
+: thumb:bx, ( Rs -- ) ?reg 3 lshift $4700 or asm-half, ;
+
+
+\ CMN ========================================================================
+\ CMN Rd, Rs           4  b   0100 0010 11ss sddd
+$b <thumb:alu-rr> thumb:cmn,
+
+
+\ CMP ========================================================================
+\ CMP Rd, #u8          3  1   0100 1ddd iiii iiii
+\ CMP Rd, Rs           4  a   0100 0010 10ss sddd
+\ CMP Rd, Rs           5  1   0100 0101 DSss sddd
+: <thumb:cmp-imm> ( imm8 Rd -- )
+  ?loreg 8 lshift >R
+  ?imm ?u8 R> or   $4800 or asm-half, ;
 
 : thumb:cmp, ( imm8|Rs Rd -- )
-  2 pick IF $2800 <thumb:alu-imm8> ELSE thumb:cmp-rr, THEN ;
+  2 pick IF $4800 <thumb:format3> ELSE
+    2dup hi-reg? >R   2over hi-reg? R> or IF
+      $4500 <thumb:hi-regs>
+    ELSE
+      ?loreg $4280 or >R
+      ?loreg 3 lshift R> or
+      asm-half,
+    THEN
+  THEN ;
+
+\ EOR ========================================================================
+\ EOR Rd, Rs           4  1   0100 0000 01ss sddd
+$1 <thumb:alu-rr> thumb:eor,
+
+\ !LDMIA =====================================================================
+\ LDMIA Rb!, {Rlist}  15  1   1100 1bbb rrrr rrrr
+: thumb:!ldmia, ( rlist Rb -- )
+  ?loreg 8 lshift $c800 or >R   ( rlist   R: opcode )
+  dup $ff invert and ABORT" Thumb LDMIA cannot have hi regs"
+  R> or asm-half, ;
 
 
-\ Thumb 5: Hi reg ops and BX, BLX ============================================
-\ 0100 01oo DSss sddd    Dddd and Ssss are the full registers.
+\ LDR ========================================================================
+\ LDR Rd, [PC, #nn]    6  -   0100 1ddd iiii iiii   (i is in steps of 4)
+\ LDR Rd, [Rb, Ro]     7  2   0101 100o oobb bddd
+\ LDR Rd, [Rb, #nn]    9  1   0111 0iii iibb bddd   (i is in steps of 4)
+\ LDR Rd, [SP, #nn]   11  1   1001 1ddd iiii iiii   (i is in steps of 4)
+
+\ cccc __IP UBWL bbbb dddd SSSS Sss0 oooo
+\ cccc __IP UBWL bbbb dddd iiii iiii iiii
+\ So for Thumb:
+\ 1. Check that the SSSS Sss0 part ($ff0) is 0; throw if it isn't.
+\ 2. P=1 for pre-index must be set for Thumb.
+\ 3. Remember that the I bit is inverted, I=0 for an immediate operand.
+\ 4. U=1 for upward must likewise be set; W=0 since Thumb doesn't have writeback.
+\ 5. All registers (1 or 2) must be lo regs.
+$02000000 CONSTANT bit-arm-I
+$01000000 CONSTANT bit-arm-P
+$00800000 CONSTANT bit-arm-U
+$00200000 CONSTANT bit-arm-W
+
+: <thumb-mem-pc/sp> ( rd arm-encoded rb -- thumb-encoded )
+  15 = IF $4800 ELSE $9800 THEN   >R ( arm-encoded   R: opcode )
+  \ These are both 8-bit immediates, so get that from the ARM encoding.
+  dup $f00 and ABORT" Thumb LDR/STR [PC, #nn] range is only 8 bits"
+  $ff and R> or   ( rd thumb-encoded )
+  swap 8 lshift or ;
+
+: <thumb-mem-reg-offset> ( rd arm-encoded -- thumb-encoded )
+  dup      $ff0 and ABORT" Cannot use shifted registers in Thumb LDR/STR"   \ #1
+  dup        $8 and ABORT" Offset register must be r0-r7"                   \ #5
+  dup $00080000 and ABORT" Base register must be r0-r7"                     \ #5
+  dup 16 rshift 7 and >R   ( rd arm-encoded   R: rb )
+  7 and 6 lshift           ( rd op-ro         R: rb )
+  R> 3 lshift or           ( rd op-ro+rb )
+  or                       ( rd op-regs )
+  $5800 or ;
+
+: <thumb-mem-imm-offset> ( rd arm-encoded -- thumb-encoded )
+  dup 16 rshift 15 and ( rd arm-encoded rb )
+  dup 15 =   over sp drop = or IF <thumb-mem-pc/sp> ELSE ( rd arm-encoded rb )
+    dup 8 >= ABORT" Base register must be r0-r7"
+    3 lshift $7000 or >R   ( rd arm-encoded   R: opcode )
+    $fff and               ( rd offset        R: opcode )
+    dup 0 32 within 0= ABORT" Offset range is 0-31 for Thumb LDR/STR"
+    6 lshift or R> or
+  THEN ;
+
+: <thumb-memory-reencode> ( rd arm-encoded -- thumb-encoded )
+  dup bit-arm-P and 0= ABORT" Thumb LDR/STR cannot have post-indexing"   \ #2
+  dup bit-arm-U and 0= ABORT" Thumb LDR/STR must be upward pre-indexing" \ #4a
+  dup bit-arm-W and    ABORT" Thumb LDR/STR cannot have writeback"       \ #4b
+  dup bit-arm-I and IF \ register mode - yes, register, it's inverted
+    <thumb-mem-reg-offset> ELSE <thumb-mem-imm-offset> THEN ;
+
+
+: thumb:ldr, ( arm-encoded-address-field Rd -- )
+  ?loreg swap   ( rd arm-encoded-address-field )
+  <thumb-memory-reencode> asm-half, ;
+
+
+\ LDRB =======================================================================
+\ LDRB Rd, [Rb, Ro]    7  3   0101 110o oobb bddd
+\ LDRB Rd, [Rb, #u5]   9  3   0111 1iii iibb bddd   (i in units of 1)
+\ In both cases, that's the same as an LDR with an extra bit set.
+: thumb:ldrb, ( arm-encoded Rd -- )
+  ?loreg swap <thumb-memory-reencode> ( thumb-encoded-ldr )
+  dup $f000 and $5000 = IF $f1ff and $5c00 or ELSE $07ff and $7800 or THEN
+  asm-half, ;
+
+
+\ LDRH =======================================================================
+\ LDRH  Rd, [Rb, Ro]   8  2   0101 101o oobb bddd
+\ LDRH  Rd, [Rb, #u5] 10  1   1000 1iii iibb bddd   (i in units of 1)
+\ LDRH with registers (format 8) is format 7 with bit 9 set ($0200).
+\ LDRH with immediate (format 10) is format 9 but with %01110 replaced by
+
+: thumb:ldrh, ( arm-encoded Rd -- )
+  ?loreg swap <thumb-memory-reencode>
+  dup $f000 and $5000 = IF $0200 or ELSE $3ff and $8800 or THEN asm-half, ;
+
+\ LDRSB ======================================================================
+\ LDRSB Rd, [Rb, Ro]   8  1   0101 011o oobb bddd
+: thumb:ldrsb, ( arm-encoded Rd -- )
+  ?loreg swap <thumb-memory-reencode>
+  $1ff and $5600 or asm-half, ;
+
+\ LDRSH ======================================================================
+\ LDRSH Rd, [Rb, Ro]   8  3   0101 111o oobb bddd
+: thumb:ldrsh, ( arm-encoded Rd -- )
+  ?loreg swap <thumb-memory-reencode>
+  $1ff and $5e00 or asm-half, ;
+
+
+\ LSL ========================================================================
+\ LSL Rd, Rs, #u5      1  0   0000 0iii iiss sddd
+\ LSL Rd, Rs           4  2   0100 0000 10ss sddd
+$2 <thumb:alu-rr> lsl2,
+: lsl3, ( imm5 Rs Rd -- ) $0000 <shift3> ;
+
+
+\ LSR ========================================================================
+\ LSR Rd, Rs, #u5      1  1   0000 1iii iiss sddd
+\ LSR Rd, Rs           4  3   0100 0000 11ss sddd
+$3 <thumb:alu-rr> lsr2,
+: lsr3, ( imm5 Rs Rd -- ) $0800 <shift3> ;
+
+
+\ MOV ========================================================================
+\ MOV Rd, #u8          3  0   0010 0ddd iiii iiii
+\ MOV Rd, Rs           5  2   0100 0110 DSss sddd   Rs or Rd must be hi!
+\ MOV Rd, Rs           2  2   0001 1100 00ss sddd   Actually ADD Rd, Rs, #0
+: thumb:mov, ( imm8|Rs Rd -- )
+  2 pick IF \ immediate form
+    ?loreg >R ?imm ?u8 R> 8 lshift or $2000 or asm-half,
+  ELSE \ register form
+    2dup hi-reg? >R   2over hi-reg? R> or IF \ At least one hi reg
+      $4600 <thumb:hi-regs>
+    ELSE \ Neither, so assembly it as 0 # Rs Rd add,
+      2>R 2>R   0 #   2R> 2R>   add3,
+    THEN
+  THEN ;
+
+
+\ MUL ========================================================================
+\ MUL Rd, Rs           4  d   0100 0011 01ss sddd
+$d <thumb:alu-rr> thumb:mul,
+
+\ MVN ========================================================================
+\ MVN Rd, Rs           4  f   0100 0011 11ss sddd
+$f <thumb:alu-rr> thumb:mvn,
+
+\ NEG ========================================================================
+\ NEG Rd, Rs           4  9   0100 0010 01ss sddd
+$9 <thumb:alu-rr> neg,
+
+\ NOP ========================================================================
+\ NOP                  5  2   0100 0110 1100 0000   Assembled as MOV r8, r8
+: nop, ( -- ) $46c0 asm-half, ;
+
+\ ORR ========================================================================
+\ ORR Rd, Rs           4  c   0100 0011 00ss sddd
+$c <thumb:alu-rr> thumb:orr,
+
+\ POP ========================================================================
+\ POP {Rlist}         14  1   1011 110L rrrr rrrr
+$8000 CONSTANT rlist-pc
+$4000 CONSTANT rlist-lr
+
+: thumb:pop, ( rlist -- )
+  dup rlist-pc and IF $bd00 ELSE $bc00 THEN >R
+  rlist-pc invert and    ( rlist-without-pc   R: opcode )
+  dup $00ff invert and ABORT" Thumb POP only supports lo regs and PC"
+  R> or asm-half, ;
+
+\ PUSH =======================================================================
+\ PUSH {Rlist}        14  0   1011 010L rrrr rrrr
+: thumb:push, ( rlist -- )
+  dup rlist-lr and IF $b500 ELSE $b400 THEN >R
+  rlist-lr invert and    ( rlist-without-lr   R: opcode )
+  dup $00ff invert and ABORT" Thumb PUSH only supports lo regs and LR"
+  R> or asm-half, ;
+
+
+\ ROR ========================================================================
+\ ROR Rd, Rs           4  7   0100 0001 11ss sddd
+$7 <thumb:alu-rr> ror,
+
+\ SBC ========================================================================
+\ SBC Rd, Rs           4  6   0100 0001 10ss sddd
+$6 <thumb:alu-rr> thumb:sbc,
+
+
+\ !STMIA =====================================================================
+\ STMIA Rb!, {Rlist}  15  0   1100 0bbb rrrr rrrr
+: thumb:!stmia, ( rlist Rb -- )
+  ?loreg 8 lshift $c000 or >R   ( rlist   R: opcode )
+  dup $ff invert and ABORT" Thumb STMIA cannot have hi regs"
+  R> or asm-half, ;
+
+
+\ STR ========================================================================
+\ STR Rd, [Rb, Ro]     7  0   0101 000o oobb bddd
+\ STR Rd, [Rb, #nn]    9  0   0110 0iii iibb bddd   (i is in steps of 4)
+\ STR Rd, [SP, #nn]   11  0   1001 0ddd iiii iiii   (i is in steps of 4)
+: thumb:str, ( arm-encoded-address-field Rd -- )
+  ?loreg swap   ( rd arm-encoded-address-field )
+  <thumb-memory-reencode>
+  dup $f000 and $7000 = IF $efff ELSE $f7ff THEN
+  and asm-half, ;
+
+\ STRB =======================================================================
+\ STRB Rd, [Rb, Ro]    7  1   0101 010o oobb bddd
+\ STRB Rd, [Rb, #nn]   9  2   0111 0iii iibb bddd   (i is in steps of 4)
+: thumb:strb, ( arm-encoded-address-field Rd -- )
+  ?loreg swap   ( rd arm-encoded-address-field )
+  <thumb-memory-reencode>
+  dup $f000 and $5000 = IF $01ff and $5400 or ELSE $07ff and $7000 or THEN
+  asm-half, ;
+
+\ STRH =======================================================================
+\ STRH  Rd, [Rb, Ro]   8  0   0101 001o oobb bddd
+\ STRH  Rd, [Rb, #u5] 10  0   1000 0iii iibb bddd   (i in units of 1)
+: thumb:strh, ( arm-encoded Rd -- )
+  ?loreg swap <thumb-memory-reencode>
+  dup $f000 and $5000 = IF $01ff and $5200 or ELSE $07ff and $8000 or THEN
+  asm-half, ;
+
+
+\ SUB2 ========================================================================
+\ SUB Rd, #u8          3  2   0011 1ddd iiii iiii
+\ SUB SP, #u7         13  0   1011 0000 oiii iiii   o=1 for SUB
+
+: <thumb:sub-13-sp> ( u7 1 12 0 -- )
+  2drop ?imm ?u7 ( u7 )
+  $b080 or asm-half, ;
+
+: sub2,
+  over sp drop = IF
+    <thumb:sub-13-sp>
+  ELSE
+    $3800 <thumb:format3>
+  THEN ;
+
+\ SUB3 =======================================================================
+\ SUB Rd, Rs, Rn       2  1   0001 101n nnss sddd
+\ SUB Rd, Rs, #u3      2  3   0001 111i iiss sddd
+: sub3, ( imm3|Rn Rs Rd -- )
+  ?loreg >R
+  ?loreg 3 lshift R> or >R
+  dup IF ?imm ?u3 $1e00 ELSE ?loreg $1a00 THEN ( n/i op-base   R: op-regs )
+  swap 6 lshift or R> or   asm-half, ;
+
+: thumb:sub, ( -- )
+  1 ABORT" Thumb has no SUB opcode, use sub2 or sub3 instead" ;
+
+
+\ SWI ========================================================================
+\ SWI nn              17  -   1101 1111 nnnn nnnn
+: thumb:swi, ( u8 -- ) ?u8 $df00 or asm-half, ;
+
+
+\ TST ========================================================================
+\ TST nn               4  8   0100 0010 00ss sddd
+$8 <thumb:alu-rr> thumb:tst,
+
+
+\ Control structures =========================================================
+\ Allows rebinding B, BL, and BNE et al, so we must distinguish them.
+: tcode-h@ ( addr -- h ) dup tcode-c@   swap 1+ tcode-c@ 8 lshift or ;
+: tcode-h! ( h addr -- )
+  over $ff and over tcode-c!
+  swap 8 rshift swap 1+ tcode-c! ;
+
+: <thumb:resolve-short> ( loc opcode mask lo hi -- )
+  2>R tuck and                   ( loc mask masked      R: lo hi )
+  2 pick 4 +   code-space @ swap -  ( loc mask masked offset   R: lo hi )
+  dup 2R> within 0= ABORT" Resolved branch is out of range" ( loc mask masked offset )
+  rot invert and $ffff and 2/   ( loc masked-opcode masked-offset )
+  or swap tcode-h! ;
+
+: <thumb:resolve-long> ( loc -- )
+  dup   4 +   code-space @ swap -   ( loc offset )
+  dup $400000 dup negate swap WITHIN 0= ABORT" Resolved branch out of range"
+  code-space @ >R   swap code-space !   ( byte-offset )
+  2/   ( halfword-offset )
+  dup 11 rshift $3ff and $f000 or asm-half, ( halfword-offset )
+  $3ff and $f800 or asm-half,
+  R> code-space ! ;
+
+: thumb:resolve ( loc -- )
+  dup tcode-h@
+  dup $f000 and $d000 = IF $ff00 -256  256  <thumb:resolve-short> EXIT THEN
+  dup $f800 and $e000 = IF $f800 -2048 2048 <thumb:resolve-short> EXIT THEN
+      $f800 and $f000 = IF <thumb:resolve-long>                   EXIT THEN
+  1 ABORT" Unrecognized branch type" ;
 
 
 : thumb ( -- )
   thumb-mode? ON
-  ['] thumb:add,    IS add,
-  ['] thumb:sub,    IS sub,
-  ['] thumb:mov,    IS mov,
-  ['] thumb:cmp,    IS cmp,
-
-  ['] thumb:and,    IS and,
-  ['] thumb:eor,    IS eor,
   ['] thumb:adc,    IS adc,
-  ['] thumb:sbc,    IS sbc,
-  ['] thumb:tst,    IS tst,
-  ['] thumb:cmn,    IS cmn,
-  ['] thumb:orr,    IS orr,
-  ['] thumb:mul,    IS mul,
+  ['] thumb:add,    IS add, \ Stub; use add2, add3, and lea, instead.
+  ['] thumb:and,    IS and,
+  ['] thumb:b,      IS b,
   ['] thumb:bic,    IS bic,
+  ['] thumb:bl,     IS bl,
+  ['] thumb:bx,     IS bx,
+  ['] thumb:cmn,    IS cmn,
+  ['] thumb:cmp,    IS cmp,
+  ['] thumb:eor,    IS eor,
+  ['] thumb:!ldmia, IS !ldmia,
+  ['] thumb:ldr,    IS ldr,
+  ['] thumb:ldrb,   IS ldrb,
+  ['] thumb:ldrh,   IS ldrh,
+  ['] thumb:ldrsb,  IS ldrsb,
+  ['] thumb:ldrsh,  IS ldrsh,
+  ['] thumb:mov,    IS mov,
+  ['] thumb:mul,    IS mul,
   ['] thumb:mvn,    IS mvn,
+  ['] thumb:orr,    IS orr,
+  ['] thumb:pop,    IS pop,
+  ['] thumb:push,   IS push,
+  ['] thumb:sbc,    IS sbc,
+  ['] thumb:!stmia, IS !stmia,
+  ['] thumb:str,    IS str,
+  ['] thumb:strb,   IS strb,
+  ['] thumb:strh,   IS strh,
+  ['] thumb:sub,    IS sub,
+  ['] thumb:swi,    IS swi,
+  ['] thumb:tst,    IS tst,
 
-  \ ['] thumb:bx,     IS bx,
-  \ ['] thumb:b,      IS b,
-  \ ['] thumb:bl,     IS bl,
-  \ ['] thumb:mul,    IS mul,
-  \ ['] thumb:ldr,    IS ldr,
-  \ ['] thumb:str,    IS str,
-  \ ['] thumb:ldrb,   IS ldrb,
-  \ ['] thumb:strb,   IS strb,
-  \ ['] thumb:ldr-pc, IS ldr-pc,
-  \ ['] thumb:ldrh,   IS ldrh,
-  \ ['] thumb:ldrsb,  IS ldrsb,
-  \ ['] thumb:ldrsh,  IS ldrsh,
-  \ ['] thumb:strh,   IS strh,
-  \ ['] thumb:!stmia, IS !stmia,
-  \ ['] thumb:!ldmia, IS !ldmia,
-  \ ['] thumb:push,   IS push,
-  \ ['] thumb:pop,    IS pop,
-  \ ['] thumb:swi,    IS swi,
-  \ ['] thumb:resolve IS resolve
-  ;
+  ['] thumb:resolve IS resolve ;
 
 thumb

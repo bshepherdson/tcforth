@@ -10,48 +10,296 @@ REQUIRE asm-test-harness.ft
 
 thumb
 
-\ Thumb 1: Shifts ============================================================
-\ 000o oSSS SSss sddd
-T{ 31 # r3 r6 lsl-imm, -> $07de }T
-T{ 0  # r3 r6 lsl-imm, -> $001e }T
-T{ 31 # r3 r6 lsr-imm, -> $0fde }T
-T{ 0  # r3 r6 lsr-imm, -> $081e }T
-T{ 31 # r3 r6 asr-imm, -> $17de }T
-T{ 0  # r3 r6 asr-imm, -> $101e }T
-
-\ Thumb 2+3: Add/Sub =========================================================
-\ 0001 1oon nnss sddd
-T{ 5 # r2 r1 add, -> $1d51 }T \ ADD r1, r2, #5
-T{ 5 # r2 r1 sub, -> $1f51 }T \ SUB r1, r2, #5
-T{ r5  r2 r1 add, -> $1951 }T \ ADD r1, r2, r5
-T{ r5  r2 r1 sub, -> $1b51 }T \ SUB r1, r2, r5
-T{ $cd #  r1 add, -> $31cd }T \ ADD r1, #$cd
-T{ $cd #  r1 sub, -> $39cd }T \ SUB r1, #$cd
-
-\ Thumb 2+3: MOV =============================================================
-T{ $cd #  r1 mov, -> $21cd }T \ MOV r1, #$cd   in immediate form
-T{ r4     r1 mov, -> $1c21 }T \ MOV r1, r4     == ADD r1, r4, #0
-
-\ Thumb 3: CMP ===============================================================
-T{ $cd # r1 cmp, -> $29cd }T \ CMP
-
-\ Thumb 4: ALU registers =====================================================
-T{ r6 r4 and,    -> $4034 }T \ AND r4, r6
-T{ r6 r4 eor,    -> $4074 }T \ EOR r4, r6
-T{ r6 r4 lsl-rr, -> $40b4 }T \ LSL r4, r6
-T{ r6 r4 lsr-rr, -> $40f4 }T \ LSR r4, r6
-T{ r6 r4 asr-rr, -> $4134 }T \ ASR r4, r6
+\ ADC ========================================================================
 T{ r6 r4 adc,    -> $4174 }T \ ADC r4, r6
-T{ r6 r4 sbc,    -> $41b4 }T \ SBC r4, r6
-T{ r6 r4 ror,    -> $41f4 }T \ ROR r4, r6
-T{ r6 r4 tst,    -> $4234 }T \ TST r4, r6
-T{ r6 r4 neg,    -> $4274 }T \ NEG r4, r6
-T{ r6 r4 cmp,    -> $42b4 }T \ CMP r4, r6
-T{ r6 r4 cmn,    -> $42f4 }T \ CMN r4, r6
-T{ r6 r4 orr,    -> $4334 }T \ ORR r4, r6
-T{ r6 r4 mul,    -> $4374 }T \ MUL r4, r6
-T{ r6 r4 bic,    -> $43b4 }T \ BIC r4, r6
-T{ r6 r4 mvn,    -> $43f4 }T \ MVN r4, r6
+
+\ ADD2 =======================================================================
+T{ $cd # r1 add2, -> $31cd }T \ ADD r1, #$cd   (format 3)
+T{ r9    r1 add2, -> $4449 }T \ ADD r1, r9     (format 5, Rs high)
+T{ r1    r9 add2, -> $4489 }T \ ADD r9, r1     (format 5, Rd high)
+T{ r10   r9 add2, -> $44d1 }T \ ADD r9, r10    (format 5, both high)
+X{ r2    r1 add2, }X          \ ADD r1, r2     (both lo, error)
+
+T{ $67 # sp add2, -> $b067 }T \ ADD SP, #$67   (format 13, in bounds)
+X{ $97 # sp add2,          }X \ ADD SP, #$97   (out of u7 range, throws)
+
+\ ADD3 =======================================================================
+T{ 5 # r2 r1 add3, -> $1d51 }T \ ADD r1, r2, #5
+T{ r5  r2 r1 add3, -> $1951 }T \ ADD r1, r2, r5
+X{ 8 # r2 r1 add3,          }X \ ADD r1, r2, #8  out of u3 range; throws
+
+\ LEA ========================================================================
+T{ $cd # sp r3 lea, -> $abcd }T \ LEA r3, sp, #$cd
+T{ $cd # pc r3 lea, -> $a3cd }T \ LEA r3, pc, #$cd
+X{ $cd # r4 r3 lea,          }X \ LEA r3, r4, #$cd    throws, bad Rs
+
+
+\ AND ========================================================================
+T{ r6 r4 and,    -> $4034 }T \ AND r4, r6
+
+
+\ ASR ========================================================================
+T{ 6 # r6 r4 asr3, -> $11b4 }T \ ASR r4, r6, #6
+T{     r6 r4 asr2, -> $4134 }T \ ASR r4, r6
+
+
+\ B ==========================================================================
+T{ code-base        b, -> $e7fe }T
+T{ code-base $100 + b, -> $e07e }T
+
+\ Bcc ========================================================================
+T{ code-base        beq, -> $d0fe }T
+T{ code-base $100 + beq, -> $d07e }T
+T{ code-base        bne, -> $d1fe }T
+T{ code-base $100 + bne, -> $d17e }T
+T{ code-base        bcs, -> $d2fe }T
+T{ code-base $100 + bcs, -> $d27e }T
+T{ code-base        bcc, -> $d3fe }T
+T{ code-base $100 + bcc, -> $d37e }T
+T{ code-base        bmi, -> $d4fe }T
+T{ code-base $100 + bmi, -> $d47e }T
+T{ code-base        bpl, -> $d5fe }T
+T{ code-base $100 + bpl, -> $d57e }T
+T{ code-base        bvs, -> $d6fe }T
+T{ code-base $100 + bvs, -> $d67e }T
+T{ code-base        bvc, -> $d7fe }T
+T{ code-base $100 + bvc, -> $d77e }T
+T{ code-base        bhi, -> $d8fe }T
+T{ code-base $100 + bhi, -> $d87e }T
+T{ code-base        bls, -> $d9fe }T
+T{ code-base $100 + bls, -> $d97e }T
+T{ code-base        bge, -> $dafe }T
+T{ code-base $100 + bge, -> $da7e }T
+T{ code-base        blt, -> $dbfe }T
+T{ code-base $100 + blt, -> $db7e }T
+T{ code-base        bgt, -> $dcfe }T
+T{ code-base $100 + bgt, -> $dc7e }T
+T{ code-base        ble, -> $ddfe }T
+T{ code-base $100 + ble, -> $dd7e }T
+
+\ BIC ========================================================================
+T{ r6 r4 bic, -> $43b4 }T \ BIC r4, r6
+
+\ BL =========================================================================
+T{ code-base        bl, -> $f7ff $fffe }T
+T{ code-base $100 + bl, -> $f000 $f87e }T
+
+\ BX =========================================================================
+T{ r3  bx, -> $4718 }T
+T{ r10 bx, -> $4750 }T
+
+\ CMN ========================================================================
+T{ r6 r4 cmn, -> $42f4 }T \ CMN r4, r6
+
+\ CMP ========================================================================
+T{ r6    r4 cmp, -> $42b4 }T \ CMP r4, r6   (format 4, lo regs ALU)
+T{ r9    r4 cmp, -> $454c }T \ CMP r4, r9   (format 5, Rs hi)
+T{ r4    r9 cmp, -> $45a1 }T \ CMP r9, r4   (format 5, Rd hi)
+T{ r8    r9 cmp, -> $45c1 }T \ CMP r9, r8   (format 5, both hi)
+T{ $cd # r4 cmp, -> $4ccd }T \ CMP r4, #$cd (format 3)
+
+
+\ EOR ========================================================================
+T{ r6 r4 eor, -> $4074 }T \ EOR r4, r6
+
+\ !LDMIA =====================================================================
+T{ {{ r1 r0 r7 }} r4 !ldmia, -> $cc83 }T \ LDMIA r4!, {r1 r0 r7}
+X{ {{ r1 r0 r9 }} r4 !ldmia,          }X \ Rejects hi reg in rlist
+
+
+\ LDR ========================================================================
+\ Immediate offsets of a lo register
+T{      r3 []   r4 ldr, -> $701c }T  \ Treated as immediate 0
+T{  6 # r3 [+]  r4 ldr, -> $719c }T
+X{ 32 # r3 [+]  r4 ldr,          }X  \ Immediate too big
+X{  6 # r3 [-]  r4 ldr,          }X  \ Downward indexing is not allowed
+X{  6 # r3 [+]! r4 ldr,          }X  \ Writeback is not allowed
+
+\ Register offset
+T{ r1 r3 [+]  r4 ldr, -> $585c }T
+X{ r8 r3 [+]  r4 ldr,          }X    \ Offset reg too big
+X{ r1 r8 [+]  r4 ldr,          }X    \ Base reg too big
+X{ r1 r3 [+]  r8 ldr,          }X    \ Dest reg too big
+
+\ Immediate offsets of PC and SP
+T{ $cd  # sp [+] r4 ldr, -> $9ccd }T
+X{ $1cd # sp [+] r4 ldr,          }X   \ Too big an offset.
+T{ $cd  # pc [+] r4 ldr, -> $4ccd }T
+X{ $1cd # pc [+] r4 ldr,          }X   \ Too big an offset.
+
+
+\ LDRB =======================================================================
+\ Immediate offsets of a lo register
+T{      r3 []   r4 ldrb, -> $781c }T  \ Treated as immediate 0
+T{  6 # r3 [+]  r4 ldrb, -> $799c }T
+X{ 32 # r3 [+]  r4 ldrb,          }X  \ Immediate too big
+X{  6 # r3 [-]  r4 ldrb,          }X  \ Downward indexing is not allowed
+X{  6 # r3 [+]! r4 ldrb,          }X  \ Writeback is not allowed
+
+\ Register offset
+T{ r1 r3 [+]  r4 ldrb, -> $5c5c }T
+X{ r8 r3 [+]  r4 ldrb,          }X    \ Offset reg too big
+X{ r1 r8 [+]  r4 ldrb,          }X    \ Base reg too big
+X{ r1 r3 [+]  r8 ldrb,          }X    \ Dest reg too big
+
+\ LDRH =======================================================================
+\ Immediate offsets of a lo register
+T{      r3 []   r4 ldrh, -> $881c }T  \ Treated as immediate 0
+T{  6 # r3 [+]  r4 ldrh, -> $899c }T
+X{ 32 # r3 [+]  r4 ldrh,          }X  \ Immediate too big
+X{  6 # r3 [-]  r4 ldrh,          }X  \ Downward indexing is not allowed
+X{  6 # r3 [+]! r4 ldrh,          }X  \ Writeback is not allowed
+
+\ Register offset
+T{ r1 r3 [+]  r4 ldrh, -> $5a5c }T
+X{ r8 r3 [+]  r4 ldrh,          }X    \ Offset reg too big
+X{ r1 r8 [+]  r4 ldrh,          }X    \ Base reg too big
+X{ r1 r3 [+]  r8 ldrh,          }X    \ Dest reg too big
+
+\ LDRSB ======================================================================
+T{ r1 r3 [+]  r4 ldrsb, -> $565c }T
+X{ r8 r3 [+]  r4 ldrsb,          }X    \ Offset reg too big
+X{ r1 r8 [+]  r4 ldrsb,          }X    \ Base reg too big
+X{ r1 r3 [+]  r8 ldrsb,          }X    \ Dest reg too big
+
+\ LDRSH ======================================================================
+T{ r1 r3 [+]  r4 ldrsh, -> $5e5c }T
+X{ r8 r3 [+]  r4 ldrsh,          }X    \ Offset reg too big
+X{ r1 r8 [+]  r4 ldrsh,          }X    \ Base reg too big
+X{ r1 r3 [+]  r8 ldrsh,          }X    \ Dest reg too big
+
+
+\ LSL ========================================================================
+T{ 6 # r6 r4 lsl3, -> $01b4 }T \ LSL r4, r6, #6
+T{     r6 r4 lsl2, -> $40b4 }T \ LSL r4, r6
+
+\ LSR ========================================================================
+T{ 6 # r6 r4 lsr3, -> $09b4 }T \ LSR r4, r6, #6
+T{     r6 r4 lsr2, -> $40f4 }T \ LSR r4, r6
+
+
+\ MOV ========================================================================
+T{ $cd # r3 mov, -> $23cd }T   \ Immediate form
+T{ r9    r3 mov, -> $464b }T   \ Rs hi
+T{ r3    r9 mov, -> $4699 }T   \ Rd hi
+T{ r10   r9 mov, -> $46d1 }T   \ Both hi
+T{ r4    r3 mov, -> $1c23 }T   \ Both lo; assembled as ADD r3, r4, #0
+
+
+\ MUL ========================================================================
+T{ r4 r3 mul, -> $4363 }T
+
+\ MVN ========================================================================
+T{ r4 r3 mvn, -> $43e3 }T
+
+\ NOP ========================================================================
+T{ nop, -> $46c0 }T
+
+\ ORR ========================================================================
+T{ r4 r3 orr, -> $4323 }T
+
+\ POP ========================================================================
+T{ {{ r1    r0 r7 }} pop,  -> $bc83 }T     \ POP {r1    r0 r7}
+T{ {{ r1 pc r0 r7 }} pop,  -> $bd83 }T     \ POP {r1 pc r0 r7}
+X{ {{ r1 pc r0 r9 }} pop,           }X     \ Rejects hi reg in rlist
+X{ {{ r1 lr r0    }} pop,           }X     \ Rejects hi reg in rlist
+
+\ PUSH =======================================================================
+T{ {{ r1    r0 r7 }} push, -> $b483 }T     \ PUSH {r1    r0 r7}
+T{ {{ r1 lr r0 r7 }} push, -> $b583 }T     \ PUSH {r1 lr r0 r7}
+X{ {{ r1 lr r0 r9 }} push,          }X     \ Rejects hi reg in rlist
+X{ {{ r1 pc r0    }} push,          }X     \ Rejects hi reg in rlist
+
+\ ROR ========================================================================
+T{ r4 r3 ror, -> $41e3 }T
+
+\ SBC ========================================================================
+T{ r4 r3 sbc, -> $41a3 }T
+
+
+\ !STMIA =====================================================================
+T{ {{ r1 r0 r7 }} r4 !stmia, -> $c483 }T \ STMIA r4!, {r1 r0 r7}
+X{ {{ r1 r0 r9 }} r4 !stmia,          }X \ Rejects hi reg in rlist
+
+
+\ STR ========================================================================
+\ Immediate offsets of a lo register
+T{      r3 []   r4 str, -> $601c }T  \ Treated as immediate 0
+T{  6 # r3 [+]  r4 str, -> $619c }T
+X{ 32 # r3 [+]  r4 str,          }X  \ Immediate too big
+X{  6 # r3 [-]  r4 str,          }X  \ Downward indexing is not allowed
+X{  6 # r3 [+]! r4 str,          }X  \ Writeback is not allowed
+
+\ Register offset
+T{ r1 r3 [+]  r4 str, -> $505c }T
+X{ r8 r3 [+]  r4 str,          }X    \ Offset reg too big
+X{ r1 r8 [+]  r4 str,          }X    \ Base reg too big
+X{ r1 r3 [+]  r8 str,          }X    \ Dest reg too big
+
+\ Immediate offsets of PC and SP
+T{ $cd  # sp [+] r4 str, -> $94cd }T
+X{ $1cd # sp [+] r4 str,          }X   \ Too big an offset.
+
+
+\ STRB =======================================================================
+\ Immediate offsets of a lo register
+T{      r3 []   r4 strb, -> $701c }T  \ Treated as immediate 0
+T{  6 # r3 [+]  r4 strb, -> $719c }T
+X{ 32 # r3 [+]  r4 strb,          }X  \ Immediate too big
+X{  6 # r3 [-]  r4 strb,          }X  \ Downward indexing is not allowed
+X{  6 # r3 [+]! r4 strb,          }X  \ Writeback is not allowed
+
+\ Register offset
+T{ r1 r3 [+]  r4 strb, -> $545c }T
+X{ r8 r3 [+]  r4 strb,          }X    \ Offset reg too big
+X{ r1 r8 [+]  r4 strb,          }X    \ Base reg too big
+X{ r1 r3 [+]  r8 strb,          }X    \ Dest reg too big
+
+
+\ STRH =======================================================================
+\ Immediate offsets of a lo register
+T{      r3 []   r4 strh, -> $801c }T  \ Treated as immediate 0
+T{  6 # r3 [+]  r4 strh, -> $819c }T
+X{ 32 # r3 [+]  r4 strh,          }X  \ Immediate too big
+X{  6 # r3 [-]  r4 strh,          }X  \ Downward indexing is not allowed
+X{  6 # r3 [+]! r4 strh,          }X  \ Writeback is not allowed
+
+\ Register offset
+T{ r1 r3 [+]  r4 strh, -> $525c }T
+X{ r8 r3 [+]  r4 strh,          }X    \ Offset reg too big
+X{ r1 r8 [+]  r4 strh,          }X    \ Base reg too big
+X{ r1 r3 [+]  r8 strh,          }X    \ Dest reg too big
+
+
+\ SUB2 =======================================================================
+T{ $cd # r1 sub2, -> $39cd }T \ SUB r1, #$cd   (format 3)
+X{ r2    r1 sub2,          }X \ SUB r1, r2     (both lo, error)
+
+T{ $67 # sp sub2, -> $b0e7 }T \ SUB SP, #$67   (format 13, in bounds)
+X{ $97 # sp sub2,          }X \ SUB SP, #$97   (out of u7 range, throws)
+
+\ SUB3 =======================================================================
+T{ 5 # r2 r1 sub3, -> $1f51 }T \ SUB r1, r2, #5
+T{ r5  r2 r1 sub3, -> $1b51 }T \ SUB r1, r2, r5
+X{ 8 # r2 r1 sub3,          }X \ SUB r1, r2, #8  out of u3 range; throws
+
+
+\ SWI ========================================================================
+T{ $5   swi, -> $df05 }T \ SWI 5
+X{ $200 swi,          }X \ Too big
+
+
+\ Resolving branches =========================================================
+T{ label tlbl1   r5 r2 r1 sub3,   tlbl1 b,   -> $1b51 $e7fd }T \ B backwards
+T{ fwd b,   r5 r2 r1 sub3,   resolve         -> $e000 $1b51 }T \ B forwards
+
+T{ label tlbl2   r5 r2 r1 sub3,   tlbl2 bne, -> $1b51 $d1fd }T \ BNE backwards
+T{ fwd bne,   r5 r2 r1 sub3,   resolve       -> $d100 $1b51 }T \ BNE forwards
+T{ label tlbl3   r5 r2 r1 sub3,   tlbl3 blt, -> $1b51 $dbfd }T \ BLT backwards
+T{ fwd blt,   r5 r2 r1 sub3,   resolve       -> $db00 $1b51 }T \ BLT forwards
+
+T{ label tlbl4   r5 r2 r1 sub3,   tlbl4 bl,  -> $1b51 $f7ff $fffd }T \ BL backwards
+T{ fwd bl,   r5 r2 r1 sub3,   resolve        -> $f000 $f801 $1b51 }T \ BL forwards
 
 
 tests-done bye

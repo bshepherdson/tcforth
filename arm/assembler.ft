@@ -87,6 +87,7 @@ VARIABLE regs-used
 : ?u3 ( imm -- imm ) dup 0 8   within 0= ABORT" Out of U3 range" ;
 : ?u4 ( imm -- imm ) dup 0 16  within 0= ABORT" Out of U4 range" ;
 : ?u5 ( imm -- imm ) dup 0 32  within 0= ABORT" Out of U5 range" ;
+: ?u7 ( imm -- imm ) dup 0 128 within 0= ABORT" Out of U7 range" ;
 : ?u8 ( imm -- imm ) dup 0 256 within 0= ABORT" Out of U8 range" ;
 
 : ?reg  ( 0 -- ) 0<>   ABORT" Expected register" ;

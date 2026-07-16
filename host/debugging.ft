@@ -23,3 +23,13 @@ host definitions
 
 : TWORDS ( -- ) latest BEGIN ?dup WHILE dup tid. cr t@ REPEAT ;
 
+\ Hex version of the ~~ debugging word from Gforth.
+\ Inlines its code so that the location reference is still valid.
+: ~~h ( -- )
+  base postpone literal
+  postpone @   postpone >R
+  postpone hex
+  postpone ~~  postpone R>
+  base postpone literal
+  postpone !
+; IMMEDIATE

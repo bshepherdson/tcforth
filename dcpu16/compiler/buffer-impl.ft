@@ -1,0 +1,37 @@
+\ DCPU-16 specific implementations of the DEFERed words for the buffering of
+\ compilation nodes.
+host definitions
+REQUIRE ../../host/compiler/buffered.ft
+
+\ Call nodes
+:noname ( bufnode -- )
+  code-space @ tcell+   over caller>slot ! \ Save the location of the target.
+  caller>t-xt @   # jsr, ; IS assemble-caller
+
+\ Forward refs and resolution
+:noname ( -- token )           $fade call, ; IS forward-ref
+:noname ( token real-t-xt -- )
+  swap 2dup caller>t-xt !   \ Set the real target xt  ( real-t-xt token )
+  \ And if it's already compiled, update the slot.
+  caller>slot @ dup IF tcode! ELSE 2drop THEN ; IS resolve-ref
+
+
+\ Literals
+:noname ( literal-node -- )
+  literal>value @   # push set, ; IS assemble-literal
+
+
+\ Nonprimitive start and end nodes
+:noname ( starter-bufnode -- ) drop   pop pushrsp, ; IS assemble-starter
+:noname ( return-bufnode -- )
+  drop
+  ra poprsp,   \ TODO: Make poprsp, in the compiler version a one-liner?
+  ra pc set, ; IS assemble-return
+
+\ DODOES nodes
+:noname ( dodoes-bufnode -- )
+  drop
+  pop ra   set,  \ Pop PFA into A
+  pop pushrsp,   \ Save the return address in RSP
+  [a] push set,  \ Push parameter field
+; IS assemble-dodoes

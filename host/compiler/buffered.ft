@@ -154,12 +154,10 @@ end-structure
 
 \ bufnode>assemble word for true, JSR-based calls, as opposed to inlined ones.
 \ This corresponds to a vanilla `tcompile,` on a non-buffered platform.
-: caller:jsr ( bufnode -- )
-  code-space @ tcell+   over caller>slot ! \ Save the location of the target.
-  caller>t-xt @   # jsr, ;
+DEFER assemble-caller ( bufnode -- )
 
 : call, ( t-xt -- caller-bufnode )
-  buftype-caller ['] caller:jsr [caller] new-bufnode
+  buftype-caller ['] assemble-caller [caller] new-bufnode
   tuck caller>t-xt ! ;
 
 \ Create and append a node for a call to a given t-xt.
@@ -167,12 +165,9 @@ end-structure
   call, drop ;
 
 \ Forward references =========================================================
-\ Compile a call to a forward ref, returning an opaque token.
-: forward-ref ( -- token )           $fade call, ;
-: resolve-ref ( token real-t-xt -- )
-  swap 2dup caller>t-xt !   \ Set the real target xt  ( real-t-xt token )
-  \ And if it's already compiled, update the slot.
-  caller>slot @ dup IF tcode! ELSE 2drop THEN ;
+\ Compile a call to a forward ref, returning an opaque cell-sized token.
+DEFER forward-ref ( -- token )
+DEFER resolve-ref ( token real-t-xt -- )
 
 
 \ Literal nodes ==============================================================
@@ -188,20 +183,19 @@ end-structure
 ; buftype-literal PRINTER!
 
 \ bufnode>assemble word for pushing a literal onto the stack.
-: literal:push ( bufnode -- )
-  literal>value @   # push set, ;
-
+DEFER assemble-literal ( literal-node -- )
 
 \ Appends a [literal] bufword for the given literal.
 : tliteral ( x --    X: -- x )
   [literal] allocate throw
   dup comp+
   buftype-literal    over bufnode>type !
-  ['] literal:push   over bufnode>assemble !
+  ['] assemble-literal over bufnode>assemble !
   literal>value ! ;
 
-\ Start and end nodes ========================================================
-\ Append a starter node to the current logic.
+\ Start, end, dodoes nodes ===================================================
+\ Nodes for the start and end of a nonprimitive word. Also for the handling of
+\ CREATEd words with a DOES> block.
 4 CONSTANT buftype-starter
 5 CONSTANT buftype-return
 6 CONSTANT buftype-dodoes
@@ -210,25 +204,16 @@ end-structure
 :noname ( buftype -- ) drop ." RETURN"  ; buftype-return  PRINTER!
 :noname ( buftype -- ) drop ." DODOES"  ; buftype-dodoes  PRINTER!
 
-: assemble:starter ( bufnode -- ) drop   pop pushrsp, ;
-: assemble:return  ( bufnode -- )
-  drop
-  ra poprsp,   \ TODO: Make poprsp, in the compiler version a one-liner?
-  ra pc set, ;
-
-: assemble:dodoes ( bufnode -- )
-  drop
-  pop ra   set,  \ Pop PFA into A
-  pop pushrsp,   \ Save the return address in RSP
-  [a] push set,  \ Push parameter field
-;
+DEFER assemble-starter ( starter-bufnode -- )
+DEFER assemble-return  ( return-bufnode  -- )
+DEFER assemble-dodoes  ( dodoes-bufnode  -- )
 
 : +starter ( -- )
-  buftype-starter ['] assemble:starter [bufnode] new-bufnode drop ;
+  buftype-starter ['] assemble-starter [bufnode] new-bufnode drop ;
 : +return  ( -- )
-  buftype-return  ['] assemble:return  [bufnode] new-bufnode drop ;
+  buftype-return  ['] assemble-return  [bufnode] new-bufnode drop ;
 : +dodoes  ( -- )
-  buftype-dodoes  ['] assemble:dodoes  [bufnode] new-bufnode drop ;
+  buftype-dodoes  ['] assemble-dodoes  [bufnode] new-bufnode drop ;
 
 \ Locations, values and logical stacks =======================================
 \ Values are either opaque or literals. Opaque values are unique in the
@@ -271,6 +256,8 @@ object class
   selector register? ( loc -- ? )
 end-class location
 
+?stack-clear
+
 location class
   double% field reg-operand
   :noname ( loc -- ? ) true ; overrides register?
@@ -278,7 +265,8 @@ location class
   :noname ( operand loc -- ) reg-operand 2! ; overrides construct
 end-class register
 
-: new-lr ( -- loc ) lr register heap-new ;
+?stack-clear
+\ : new-lr ( -- loc ) lr register heap-new ;
 
 \ The offset is in cells, where 0 is TOS at the start of a non-primitive, and
 \ 1 represents NOS. Negative values are those added to the stack later. The
@@ -291,6 +279,8 @@ end-class abs-stacked
 
 abs-stacked class   end-class stacked
 abs-stacked class   end-class return-stacked
+
+?stack-clear
 
 \ Values =====================================================================
 \ Abstract value descriptors. These have a set of 0 or more locations, of which
@@ -337,16 +327,17 @@ object class
     this at @ ;m
 
   :m popx ( stack -- value-descriptor )
-    0 this grab   cell stack +! ;m
+    0 this pickx   cell stack +! ;m
 
   :m pushx ( value-descriptor stack -- )
     -1 cells stack +!   0 this at ! ;m
 end-class comp-stack
 
+?stack-clear
 object class
-  cell% inst-value data-stack
-  cell% inst-value return-stack
-  cell% inst-value literal-pool    \ Linked list of literals in the pool.
+  inst-value data-stack
+  inst-value return-stack
+  inst-value literal-pool    \ Linked list of literals in the pool.
 
   :noname ( cs -- )
     comp-stack heap-new [to-inst] data-stack
@@ -354,3 +345,5 @@ object class
     0 [to-inst] literal-pool
   ; overrides construct
 end-class comp-state
+
+?stack-clear

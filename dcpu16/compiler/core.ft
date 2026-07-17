@@ -45,41 +45,7 @@
 \ Alternatively, could use I or J as RSP empty-descending, and STD/STI?
 \ Then RSP pushes and pops are 1 word, 2 cycles.
 
-\ Inlined native code ========================================================
-\ This word defines a new mirror with the given name. Its `mirror>compile` will
-\ buffer it as an "inlined" node, which will run the following assembler code
-\ directly when drained.
-
-1 CONSTANT buftype-inliner
-
-:noname ( inliner -- )
-  ." INLINER " bufnode>assemble @ hex.
-; buftype-inliner PRINTER!
-
-\ Nameless `CREATE` that wraps the inner inline>xt into a word that will append
-\ a [bufnode] to the current definition; used for the `mirror>compile` of an
-\ inlined primitive.
-: INLINER ( host-xt-raw-inlining -- host-xt-mirror-compile   X: -- )
-    \ Gforth-specific hook that makes the next `CREATE` etc. nameless.
-    noname CREATE ,   latestxt
-  DOES> ( 'xt )
-    @   [bufnode] allocate throw ( raw-xt bufnode )
-    dup comp+
-    buftype-inliner   over bufnode>type !
-    bufnode>assemble ! ;
-
-\ This includes a `drop` to get rid of the `bufnode` the compiler will put on
-\ the stack; these inliners know how to assemble themselves and don't need the
-\ node.
-: :I ( "name" [code...] -- )
-  (TCREATE) :noname   postpone drop ;
-
-: ;I ( -- )
-  postpone ;   ( host-xt-raw )
-  INLINER      ( host-xt-inliner )
-  'mirror @ mirror>compile !
-  -1 'mirror @ mirror>txt !   \ Signals that this word has no target XT!
-; IMMEDIATE
+REQUIRE ../host/compiler/inlining.ft
 
 \ Arithmetic =================================================================
 :I +        pop peek add, ;I
@@ -235,10 +201,6 @@
 : END-CODE ( -- )    code-return, END-CODE-BARE ;
 
 
-TVARIABLE var_up
-
-
-
 \ Variables and core states ==================================================
 \ TODO: I've omitted a bunch of these, keeping only the ones that are needed
 \ for a compiled app (ie. no Forth interpreter).
@@ -285,7 +247,7 @@ TVARIABLE var_handler
 
 
 \ Branches ===================================================================
-\ Branches are abstracted, because they differ signficantly on STC systems,
+\ Branches are abstracted, because they differ significantly on STC systems,
 \ and even on others they might prefer relative or absolute branches.
 \ ,BRANCH ,DEST and !DEST handle that abstraction between the kernel and the
 \ shared high-level Forth control structures.

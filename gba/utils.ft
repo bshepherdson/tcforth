@@ -1,0 +1,16 @@
+host definitions
+
+: tos r5 ;
+: rsp r6 ;
+: up  r7 ;
+
+2 CONSTANT instr-width
+
+\ Assembler macros for using the return stack.
+: pushrsp, ( r 0 -- )
+  2>R
+  4 #    rsp sub,
+  rsp [] 2R> str, ;
+
+: poprsp,  ( r 0 -- )
+  2>R {{ 2R> }} rsp !ldmia, ;

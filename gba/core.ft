@@ -1,0 +1,296 @@
+\ NOTE: See the DCPU-16 compiled version's core for a design discussion.
+
+\ XTs in a compiled app ======================================================
+\ Inlined words (like `+`) do not necessarily have a target xt. That's not
+\ usually very important for a directly compiled app, but e.g. dynamic dispatch
+\ is legal. If there is a problem, a wrapper like `: plus + ;` can be created,
+\ and its xt used instead.
+
+\ XTs in Thumb ===============================================================
+\ The main use of an xt is to jump to it when it's contained in a register.
+\ On Thumb, that means using `BX`, which switches to ARM mode if bit 0 of the
+\ target address is 0, and to Thumb if it's 1.
+\ Therefore all xts in Thumb should have their bit 0 set!
+\
+\ Anywhere we want to turn the xt into a pointer therefore must have the low
+\ bit masked off.
+\
+\ Calling convention and register allocation =================================
+\ As a first pass, I've adopted the fully stacked, TOS-in-register approach
+\ used by ARM DTC.
+\ - TOS in r5 (see utils.ft)
+\ - `DUP`, `SWAP`, etc. are all reified directly as code.
+\ - With everything pushed thus, there's nothing to do at control points.
+
+REQUIRE ../host/compiler/inlining.ft
+' thumb IS inline-preamble
+
+
+\ Arithmetic =================================================================
+:I +        {{ r0 }} pop,   r0 tos add2, ;I
+:I -        {{ r0 }} pop,   tos r0 sub2,   r0 tos mov, ;I
+:I *        {{ r0 }} pop,   r0 tos mul,  ;I
+:I AND      {{ r0 }} pop,   r0 tos and,  ;I
+:I OR       {{ r0 }} pop,   r0 tos orr,  ;I
+:I XOR      {{ r0 }} pop,   r0 tos eor,  ;I
+:I LSHIFT   {{ r0 }} pop,   tos r0 lsl2,   r0 tos mov, ;I
+:I RSHIFT   {{ r0 }} pop,   tos r0 lsr2,   r0 tos mov, ;I
+:I ARSHIFT  {{ r0 }} pop,   tos r0 asr2,   r0 tos mov, ;I
+:I 2*       1 # tos tos lsl3, ;I
+:I 2/       1 # tos tos asr3, ;I
+:I INVERT   tos tos mvn, ;I
+:I NEGATE   tos tos neg, ;I
+
+\ Comparisons ================================================================
+\ Compiles a Forth comparison, with a host xt for the comparison op.
+
+: comparison, ( xt-branch-false -- )
+  >R thumb
+  {{ r0 }} pop,
+  r1 r1 eor,     \ 0 out r1 as our flag.
+  tos r0 cmp,    \ Sets flags for the comparison r0 - tos
+  \ We want to skip ahead if the given _reversed_ condition is true.
+  fwd R> execute
+    r1 r1 mvn,   \ Invert the 0 to -1 if the branch failed ==> condition pass.
+  resolve        \ Either way, move the flag on top.
+  r1 tos mov, ;
+
+
+:I =   ['] bne, comparison, ;I
+:I <   ['] bge, comparison, ;I
+:I U<  ['] bhs, comparison, ;I
+
+
+\ Stack ops ==================================================================
+:I DUP    {{ tos }} push, ;I
+:I DROP   {{ tos }} pop,  ;I
+
+:I OVER
+  0 # sp [+] r0 ldr,
+  {{ tos }}     push,
+  r0 tos        mov,
+;I
+
+:I SWAP
+  0 # sp [+] r0  ldr,
+  0 # sp [+] tos str,
+  r0 tos         mov,
+;I
+
+:I ?DUP
+  0 # tos cmp,
+  fwd beq,          \ Skip ahead if tos == 0
+    {{ tos }} push, \ Conditionally push TOS, a DUP.
+  resolve
+;I
+
+:I NIP   4 # sp add2, ;I
+
+:I SP@
+  {{ tos }} push,  \ Push TOS first so it counts in the SP!
+  sp tos mov,
+;I
+
+:I SP!
+  tos sp mov,
+  {{ tos }} pop, \ Get the new TOS into the register.
+;I
+
+:I RP@
+  {{ tos }} push,
+  rsp tos mov,
+;I
+
+:I RP!
+  tos rsp mov,
+  {{ tos }} pop,
+;I
+
+
+:I >R   tos pushrsp,      {{ tos }}  pop,    ;I
+:I R>   {{ tos }} push,   tos        poprsp, ;I
+:I R@   {{ tos }} push,   rsp [] tos ldr,    ;I
+
+\ Memory access ==============================================================
+:I @    tos [] tos ldr,  ;I
+:I C@   tos [] tos ldrb, ;I
+:I !    tos r0 mov,   {{ r1 tos }} pop,   r0 [] r1 str,  ;I
+:I C!   tos r0 mov,   {{ r1 tos }} pop,   r0 [] r1 strb, ;I
+
+\ These store as hi, lo in memory, but push as ( lo hi ) double-words.
+:I 2@  ( addr -- lo hi )
+  1 # tos [+] r0 ldr,   \ lo -> r0   Note: Thumb literal [+] has word units.
+  {{ r0 }}       push,  \ lo -> NOS
+  tos     [] tos ldr,   \ hi -> TOS
+;I
+
+:I 2!  ( lo hi addr -- )
+  tos r0 mov,           \ addr -> r0
+  {{ r1 r2 tos }} pop,  \ hi -> r1; lo -> r2; next-TOS -> tos
+  r0     []  r1 str,    \ hi -> r0[0]
+  1 # r0 [+] r2 str,    \ lo -> r0[1]   next-TOS is already loaded!
+;I
+
+:I +!  ( delta addr -- )
+  tos r0 mov,        \ addr -> r0
+  {{ r1 tos }} pop,  \ delta -> r1; next-TOS -> tos
+  r0 [] r2 ldr,      \ value -> r2
+  r1 r2 add2,        \ value+delta -> r2
+  r0 [] r2 str,      \ value' -> r0[0]    Next TOS is already loaded.
+;I
+
+\ Miscellany =================================================================
+
+\ EXECUTE expects an xt on the stack, but in order to return back to here, we
+\ need the return address. So we BL to a helper that adjusts the stack and does
+\ a BX into the code.
+thumb
+label EXECUTE-launchpad   \ We BL to here so the true return address is in LR.
+  tos r0    mov,
+  {{ tos }} pop,     \ Reload TOS; xt -> r0
+  r0        bx,      \ Branch directly to xt!
+  \ Deliberately no return from here.
+
+:I EXECUTE   EXECUTE-launchpad bl, ;I
+
+:I LOG   ( x -- ) {{ tos }} pop,  ;I
+:I BREAK ( x -- ) code-space @ b, ;I \ Spin forever! TODO: BKPT instr? SWI?
+
+
+\ These are fake inlines - they throw, since executing these at runtime makes
+\ no sense on a headless, compiled target!
+:I ,    71 throw ;I
+:I C,   72 throw ;I
+
+
+\ CODE words =================================================================
+\ CODE words are written in assembly, but are NOT inlined!
+\ These are called using BL like nonprimitives.
+
+\ NOTE: Remember that the ARM chip puts the return address in TOS!
+\ That's visible to CODE words, which are responsible for handling it.
+\ They can choose the type of return they want, using the right `END-CODE-*`.
+
+: CODE-BARE   ( "name" -- )
+  (TCREATE)
+  ." CODE " 'mirror @   dup mirror>mirror-nt @ id. ." at " mirror>txt @ hex. cr ;
+
+\ Do nothing - you handle the return fully.
+: END-CODE-BARE ( -- ) ;
+
+\ Compiles a `BX lr` and ends the code definition.
+: END-CODE-LR ( -- )   thumb   lr bx,   end-code-bare ;
+
+\ Pops the RSP into r0, and returns to that.
+: END-CODE-RSP ( -- )  thumb   r0 poprsp,   r0 bx,   end-code-bare ;
+
+
+\ Variables and core states ==================================================
+TVARIABLE var_handler   \ Interrupt handler
+
+\ NOTE: Skipping a pile of words like `,` and `STATE` since they're only needed
+\ for a target-side Forth.
+
+\ FIXME: Missing HANDLER - that should be just a tliteral I think?
+
+:I UP  ( -- up ) {{ tos }} push,   up tos mov, ;I
+
+
+\ Bigger stack manipulations =================================================
+:I 2DUP ( a b -- a b a b )
+  sp [] r0 ldr,        \ Peek at NOS (a)
+  {{ r0 tos }} push,   \ Push tos (b) and then r0 (a)
+;I
+
+:I 2OVER ( a b c d -- a b c d a b )
+  2 # sp [+] r0  ldr,    \ a -> r0
+  {{ r0 tos }}   push,   \ Push tos (d) and then r0 (a): ( a b c d a d )
+  3 # sp [+] tos ldr,    \ b -> tos                      ( a b c d a b )
+;I
+
+:I 2DROP ( x a b -- x )
+  {{ r0 tos }} pop,      \ a -> r0; x -> TOS
+;I
+
+
+\ More arithmetic ============================================================
+:I 1+      1 # tos add2, ;I
+:I CELL+   4 # tos add2, ;I
+:I CHAR+   1 # tos add2, ;I
+:I 1-      1 # tos sub2, ;I
+:I CELL    {{ tos }} push,   4 # tos mov, ;I
+:I CELLS   2 # tos tos lsl3, ;I
+:I CHARS   ;I
+
+
+\ Double-cell arithmetic =====================================================
+\ D>S is DROP
+:I D>S   {{ tos }} pop, ;I
+
+
+\ Branches ===================================================================
+\ Branches are abstracted, because they differ significantly on STC systems,
+\ and even on others they might prefer relative or absolute branches.
+\ See the logic in gba/branches.ft for the details.
+
+\ Note that `EXIT,` (which is a model interface word) both compiles a return
+\ *and* ends compilation. It is intended to be called from `;` only.
+\ This inlined `EXIT` really does a direct return.
+:I EXIT ( --    R: addr -- )
+  r0 poprsp,
+  r0 bx,
+;I
+
+
+\ DO LOOP helpers ============================================================
+:I UNLOOP ( --    R: limit index -- )
+  8 # rsp add2,
+;I
+
+:I I ( -- index    R: index -- index )
+  {{ tos }}  push,
+  rsp [] tos ldr,
+;I
+
+:I J ( -- index1    R: index1 limit2 index2 -- index1 limit2 index2 )
+  {{ tos }}       push,
+  2 # rsp [+] tos ldr,
+;I
+
+
+REQUIRE code-words.ft
+
+
+\ Interrupts =================================================================
+\ interrupt_handler is what actually gets installed as the interrupt handler.
+\ It's an **ARM machine code** routine that's invoked by the GBA BIOS.
+\ This *could* set up the Forth system and call high-level code, but it also
+\ doesn't necessarily need to. For now it's just a machine code stub.
+
+\ Thumb doesn't have the instructions necessary to manipulate CPSR, so create
+\ two ARM routines for that.
+
+$00c0 CONSTANT cpsr-int-mask
+
+\ Non-inlined calls that can BX to ARM state and back again.
+thumb
+code IRQ+ ( -- ) fwd b, end-code-bare
+code IRQ- ( -- ) fwd b, end-code-bare
+
+( loc-irq+ loc-irq- )
+
+thumb resolve    ( loc-irq+ )
+arm label IRQ-_arm ( -- )   \ Disable interrupts
+  cpsr               r0 mrs,
+  cpsr-int-mask # r0 r0 orr,
+  r0               cpsr msr,
+  lr                    bx,
+
+thumb resolve      ( )
+arm label IRQ+_arm ( -- )   \ Enable interrupts
+  cpsr               r0 mrs,
+  cpsr-int-mask # r0 r0 bic,
+  r0               cpsr msr,
+  lr                    bx,
+
+thumb

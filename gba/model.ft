@@ -1,0 +1,152 @@
+\ ===================== MACHINE/MODEL DEPENDENT SECTION ======================
+\ Native code, TOS in register.
+\ r13/sp is data stack, r14/lr is used for links.
+\ TOS in r5, RSP in r6, UP in r7.
+\ TODO: If that starts getting tight on Thumb-friendly registers, UP could be
+\ moved to a high register fairly harmlessly.
+HOST DEFINITIONS
+
+\ These are not sensible to call when doing native compilation and with separate
+\ data spaces.
+: HERE ( -- ) 99 throw ;
+: DP   ( -- ) 98 throw ;
+
+\ First line of code, the entry point. This is at $08000000, the start of ROM.
+?stack-clear
+code-space @ b,   \ A dummy jump for now that will be adjusted later.
+?stack-clear
+
+\
+\ Internal helper that compiles a return into a word. This is called by the
+\ inliner for early, explicit `EXIT` on native code platforms.
+\ Not technically part of the model interface with the metacompiler.
+: return, ( -- )
+  +return ;
+
+\ Actually **ends** a nonprimitive definition. See `return,` above for an early
+\ explicit exit. This buffers the end node and also triggers native compilation.
+: EXIT,  ( -- ) return, done-comp ;
+
+\ DOES> design for buffered compilation ======================================
+\ This is different from the original TC-Forth DODOES scheme.
+\ Sequence 1: while eg. : CONSTANT create , DOES> @ ; is being defined.
+\ Sequence 2: while CONSTANT is running, defining a new constant.
+\ Sequence 3: while a particular constant is executing.
+
+\ DOES> is an immediate word, it runs during "Sequence 1".
+\ It compiles a dodoes node and an end node at the end of e.g. `CONSTANT`.
+\ Then the Forth code after `DOES>` is compiled, as a new nonprimitive.
+
+\ Sequence 2 (eg. `7 CONSTANT FOO`) `CREATE`s the new header with the default
+\ `DOVAR` code, but then the code compiled by the `dodoes` node replaces it with
+\ a call to the second, `DOES>` nonprimitive.
+
+\ Sequence 3 executes `FOO` like any other word. Its code has been modified to
+\ jump to the `DOES>` nonprimitive, which has a preamble that fetches the data
+\ field.
+
+\ Called during the `HOST ACTS:` for a `DOES>`, during Phase 1, i.e. compilation
+\ of a defining word like `CONSTANT`. In general, it must do four things:
+\ 1. Close the current definition, like `;` would.
+\ 2. Open a new definition and capture its xt.
+\ 3. Compile any preamble that the target `DOES>` needs.
+\ 4. Return the target-xt for the dodoes-code.
+
+\ Thumb-specific: The code calling e.g. a `VALUE` does a `BL some-val`.
+\ That puts the return address into `lr`, but don't forget that it's actually
+\ `($ + 4) OR 1`, where `$` is the address of (first opcode of) the `BL`
+\ instruction itself.
+\ So that's the right pointer, except for the extra 1 on it.
+: DOES, ( -- xt-does )
+  compiling @ IF done-comp THEN
+  code-space @ \ Capture the xt of the does code
+  begin-comp +dodoes ;
+
+
+\ Opens a nonprimitive definition, compiling any boilerplate that it needs.
+\ For threaded code, either the address of DOCOL/ENTER or a jump to it.
+\ For native code, any preamble that's required to handle the return address.
+\ Begin compilation, then append a "starter" node as the first entry.
+\ For Thumb, the return address is in `lr`, and we always save it to the return
+\ stack for safety, for now. But that's the job of `assemble-starter`; see the
+\ gba/buffer-impl.ft.
+: ,docol ( -- ) begin-comp   +starter ;
+
+
+\ CREATEd words and DOES> ====================================================
+\ These words need to push their own PFA to the data stack and allow for a
+\ later `!dodoes` that makes them call the `DOES>` code without consuming any
+\ extra space.
+\ The final, post-`!dodoes` form looks like this:
+\ $00: PUSH {tos}
+\ $02: LDR tos, [pc, #2]   $+4 = $06; +2 cells = $0d; AND NOT 2 = $0c = &PFA
+\ $04: LDR r0,  [pc, #0]   $+4 = $08; +0 cells = $08; AND NOT 2 = $08 = &dodoes-xt
+\ $06: BX r0               Jump to the dodoes-xt
+\ $08: dodoes-xt
+\ $0a: ...
+\ $0c: PFA
+\ $0e: ...
+\
+\ So a basic ,dovar compiles the following:
+\ $00: PUSH {tos}
+\ $02: LDR tos, [pc, #2]   $+4 = $06; +2 cells = $0d; AND NOT 2 = $0c = &PFA
+\ $04: BX lr               Returning directly to the caller.
+\ $06: (blank)
+\ $08: (blank)
+\ $0a: (blank)
+\ $0c: PFA
+\ $0e: ...
+\ NOTE: The above PC-relative arithmetic only works if the xt of this code is
+\ word-aligned! So ,dovar checks that, and all xts should be word-aligned, even
+\ though Thumb could support halfword alignment.
+: ,dovar ( -- )
+  code-space @ 3 and ABORT" ,dovar called with unaligned address"
+
+  thumb
+  {{ tos }}      push,
+  2 # pc [+] tos ldr,
+  lr             bx,
+
+  3 0 DO 0 asm-half, LOOP
+  \ That leaves the code-space pointer at xt+$0c, which is exactly where the
+  \ following shared host code's call to `t,pfa` will put the PFA.
+;
+
+\ Called from `HOST (DOES>)` to overwrite the code in the word at word-xt,
+\ which was compiled by `,dovar` above, so that it calls the `;CODE` or `DOES>`
+\ at `does-xt` instead.
+\ See above for what the final code looks like.
+: !dodoes ( does-xt word-xt -- )
+  code-space @ >R                     \ Save the current location
+  1 invert and   4 + code-space !     \ Move to the `BX lr` slot ( does-xt )
+  thumb
+  0 # pc [+] r0 ldr,
+  r0            bx,                   ( does-xt )
+  1 or asm-word,                      \ Making sure it's Thumb-safe!
+  R> code-space ! ;
+
+
+\ No inline strings allowed - store them in code space with `STRING`.
+: ,dostring ( c-addr u -- ) 97 throw ;
+
+\ For compiled Thumb the parameter field is always at xt+$c; see `,dovar`.
+: t>pfa ( t-xt -- pf-slot ) 1 invert and   $c + ;
+
+
+\ For GBA, the tasks start at the top of IWRAM.
+\ Entry point at 64KB, dictionary follows, and tasks start at 8MB.
+$00800000 CONSTANT task-area0
+
+\ For the main task, 64 cells of return stack and 128 cells of data stack.
+64  tcells CONSTANT default/rs
+128 tcells CONSTANT default/ds
+
+tcode-align
+label entry-point 0 asm-word,
+
+\ Compiles a jump to `entry-point` at the end of `kmain`.
+\ NOTE: This is **ARM code**, and this BX is the transition to Thumb.
+: >entry-point, ( -- )
+  arm
+  entry-point r0 ldr-pc,
+  r0 bx, ;

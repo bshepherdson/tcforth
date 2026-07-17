@@ -1,0 +1,38 @@
+\ Inlined native code ========================================================
+\ This word defines a new mirror with the given name. Its `mirror>compile` will
+\ buffer it as an "inlined" node, which will run the following assembler code
+\ directly when drained.
+
+1 CONSTANT buftype-inliner
+
+:noname ( inliner -- )
+  ." INLINER " bufnode>assemble @ hex.
+; buftype-inliner PRINTER!
+
+\ Nameless `CREATE` that wraps the inner inline>xt into a word that will append
+\ a [bufnode] to the current definition; used for the `mirror>compile` of an
+\ inlined primitive.
+: INLINER ( host-xt-raw-inlining -- host-xt-mirror-compile   X: -- )
+    \ Gforth-specific hook that makes the next `CREATE` etc. nameless.
+    noname CREATE ,   latestxt
+  DOES> ( 'xt )
+    @   [bufnode] allocate throw ( raw-xt bufnode )
+    dup comp+
+    buftype-inliner   over bufnode>type !
+    bufnode>assemble ! ;
+
+DEFER inline-preamble ( -- )
+' noop IS inline-preamble
+
+\ This includes a `drop` to get rid of the `bufnode` the compiler will put on
+\ the stack; these inliners know how to assemble themselves and don't need the
+\ node.
+: :I ( "name" [code...] -- )
+  (TCREATE) inline-preamble :noname   postpone drop ;
+
+: ;I ( -- )
+  postpone ;   ( host-xt-raw )
+  INLINER      ( host-xt-inliner )
+  'mirror @ mirror>compile !
+  -1 'mirror @ mirror>txt !   \ Signals that this word has no target XT!
+; IMMEDIATE

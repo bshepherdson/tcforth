@@ -2,14 +2,21 @@
 ?default-spaces
 
 ?stack-clear
+?check-config
 REQUIRE ../arm/assembler.ft    ?stack-clear
-host REQUIRE ../arm/model.ft   ?stack-clear
+REQUIRE ../arm/thumb-asm.ft    ?stack-clear
+
+host REQUIRE utils.ft          ?stack-clear
+host REQUIRE buffer-impl.ft    ?stack-clear
+host REQUIRE model.ft          ?stack-clear
 host REQUIRE ../host/dictionary.ft
 host REQUIRE ../host/mirrors.ft
 
+?stack-clear
+
 \ Now we have what we need to metacompile the CODE definitions at the heart of
 \ the new kernel.
-host definitions REQUIRE ../arm/kernel.ft   ?stack-clear
+host definitions REQUIRE core.ft
 
 host REQUIRE startup.ft  ?stack-clear
 
@@ -18,10 +25,10 @@ host REQUIRE ../host/metacompiler.ft
 
 \ Now an interleaved dance of shared and target-specific metacompiled code.
 host REQUIRE ../shared/basics.ft
-host REQUIRE ../arm/branches.ft        \ Target-specific branching helpers.
+host REQUIRE branches.ft               \ Target-specific branching helpers.
 host REQUIRE ../shared/control-structures.ft
 host REQUIRE ../shared/exceptions.ft
-host REQUIRE ../arm/model-target.ft
+host REQUIRE ../shared/model-target.ft
 host REQUIRE ../shared/input.ft
 host REQUIRE ../shared/core2.ft
 host REQUIRE ../shared/user-area.ft
@@ -38,8 +45,5 @@ host REQUIRE ../shared/error-messages.ft
 host structures?   [IF] REQUIRE ../shared/structs.ft host [THEN]
 host multitasking? [IF] REQUIRE ../shared/tasks.ft   host [THEN]
 
-\ XXX: START HERE: Check on the intro; make it fit the GBA.
-\ I'll want to like toggle the screen or something to prove it's working.
-\ Then bootstrap my way up from there.
 host REQUIRE intro.ft
 host REQUIRE ../shared/init.ft         \ Shared init code.

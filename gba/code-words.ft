@@ -1,0 +1,211 @@
+\ CODE words in Thumb for the GBA ARM chip, which are too bulky or rare to be
+\ worth inlining.
+
+thumb
+
+\ Lengthy stack ops ==========================================================
+\ TODO: These are not bad in Thumb; they could get inlined.
+code ROT ( c b a -- b a c )
+  tos r0 mov,        \ a -> r0
+  {{ r1 tos }} pop,  \ b -> r1, c -> tos
+  {{ r0 r1 }}  push,
+end-code-lr
+
+code -ROT ( c b a -- a c b )
+  {{ r0 r1 }}  pop,  \ b -> r0, c -> r1
+  {{ r1 tos }} push, \ Push a, then c
+  r0 tos       mov,  \ b -> tos
+end-code-lr
+
+code TUCK ( a b -- b a b )
+  {{ r0 }}     pop,
+  {{ r0 tos }} push,
+end-code
+
+\ DEPTH is a bit weird with TOS in register. The bottom value in memory is
+\ actually whatever dummy value was in the TOS register when the first real
+\ value was pushed.
+\ BUT! sp0 is $...7f and not $..80, because that's the right value to  sp0 sp!
+\ in ABORT. So DEPTH actually pushes TOS early to move SP one notch "too far",
+\ then measures the depth from sp0, rather than the real empty SP.
+code DEPTH ( -- u )
+  {{ tos }}        push,
+  tsp0 # up [+] r0 ldr,
+  sp            r1 mov,
+  r1            r0 sub2,
+  2 #    r0    tos lsr3, \ Converting bytes to cells.
+end-code-lr
+
+code 2SWAP ( d c b a -- b a d c )
+  {{ r0 r1 r2 }} pop,   \ d -> r2, c -> r1, b -> r0
+  r0  r4 mov,           \ b -> r4
+  tos r3 mov,           \ a -> r3
+  r1 tos mov,           \ c -> tosk
+  {{ r4 r3 r2 }} push,
+end-code-lr
+
+
+\ Double-cell arithmetic =====================================================
+code S>D ( lo -- lo hi )
+  0 # r0    mov,        \ 0 -> r0
+  {{ tos }} push,
+  0 # tos   add2,       \ tos+0 -> tos to set N accordingly.
+  fwd       bpl,        \ Skip if positive or zero
+    r0 r0 mvn,
+  resolve
+  r0 tos mov,
+end-code-lr
+
+code D+ ( l1 h1 l2 h2 -- l3 h3 )
+  {{ r0 r1 r2 }} pop,   \ l1 -> r0, h1 -> r1, l2 -> r2  and tos has h2.
+  r2    r0       add2,  \ l3 -> r0
+  r1    tos      adc,   \ h3 -> tos
+  {{ r0 }}       push,
+end-code-lr
+
+code D- ( l1 h1 l2 h2 -- l3 h3 )
+  {{ r0 r1 r2 }} pop,   \ l1 -> r0, h1 -> r1, l2 -> r2  and tos has h2.
+  r0    r2       sub2,  \ l3 -> r2
+  tos   r1       sbc,   \ h3 -> r1
+  r1    tos      mov,   \ h3 -> tos
+  {{ r2 }}       push,
+end-code-lr
+
+\ NOTE: Skipped UDM* and UM/MOD here.
+
+
+\ MOVEs ======================================================================
+\ Copies src to dst from lower addresses to higher, one byte at a time.
+code MOVE< ( src dst u -- )
+  {{ r0 r1 }} pop,      \ src -> r1, dst -> r0
+
+  0 # tos add2, \ Set the Z flag for the branch below.
+  fwd b,        \ Jump ahead to the loop tail.
+
+  label MOVE<-loop
+    r1 [] r2 ldrb,
+    r0 [] r2 strb,
+    1 # r1   add2,
+    1 # r0   add2,
+    1 # tos  sub2,   \ Sets Z if we just reached 0.
+    resolve          \ The upper jump lands here.
+    MOVE<-loop bne,  \ Loop back up unless we reached 0.
+
+  \ Copy complete
+  {{ tos }} pop,
+end-code-lr
+
+\ Copies src to dst from higher addresses to lower, one byte at a time.
+code MOVE> ( src dst u -- )
+  {{ r0 r1 }} pop,      \ src -> r1, dst -> r0
+  tos r0      add2,     \ dst+len   -> r0
+  1 # r0      sub2,     \ dst+len-1 -> r0
+  tos r1      add2,     \ src+len   -> r1
+  1 # r1      sub2,     \ src+len-1 -> r1
+
+  0 # tos add2, \ Set the Z flag for the branch below.
+  fwd b,        \ Jump ahead to the loop tail.
+
+  label MOVE>-loop
+    r1 [] r2 ldrb,
+    r0 [] r2 strb,
+    1 # r1   sub2,
+    1 # r0   sub2,
+    1 # tos  sub2,   \ Sets Z if we just reached 0.
+    resolve          \ The upper jump lands here.
+    MOVE>-loop bne,  \ Loop back up unless we reached 0.
+
+  \ Copy complete
+  {{ tos }} pop,
+end-code-lr
+
+
+code FILL8 ( c-addr u ch -- )
+  tos r2          mov,   \ ch -> r2
+  {{ r0 r1 tos }} pop,   \ addr -> r1,  len -> r0
+
+  0 # r2 add2,
+  fwd b,
+
+  label FILL8-loop
+    r1 [] r2 strb,
+    1 # r1   add2,
+    1 # r0   sub2,
+    resolve
+    FILL8-loop bne,
+end-code-lr
+
+\ NOTE: Address must be halfword-aligned. Length is in units, not bytes!
+code FILL16 ( h-addr u h -- )
+  tos r2          mov,   \ h -> r2
+  {{ r0 r1 tos }} pop,   \ addr -> r1,  len -> r0
+
+  0 # r2 add2,
+  fwd b,
+
+  label FILL16-loop
+    r1 [] r2 strh,
+    2 # r1   add2,
+    1 # r0   sub2,
+    resolve
+    FILL16-loop bne,
+end-code-lr
+
+\ NOTE: Address must be word-aligned. Length is in units, not bytes!
+\ TODO: This can be made much faster with !STMIA but it's a bit more complex.
+code FILL32 ( w-addr u w -- )
+  tos r2      mov,   \ w -> r2
+  {{ r0 r1 }} pop,   \ addr -> r1,  len -> r0
+
+  0 # r2 add2,
+  fwd b,
+
+  label FILL32-loop
+    r1 [] r2 str,
+    4 # r1   add2,
+    1 # r0   sub2,
+    resolve
+    FILL32-loop bne,
+
+  {{ tos }} pop,
+end-code-lr
+
+
+\ DO LOOP helpers ============================================================
+code (DO) ( limit index --    R: -- limit index )
+  {{ r2 r1 }}  pop,   \ limit -> r1,   new-TOS -> r2
+  r1       pushrsp,
+  tos      pushrsp,
+  r2 tos       mov,
+end-code-lr
+
+code (LOOP-END)  ( delta -- done?    R: limit index1 -- limit index2 )
+  rsp     []  r3 ldr,    \ index -> r3
+  1 # rsp [+] r4 ldr,    \ limit -> r4
+  r3          r2 mov,    \ index -> r2
+  r4          r2 sub2,   \ i-l   -> r2
+
+  \ We want delta + index - limit
+  tos    r0 mov,
+  r2     r0 add2,   \ delta + index - limit -> r0
+  0 #    r1 mov,    \ false -> r1
+  r2     r0 eor,    \ d+i-l ^ i-l           -> r0
+  \ That set N based on the top bit!
+  fwd       bmi,    \ Jump ahead if the top bit is set, i.e. negative.
+    r1 r1 mvn,      \ true -> r1, when the top bit is clear.
+  resolve
+  r1     r0 mov,    \ flag1 -> r0
+
+  \ Now calculate delta XOR index-limit
+  0 #    r1 mov,    \ false -> r1
+  tos    r2 eor,
+  fwd       bmi,    \ Jump ahead if the top bit is set, i.e. negative.
+    r1 r1 mvn,      \ true -> r1, when the top bit is clear.
+  r1     r0 orr,    \ OR both flags -> r0
+  r0     r0 mvn,    \ And invert the result
+  tos    r4 add2,   \ delta + index -> r4
+  rsp [] r4 str,    \ And store it back to the return stack
+  r0    tos mov,    \ done flag -> tos
+end-code-lr
+
+\ TODO: Implementing the necessary pieces for multitasking.

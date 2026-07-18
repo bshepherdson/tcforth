@@ -6,9 +6,15 @@
 
 : hex.s base @ >R   hex .s   R> base ! ;
 
-: asm-word, ( w -- ) tcode, ;
-: asm-byte, ( b -- ) tcode-c, ;
-: asm-half, ( h -- ) dup tcode-c,   8 rshift tcode-c, ;
+: asm-word, ( w -- )
+  code-space @ ." ASM " hex. 4 . dup hex. cr
+  tcode, ;
+: asm-byte, ( b -- )
+  code-space @ ." ASM " hex. 1 . dup hex. cr
+  tcode-c, ;
+: asm-half, ( h -- )
+  code-space @ ." ASM " hex. 2 . dup hex. cr
+  dup tcode-c,   8 rshift tcode-c, ;
 
 : label ( "name" --    X: -- t-addr ) code-space @ CONSTANT ;
 

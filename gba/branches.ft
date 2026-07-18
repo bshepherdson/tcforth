@@ -63,10 +63,26 @@ end-structure
 ; buftype-destination PRINTER!
 
 
+\ "Patches" a forward branch to set its actual destination.
+\ For Thumb, that's a resolve call.
+: patch-branch ( branch-target branch-bufword -- )
+  ." Patching branch at host " dup hex.
+  branch>slot-addr @ ." and target " dup hex. swap
+  ." to be aimed at " dup hex. cr
+
+  over dup >R tcode-h@ ." was " hex.
+  resolve-to
+  R> tcode-h@ ." now " hex. cr
+;
+
+\ d076
+\ 1101 0000 0111 0110
+\ 1101 BEQ
+
 \ If the destination isn't yet known, adds this [branch] into the forwarding
 \ list. If it is known, resolve the new branch to the destination.
 : the-dest ( branch-bufword -- )
-  dup branch>dest @ dest>address @ ?dup IF resolve drop EXIT THEN
+  dup branch>dest @ dest>address @ ?dup IF ~~h swap patch-branch EXIT THEN
 
   \ Not defined yet! ( branch-bufword )
   dup branch>dest @ dest>forwarding @ ( branch-bufword forwarding )
@@ -76,24 +92,16 @@ end-structure
 : assemble:branch ( bufword -- )
   thumb
   dup branch>cond? @ IF
-    tos r0    mov,   \ Set the flags
+    tos tos   mov,   \ Set the flags
     {{ tos }} pop,   \ Refill tos
     fwd       beq,   \ Branch if equal, meaning if 0.
   ELSE
+  ~~h
     fwd       b,     \ Simple branch
+  ~~h
   THEN ( fwd-loc )
   over branch>slot-addr !    \ Save the branch loc
   the-dest ;
-
-: resolve-to ( branch-loc target -- )
-  code-space @ >R   code-space !
-  resolve
-  R> code-space ! ;
-
-\ "Patches" a forward branch to set its actual destination.
-\ For Thumb, that's a resolve call.
-: patch-branch ( branch-target branch-bufword -- )
-  branch>slot-addr @ swap resolve-to ;
 
 : assemble:destination ( bufword -- )
   code-space @   over dest>address !   \ Save the current address.

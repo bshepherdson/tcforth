@@ -20,8 +20,9 @@ T{ r1    r9 add2, -> $4489 }T \ ADD r9, r1     (format 5, Rd high)
 T{ r10   r9 add2, -> $44d1 }T \ ADD r9, r10    (format 5, both high)
 X{ r2    r1 add2, }X          \ ADD r1, r2     (both lo, error)
 
-T{ $67 # sp add2, -> $b067 }T \ ADD SP, #$67   (format 13, in bounds)
-X{ $97 # sp add2,          }X \ ADD SP, #$97   (out of u7 range, throws)
+T{ $68  # sp add2, -> $b01a }T \ ADD SP, #$68   (format 13, in bounds)
+X{ $67  # sp add2,          }X \ ADD SP, #$67   (not word-aligned)
+X{ $990 # sp add2,          }X \ ADD SP, #$990  (out of u7 range, throws)
 
 \ ADD3 =======================================================================
 T{ 5 # r2 r1 add3, -> $1d51 }T \ ADD r1, r2, #5
@@ -29,9 +30,11 @@ T{ r5  r2 r1 add3, -> $1951 }T \ ADD r1, r2, r5
 X{ 8 # r2 r1 add3,          }X \ ADD r1, r2, #8  out of u3 range; throws
 
 \ LEA ========================================================================
-T{ $cd # sp r3 lea, -> $abcd }T \ LEA r3, sp, #$cd
-T{ $cd # pc r3 lea, -> $a3cd }T \ LEA r3, pc, #$cd
-X{ $cd # r4 r3 lea,          }X \ LEA r3, r4, #$cd    throws, bad Rs
+T{ $88  # sp r3 lea, -> $ab22 }T \ LEA r3, sp, #$88
+T{ $88  # pc r3 lea, -> $a322 }T \ LEA r3, pc, #$88
+X{ $87  # sp r3 lea,          }X \ LEA r3, r4, #$87    throws, not aligned
+X{ $880 # sp r3 lea,          }X \ LEA r3, r4, #$87    throws, out of range
+X{ $88  # r4 r3 lea,          }X \ LEA r3, r4, #$88    throws, bad Rs
 
 
 \ AND ========================================================================
@@ -96,7 +99,7 @@ T{ r6    r4 cmp, -> $42b4 }T \ CMP r4, r6   (format 4, lo regs ALU)
 T{ r9    r4 cmp, -> $454c }T \ CMP r4, r9   (format 5, Rs hi)
 T{ r4    r9 cmp, -> $45a1 }T \ CMP r9, r4   (format 5, Rd hi)
 T{ r8    r9 cmp, -> $45c1 }T \ CMP r9, r8   (format 5, both hi)
-T{ $cd # r4 cmp, -> $4ccd }T \ CMP r4, #$cd (format 3)
+T{ $cd # r4 cmp, -> $2ccd }T \ CMP r4, #$cd (format 3)
 
 
 \ EOR ========================================================================
@@ -109,8 +112,12 @@ X{ {{ r1 r0 r9 }} r4 !ldmia,          }X \ Rejects hi reg in rlist
 
 \ LDR ========================================================================
 \ Immediate offsets of a lo register
-T{      r3 []   r4 ldr, -> $701c }T  \ Treated as immediate 0
-T{  6 # r3 [+]  r4 ldr, -> $719c }T
+\ LDR w/immediate offset
+\ 011 01 iiiii bbb ddd
+\ 0110 1000 0001 1100
+\ 681c
+T{      r3 []   r4 ldr, -> $681c }T  \ Treated as immediate 0
+T{  6 # r3 [+]  r4 ldr, -> $699c }T
 X{ 32 # r3 [+]  r4 ldr,          }X  \ Immediate too big
 X{  6 # r3 [-]  r4 ldr,          }X  \ Downward indexing is not allowed
 X{  6 # r3 [+]! r4 ldr,          }X  \ Writeback is not allowed
@@ -275,7 +282,9 @@ X{ r1 r3 [+]  r8 strh,          }X    \ Dest reg too big
 T{ $cd # r1 sub2, -> $39cd }T \ SUB r1, #$cd   (format 3)
 X{ r2    r1 sub2,          }X \ SUB r1, r2     (both lo, error)
 
-T{ $67 # sp sub2, -> $b0e7 }T \ SUB SP, #$67   (format 13, in bounds)
+\ 10110000 1 iiiiiii
+\ 1011 0000 1010 0010
+T{ $88 # sp sub2, -> $b0a2 }T \ SUB SP, #$88   (format 13, in bounds)
 X{ $97 # sp sub2,          }X \ SUB SP, #$97   (out of u7 range, throws)
 
 \ SUB3 =======================================================================

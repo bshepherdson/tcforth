@@ -17,3 +17,7 @@ $03007ffc CONSTANT 'gba-isr
 
 label gba-isr
   lr bx,        \ Just return, a no-op.
+
+target definitions
+: HANDLER ( -- 'handler-xt ) ; IMMEDIATE
+host acts: var_handler tliteral ; IMPERATIVE

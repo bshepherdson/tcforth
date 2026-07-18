@@ -1,0 +1,90 @@
+\ Thumb-specific implementations of the DEFERed words for the buffering of
+\ compilation nodes.
+host definitions
+REQUIRE ../host/compiler/buffered.ft
+
+\ Call nodes
+:noname ( bufnode -- )
+  thumb
+  code-space @   over caller>slot !   \ Save the location of the branch.
+  caller>t-xt @ bl,
+; IS assemble-caller
+
+\ Forward refs and resolution
+\ The `token` is the caller-bufnode.
+:noname ( -- token ) $0800fad8 call, ; IS forward-ref
+:noname ( token real-t-xt -- )
+  swap 2dup caller>t-xt !   \ Set the real target xt  ( real-t-xt token )
+  \ And if it's already compiled, update the slot.
+  caller>slot @ dup IF ( real-t-xt branch-loc )
+    swap 1 invert and resolve-to ( )
+  ELSE 2drop THEN ; IS resolve-ref
+
+
+\ Literals ===================================================================
+\ If the literal value fits into a u8, it can be loaded directly.
+\ Otherwise, we use a PC-relative load and a literal pool.
+VARIABLE literal-list
+
+:noname ( literal-node -- )
+  thumb
+  {{ tos }} push,
+  dup literal>value @ 0 256 within IF \ In range of a literal value.
+    literal>value @ # tos mov,
+  ELSE dup literal>value @ -255 0 within IF \ Negative byte
+    literal>value @ negate #   tos mov,
+    tos tos neg,
+  ELSE \ Doesn't fit either way, so use the literal pool.
+    code-space @   over literal>instr !   ( node )
+    literal-list @   swap                 ( tail node )
+    2 cells allocate throw                ( tail node list-pair )
+    dup literal-list !
+    2!
+    $aa # pc [+] tos ldr,                 \ Compile the dummy load
+  THEN THEN ; IS assemble-literal
+
+: pool1 ( literal-node -- )
+  code-space @   over literal>pool-slot !
+  code-space @ >R
+  dup literal>value @ tcode,    ( literal-node   R: pool-slot )
+  \ Thumb's PC-relative load uses $+4 AND NOT 2 as the base.
+  dup literal>instr @ 4 +   2 invert and
+  R> swap            ( literal-node pool-slot pool-base )
+  - 2 rshift         ( literal-node cell-offset )
+  code-space @ >R    ( literal-node cell-offset   R: after )
+  swap literal>instr @
+  ." pool1 writing cell offset " over hex. ." at " dup hex. cr
+  code-space ! ( cell-offset   R: after )
+  thumb   # pc [+] tos ldr,   ( R: after )
+  R> code-space ! ;
+
+
+\ Called at the end of the definition when the `end` is assembled.
+: process-literal-pool ( -- )
+  tcode-align
+  literal-list @ BEGIN dup WHILE 2@ ~~h pool1 REPEAT drop
+  0 literal-list ! ;
+
+\ Nonprimitive start and end nodes
+: <thumb:assemble-starter> ( starter-bufnode -- )
+  drop   0 literal-list !
+  lr r0 mov,
+  r0 pushrsp, ;
+
+' <thumb:assemble-starter> IS assemble-starter
+
+:noname ( return-bufnode -- )
+  drop
+  r0 poprsp,
+  r0 bx,
+
+  process-literal-pool
+; IS assemble-return
+
+\ DODOES nodes ===============================================================
+\ Note that this is the prefix code for when Sequence 3 - calling a specific
+\ `CONSTANT` - actually enters the `DOES>` block's code.
+\ For the Thumb build, that means the PFA is in `tos` and `lr` is the true
+\ caller. So this is essentially the same as any start node: save `lr` and
+\ carry on executing it.
+' <thumb:assemble-starter> IS assemble-dodoes

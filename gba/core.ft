@@ -25,10 +25,11 @@
 REQUIRE ../host/compiler/inlining.ft
 ' thumb IS inline-preamble
 
+?stack-clear
 
 \ Arithmetic =================================================================
-:I +        {{ r0 }} pop,   r0 tos add2, ;I
-:I -        {{ r0 }} pop,   tos r0 sub2,   r0 tos mov, ;I
+:I +        {{ r0 }} pop,   r0  tos tos add3, ;I
+:I -        {{ r0 }} pop,   tos r0  tos sub3, ;I
 :I *        {{ r0 }} pop,   r0 tos mul,  ;I
 :I AND      {{ r0 }} pop,   r0 tos and,  ;I
 :I OR       {{ r0 }} pop,   r0 tos orr,  ;I
@@ -40,6 +41,8 @@ REQUIRE ../host/compiler/inlining.ft
 :I 2/       1 # tos tos asr3, ;I
 :I INVERT   tos tos mvn, ;I
 :I NEGATE   tos tos neg, ;I
+
+?stack-clear
 
 \ Comparisons ================================================================
 \ Compiles a Forth comparison, with a host xt for the comparison op.
@@ -112,9 +115,13 @@ REQUIRE ../host/compiler/inlining.ft
 :I R@   {{ tos }} push,   rsp [] tos ldr,    ;I
 
 \ Memory access ==============================================================
-:I @    tos [] tos ldr,  ;I
-:I C@   tos [] tos ldrb, ;I
+:I @    tos [] tos ldr,   ;I
+:I H@   tos [] tos ldrh,  ;I
+:I SH@  tos [] tos ldrsh, ;I
+:I C@   tos [] tos ldrb,  ;I
+:I SC@  tos [] tos ldrsb, ;I
 :I !    tos r0 mov,   {{ r1 tos }} pop,   r0 [] r1 str,  ;I
+:I H!   tos r0 mov,   {{ r1 tos }} pop,   r0 [] r1 strh, ;I
 :I C!   tos r0 mov,   {{ r1 tos }} pop,   r0 [] r1 strb, ;I
 
 \ These store as hi, lo in memory, but push as ( lo hi ) double-words.
@@ -135,7 +142,7 @@ REQUIRE ../host/compiler/inlining.ft
   tos r0 mov,        \ addr -> r0
   {{ r1 tos }} pop,  \ delta -> r1; next-TOS -> tos
   r0 [] r2 ldr,      \ value -> r2
-  r1 r2 add2,        \ value+delta -> r2
+  r1 r2 r2 add3,     \ value+delta -> r2
   r0 [] r2 str,      \ value' -> r0[0]    Next TOS is already loaded.
 ;I
 
@@ -154,7 +161,7 @@ label EXECUTE-launchpad   \ We BL to here so the true return address is in LR.
 :I EXECUTE   EXECUTE-launchpad bl, ;I
 
 :I LOG   ( x -- ) {{ tos }} pop,  ;I
-:I BREAK ( x -- ) code-space @ b, ;I \ Spin forever! TODO: BKPT instr? SWI?
+:I BREAK ( x -- ) 2 swi, ;I
 
 
 \ These are fake inlines - they throw, since executing these at runtime makes
@@ -175,6 +182,8 @@ label EXECUTE-launchpad   \ We BL to here so the true return address is in LR.
   (TCREATE)
   ." CODE " 'mirror @   dup mirror>mirror-nt @ id. ." at " mirror>txt @ hex. cr ;
 
+: CODE ( "name" -- ) code-bare ;
+
 \ Do nothing - you handle the return fully.
 : END-CODE-BARE ( -- ) ;
 
@@ -183,6 +192,12 @@ label EXECUTE-launchpad   \ We BL to here so the true return address is in LR.
 
 \ Pops the RSP into r0, and returns to that.
 : END-CODE-RSP ( -- )  thumb   r0 poprsp,   r0 bx,   end-code-bare ;
+
+DEFER END-CODE
+
+: <end-code-throw> ( -- )
+  1 ABORT" No END-CODE for Thumb, use -bare, -lr or -rsp" ;
+' <end-code-throw> IS END-CODE
 
 
 \ Variables and core states ==================================================
@@ -195,6 +210,7 @@ TVARIABLE var_handler   \ Interrupt handler
 
 :I UP  ( -- up ) {{ tos }} push,   up tos mov, ;I
 
+?stack-clear
 
 \ Bigger stack manipulations =================================================
 :I 2DUP ( a b -- a b a b )
@@ -212,6 +228,7 @@ TVARIABLE var_handler   \ Interrupt handler
   {{ r0 tos }} pop,      \ a -> r0; x -> TOS
 ;I
 
+?stack-clear
 
 \ More arithmetic ============================================================
 :I 1+      1 # tos add2, ;I
@@ -241,6 +258,7 @@ TVARIABLE var_handler   \ Interrupt handler
   r0 bx,
 ;I
 
+?stack-clear
 
 \ DO LOOP helpers ============================================================
 :I UNLOOP ( --    R: limit index -- )
@@ -249,16 +267,21 @@ TVARIABLE var_handler   \ Interrupt handler
 
 :I I ( -- index    R: index -- index )
   {{ tos }}  push,
-  rsp [] tos ldr,
+  rsp [] tos ldr,  \ FIXME: This is getting assembled as $7035 == strb r6, [r6, #0]
+\ XXX: START HERE: Check how this is getting assembled now; I think I fixed this.
 ;I
+
+\ 7035
+\ 0111 0000 0011 0101
+\ 011 10 00000 110 101
+\ ___ oo iiiii bbb ddd
 
 :I J ( -- index1    R: index1 limit2 index2 -- index1 limit2 index2 )
   {{ tos }}       push,
   2 # rsp [+] tos ldr,
 ;I
 
-
-REQUIRE code-words.ft
+REQUIRE code-words.ft ?stack-clear
 
 
 \ Interrupts =================================================================
@@ -272,12 +295,15 @@ REQUIRE code-words.ft
 
 $00c0 CONSTANT cpsr-int-mask
 
+?stack-clear
 \ Non-inlined calls that can BX to ARM state and back again.
 thumb
 code IRQ+ ( -- ) fwd b, end-code-bare
 code IRQ- ( -- ) fwd b, end-code-bare
 
 ( loc-irq+ loc-irq- )
+
+REQUIRE ../host/debugging.ft
 
 thumb resolve    ( loc-irq+ )
 arm label IRQ-_arm ( -- )   \ Disable interrupts
@@ -292,5 +318,7 @@ arm label IRQ+_arm ( -- )   \ Enable interrupts
   cpsr-int-mask # r0 r0 bic,
   r0               cpsr msr,
   lr                    bx,
+
+?stack-clear
 
 thumb

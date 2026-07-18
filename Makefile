@@ -17,6 +17,9 @@ ARM_QEMU_FLAGS ?= -drive if=sd,format=raw,file=test_arm_sd.img -d guest_errors -
 #ARM_QEMU_FLAGS ?= -D log.txt -d exec,cpu,int
 ARM_PREFIX ?= arm-none-eabi-
 
+GBA_EMU ?= mGBA
+GBA_EMU_FLAGS ?=
+
 VICE_C64 ?= x64sc
 VICE_C64_FLAGS ?= -nativemonitor \
 		  -autostartprgmode 1 \
@@ -208,6 +211,15 @@ forth-armos.bin: host/*.ft arm/*.ft arm/os/*.ft arm/os/**/*.ft shared/*.ft
 
 run-armos: forth-armos.bin FORCE
 	$(ARM_QEMU) $(ARM_QEMU_FLAGS) -kernel $<
+
+# Gameboy Advance ============================================================
+forth-gba.bin: host/*.ft host/**/*.ft arm/*.ft arm/**/*.ft gba/*.ft gba/**/*.ft shared/*.ft
+	$(FORTH) gba/preamble.ft gba/system.ft gba/game/core.ft \
+		-e 'host :noname S" $@" ; IS tcforth-output' \
+		gba/finalize.ft -e 'bye'
+
+run-gba: forth-gba.bin FORCE
+	$(GBA_EMU) $(GBA_EMU_FLAGS) $<
 
 # Commodore 64 ===============================================================
 forth-c64.prg: host/*.ft 6502/*.ft shared/*.ft

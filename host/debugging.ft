@@ -8,20 +8,22 @@
 \ : tsee-word    ( tt -- tt' ) for the regular case of printing a word; no address or CR
 host definitions
 
-: TXT-SEE-1 ( t-xt -- t-xt'|0 )
-  ?tsee-lit    IF EXIT THEN
-  ?tsee-branch IF EXIT THEN
-  dup tsee-end? IF drop 0 ." EXIT" EXIT THEN
-  dup t@ T>NAME TID. tcell+ ;
+\ TODO: Bring these back! Needs model-specific helpers, though.
 
-: TXT-SEE ( t-xt -- )
-  cr dup hex. ." : " dup T>NAME TID. cr
-  tcell+ \ Skip past the codeword.
-  BEGIN 4 spaces dup hex. txt-see-1 cr dup 0= UNTIL drop ;
-
-: TSEE ( "name" -- ) T' txt-see ;
-
-: TWORDS ( -- ) latest BEGIN ?dup WHILE dup tid. cr t@ REPEAT ;
+\ : TXT-SEE-1 ( t-xt -- t-xt'|0 )
+\   ?tsee-lit    IF EXIT THEN
+\   ?tsee-branch IF EXIT THEN
+\   dup tsee-end? IF drop 0 ." EXIT" EXIT THEN
+\   dup t@ T>NAME TID. tcell+ ;
+\
+\ : TXT-SEE ( t-xt -- )
+\   cr dup hex. ." : " dup T>NAME TID. cr
+\   tcell+ \ Skip past the codeword.
+\   BEGIN 4 spaces dup hex. txt-see-1 cr dup 0= UNTIL drop ;
+\
+\ : TSEE ( "name" -- ) T' txt-see ;
+\
+\ : TWORDS ( -- ) latest BEGIN ?dup WHILE dup tid. cr t@ REPEAT ;
 
 \ Hex version of the ~~ debugging word from Gforth.
 \ Inlines its code so that the location reference is still valid.

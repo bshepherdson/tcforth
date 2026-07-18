@@ -79,7 +79,9 @@ CREATE node-printers 16 cells allot
 : PRINTER! ( xt type -- )  printer ! ;
 
 : .node ( bufnode -- )
-  ." Node " dup hex. ." of type " dup bufnode>type @   dup .
+  ." Node " dup hex.
+  ." @ " code-space @ hex.
+  ." of type " dup bufnode>type @   dup .
   printer @ execute    cr ;
 
 
@@ -174,6 +176,8 @@ DEFER resolve-ref ( token real-t-xt -- )
 begin-structure [literal]
   [bufnode] +
   FIELD: literal>value
+  FIELD: literal>instr
+  FIELD: literal>pool-slot
 end-structure
 
 3 CONSTANT buftype-literal

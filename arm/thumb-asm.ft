@@ -3,6 +3,8 @@
 \ toggle between them.
 REQUIRE assembler.ft
 
+REQUIRE ../host/debugging.ft
+
 : <?loreg> ( r -- r ) dup 8 >= ABORT" Thumb registers must be r0 to r7" ;
 
 : ?loreg ( r 0 -- r ) ?reg <?loreg> ;
@@ -24,8 +26,14 @@ REQUIRE assembler.ft
 : hi-reg? ( r 0 -- ? ) 0= >R   8 >=   R> and ;
 : lo-reg? ( r 0 -- ? ) 0= >R   8 <    R> and ;
 
+: wordy   ( u-bytes -- u-words )
+  dup 3 and ABORT" Expected a byte offset that's aligned to words"
+  2 rshift ;
+
+\ Expects an absolute amount here, for assembler ergonomics, but the SP
+\ adjustments are in cells.
 : <thumb:add-13-sp> ( u7 1 12 0 -- )
-  2drop ?imm ?u7 ( u7 )
+  2drop ?imm wordy ?u7 ( u7 )
   $b000 or asm-half, ;
 
 : <thumb:hi-regs> ( Rs Rd opcode -- )
@@ -62,6 +70,7 @@ REQUIRE assembler.ft
 \ This one is ambiguous so it's handled explicitly as a "load effective address"
 \ pseudoinstruction, rather than an ADD3.
 \ ADD Rd, PC/SP, #u8  12  *   1010 Sddd iiii iiii   S=0 for PC; S=1 for SP
+\ NOTE: The immediate is given as absolute, but assembled as cells not bytes.
 \ TODO: It's actually not ambiguous as an ADD3, so it could be folded back in.
 : lea, ( imm8 Rpc/Rsp Rd -- )
   ?loreg  8 lshift >R
@@ -70,7 +79,7 @@ REQUIRE assembler.ft
     sp drop OF $0800 ENDOF
     1 ABORT" Bad register operand for Thumb LEA"
   ENDCASE R> or >R ( imm8   R: opcode )
-  ?imm ?u8   R> or
+  ?imm wordy ?u8   R> or
   $a000 or asm-half, ;
 
 
@@ -137,6 +146,10 @@ $a <thumb:bcond> bge,   $b <thumb:bcond> blt,
 $c <thumb:bcond> bgt,   $d <thumb:bcond> ble,
 \ $e is unused; $f is SWI.
 
+\ A couple of aliases, since there are multiple phrasings of these opcodes.
+: bhs, ( abs-addr -- ) bcs, ;
+: blo, ( abs-addr -- ) bcc, ;
+
 \ BIC ========================================================================
 \ BIC Rd, Rs           4  14  0100 0011 01ss sddd
 $e <thumb:alu-rr> thumb:bic,
@@ -171,8 +184,11 @@ $b <thumb:alu-rr> thumb:cmn,
   ?loreg 8 lshift >R
   ?imm ?u8 R> or   $4800 or asm-half, ;
 
+\ 001 01 ddd iiiiiiii
+\ 0010 1ddd iiii iiii
+
 : thumb:cmp, ( imm8|Rs Rd -- )
-  2 pick IF $4800 <thumb:format3> ELSE
+  2 pick IF $2800 <thumb:format3> ELSE
     2dup hi-reg? >R   2over hi-reg? R> or IF
       $4500 <thumb:hi-regs>
     ELSE
@@ -234,7 +250,7 @@ $00200000 CONSTANT bit-arm-W
   dup 16 rshift 15 and ( rd arm-encoded rb )
   dup 15 =   over sp drop = or IF <thumb-mem-pc/sp> ELSE ( rd arm-encoded rb )
     dup 8 >= ABORT" Base register must be r0-r7"
-    3 lshift $7000 or >R   ( rd arm-encoded   R: opcode )
+    3 lshift $6800 or >R   ( rd arm-encoded   R: opcode )
     $fff and               ( rd offset        R: opcode )
     dup 0 32 within 0= ABORT" Offset range is 0-31 for Thumb LDR/STR"
     6 lshift or R> or
@@ -406,14 +422,14 @@ $6 <thumb:alu-rr> thumb:sbc,
 \ SUB SP, #u7         13  0   1011 0000 oiii iiii   o=1 for SUB
 
 : <thumb:sub-13-sp> ( u7 1 12 0 -- )
-  2drop ?imm ?u7 ( u7 )
+  2drop ?imm wordy ?u7 ( u7 )
   $b080 or asm-half, ;
 
 : sub2,
   over sp drop = IF
     <thumb:sub-13-sp>
   ELSE
-    $3800 <thumb:format3>
+    $3800 ~~h <thumb:format3>
   THEN ;
 
 \ SUB3 =======================================================================
@@ -447,10 +463,11 @@ $8 <thumb:alu-rr> thumb:tst,
   swap 8 rshift swap 1+ tcode-c! ;
 
 : <thumb:resolve-short> ( loc opcode mask lo hi -- )
-  2>R tuck and                   ( loc mask masked      R: lo hi )
+  2>R tuck and ~~h                  ( loc mask masked      R: lo hi )
   2 pick 4 +   code-space @ swap -  ( loc mask masked offset   R: lo hi )
   dup 2R> within 0= ABORT" Resolved branch is out of range" ( loc mask masked offset )
-  rot invert and $ffff and 2/   ( loc masked-opcode masked-offset )
+  2/                            ( loc mask masked halfword-offset )
+  rot invert and $ffff and      ( loc masked-opcode masked-offset )
   or swap tcode-h! ;
 
 : <thumb:resolve-long> ( loc -- )
@@ -467,7 +484,15 @@ $8 <thumb:alu-rr> thumb:tst,
   dup $f000 and $d000 = IF $ff00 -256  256  <thumb:resolve-short> EXIT THEN
   dup $f800 and $e000 = IF $f800 -2048 2048 <thumb:resolve-short> EXIT THEN
       $f800 and $f000 = IF <thumb:resolve-long>                   EXIT THEN
+  dup tcode-h@
+  ~~h
   1 ABORT" Unrecognized branch type" ;
+
+\ 4d00
+\ 0100 1101 0000 0000
+\ 01001 ddd iiiiiiii   Format 6, LDR PC
+\ XXX: START HERE: Keep debugging this unexpected `resolve` aimed at a LDR PC
+\ opcode. Something is busted in the literal pool handling, I suppose?
 
 
 : thumb ( -- )
@@ -506,3 +531,8 @@ $8 <thumb:alu-rr> thumb:tst,
   ['] thumb:resolve IS resolve ;
 
 thumb
+
+: resolve-to ( branch-loc target -- )
+  code-space @ >R   code-space !
+  resolve
+  R> code-space ! ;

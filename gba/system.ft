@@ -20,6 +20,10 @@ host definitions REQUIRE core.ft
 
 host REQUIRE startup.ft  ?stack-clear
 
+\ The metacompiler expects a working `code end-code` pair, so adjust our
+\ `end-code` (a DEFERed word) to `end-code-lr`. No one should call it anyway.
+' end-code-lr IS end-code
+
 \ The main part of the metacompiler
 host REQUIRE ../host/metacompiler.ft
 
@@ -27,6 +31,7 @@ host REQUIRE ../host/metacompiler.ft
 host REQUIRE ../shared/basics.ft
 host REQUIRE branches.ft               \ Target-specific branching helpers.
 host REQUIRE ../shared/control-structures.ft
+host REQUIRE interrupts.ft             \ Target-specific interrupt helpers.
 host REQUIRE ../shared/exceptions.ft
 host REQUIRE ../shared/model-target.ft
 host REQUIRE ../shared/input.ft

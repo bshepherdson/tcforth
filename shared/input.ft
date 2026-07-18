@@ -29,6 +29,71 @@ target : istr= ( ca1 u1 ca2 u2 -- ? )
   REPEAT 2drop -1 ;
 host [THEN]
 
+\ istr= compiling at $8000724
+\ =========================================
+\ Draining node $6000012B6320 at: $8000724
+\ Node $6000012B6320 of type 4 STARTER
+\
+\ gba/utils.ft:14:<5> 6000012B6320 4 1 6 0
+\
+\ arm/thumb-asm.ft:422:<6> 6000012B6320 4 1 6 0 3800
+\ Node $600001CA45D0 of type 2 CALLER $80000CE           rot
+\ Node $6000012B6340 of type 1 INLINER $1320594A0        over
+\ Node $600001CA4600 of type 2 CALLER $8000364           <>
+\ Node $6000007A4800 of type 7 0BRANCH to $600001CA4630 slot $0 with sibling $0  IF
+\ Node $6000012B6360 of type 1 INLINER $1320593D0        drop
+\ Node $6000012B6380 of type 1 INLINER $13205B558        2drop
+\ Node $6000007A4840 of type 3 LITERAL 0 $0              lit 0
+\ Node $6000012B63A0 of type 1 INLINER $13205BCC8        EXIT
+\ Node $600001CA4630 of type 8 DEST at $0 first forwarder $6000007A4800    THEN
+\ Node $600001CA4660 of type 8 DEST at $0 first forwarder $0               BEGIN
+\ Node $6000012B63C0 of type 1 INLINER $132059780                          ?dup
+\ Node $6000007A4880 of type 7 0BRANCH to $600001CA4750 slot $0 with sibling $0  WHILE
+\ Node $6000012B63E0 of type 1 INLINER $132059D90                                >R
+\
+\ gba/utils.ft:14:<5> 6000012B63E0 4 1 6 0
+\
+\ arm/thumb-asm.ft:422:<6> 6000012B63E0 4 1 6 0 3800
+\ Node $6000012B6400 of type 1 INLINER $1320594A0     over
+\ Node $6000012B6420 of type 1 INLINER $13205A150     c@
+\ Node $600001CA4690 of type 2 CALLER $80006FC        >upper
+\ Node $6000012B6440 of type 1 INLINER $1320594A0     over
+\ Node $6000012B6460 of type 1 INLINER $13205A150     c@
+\ Node $600001CA46C0 of type 2 CALLER $80006FC        >upper
+\ Node $600001CA46F0 of type 2 CALLER $8000364        <>
+\ Node $6000007A48C0 of type 7 0BRANCH to $600001CA4720 slot $0 with sibling $0    IF
+\ Node $6000012B6480 of type 1 INLINER $13205B558     2drop
+\ Node $6000012B64A0 of type 1 INLINER $132059E80     R>
+\ Node $6000012B64C0 of type 1 INLINER $1320593D0     drop
+\ Node $6000007A4900 of type 3 LITERAL 0 $0           0
+\ Node $6000012B64E0 of type 1 INLINER $13205BCC8     EXIT
+\ Node $600001CA4720 of type 8 DEST at $0 first forwarder $6000007A48C0    THEN
+\ Node $6000012B6500 of type 1 INLINER $13205B638     1+
+\ Node $6000012B6520 of type 1 INLINER $132059D90     >R
+\
+\ gba/utils.ft:14:<5> 6000012B6520 4 1 6 0
+\
+\ arm/thumb-asm.ft:422:<6> 6000012B6520 4 1 6 0 3800
+\ Node $6000012B6540 of type 1 INLINER $13205B638     1+
+\ Node $6000012B6560 of type 1 INLINER $132059E80     R>
+\ Node $6000012B6580 of type 1 INLINER $132059E80     R>
+\ Node $6000012B65A0 of type 1 INLINER $13205B8A8     1-
+\
+\ arm/thumb-asm.ft:422:<6> 6000012B65A0 1 1 5 0 3800
+\ Node $6000007A4940 of type 7 BRANCH to $600001CA4660 slot $0 with sibling $0   REPEAT
+\
+\ arm/thumb-asm.ft:477:<4> 6000007A4940 6000007A4940 800074A 4D00
+\
+\ in file included from *OS command line*:-1
+\ in file included from gba/system.ft:37
+\ shared/input.ft:29: Unrecognized branch type
+\   REPEAT 2drop -1 >>>;<<<
+\
+\       2drop R> drop 0 EXIT THEN \ Character mismatch
+\     1+ >R 1+ R> R> 1- ( ca1' ca2' u' )
+\   REPEAT 2drop -1 ;
+
+
 host <T'> <find> 0=   has-dictionary? and [IF]
 \ Implementing <FIND> in code gave a 2x speedup on DCPU-16.
 target :F <FIND> ( c-addr u nt -- nt|0 )

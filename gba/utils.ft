@@ -2,14 +2,16 @@ host definitions
 
 : tos r5 ;
 : rsp r6 ;
-: up  r7 ;
+: up  r7 ; \ TODO: Probably move this to a high register? It's rarely used.
 
 2 CONSTANT instr-width
+
+REQUIRE ../host/debugging.ft
 
 \ Assembler macros for using the return stack.
 : pushrsp, ( r 0 -- )
   2>R
-  4 #    rsp sub,
+  4 #    rsp ~~h sub2,
   rsp [] 2R> str, ;
 
 : poprsp,  ( r 0 -- )

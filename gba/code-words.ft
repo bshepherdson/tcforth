@@ -3,13 +3,18 @@
 
 thumb
 
+?stack-clear
+
 \ Lengthy stack ops ==========================================================
 \ TODO: These are not bad in Thumb; they could get inlined.
+?stack-clear
 code ROT ( c b a -- b a c )
+?stack-clear
   tos r0 mov,        \ a -> r0
   {{ r1 tos }} pop,  \ b -> r1, c -> tos
   {{ r0 r1 }}  push,
 end-code-lr
+?stack-clear
 
 code -ROT ( c b a -- a c b )
   {{ r0 r1 }}  pop,  \ b -> r0, c -> r1
@@ -20,7 +25,9 @@ end-code-lr
 code TUCK ( a b -- b a b )
   {{ r0 }}     pop,
   {{ r0 tos }} push,
-end-code
+end-code-lr
+
+?stack-clear
 
 \ DEPTH is a bit weird with TOS in register. The bottom value in memory is
 \ actually whatever dummy value was in the TOS register when the first real
@@ -32,7 +39,7 @@ code DEPTH ( -- u )
   {{ tos }}        push,
   tsp0 # up [+] r0 ldr,
   sp            r1 mov,
-  r1            r0 sub2,
+  r1     r0     r0 sub3,
   2 #    r0    tos lsr3, \ Converting bytes to cells.
 end-code-lr
 
@@ -58,20 +65,71 @@ end-code-lr
 
 code D+ ( l1 h1 l2 h2 -- l3 h3 )
   {{ r0 r1 r2 }} pop,   \ l1 -> r0, h1 -> r1, l2 -> r2  and tos has h2.
-  r2    r0       add2,  \ l3 -> r0
+  r2    r0    r0 add3,  \ l3 -> r0
   r1    tos      adc,   \ h3 -> tos
   {{ r0 }}       push,
 end-code-lr
 
+?stack-clear
+
 code D- ( l1 h1 l2 h2 -- l3 h3 )
   {{ r0 r1 r2 }} pop,   \ l1 -> r0, h1 -> r1, l2 -> r2  and tos has h2.
-  r0    r2       sub2,  \ l3 -> r2
+  r0    r2    r2 sub3,  \ l3 -> r2
   tos   r1       sbc,   \ h3 -> r1
   r1    tos      mov,   \ h3 -> tos
   {{ r2 }}       push,
 end-code-lr
 
-\ NOTE: Skipped UDM* and UM/MOD here.
+code UM* ( u1 u2 -- ud )
+  {{ r1 }}     pop,    \ u1 -> r1
+  tos r2       mov,    \ u2 -> r2
+  r1  r2       mul,    \ lo=u1*u2 -> r2
+  {{ r2 }}     push,   \ lo -> NOS
+  16 # r1  r1  lsr3,   \ u1>>16 -> r1
+  16 # tos tos lsr3,   \ u2>>16 -> tos
+  r1       tos mul,    \ hi -> tos
+end-code-lr
+
+
+code UM/MOD ( ulo uhi udiv -- ur uq )
+  \ Dividing a 64-bit unsigned dividend by an unsigned 32-bit divisor to get
+  \ an unsigned 32-bit quotient and unsigned 32-bit remainder.
+  \ This works by successive bit-shifting until we run out of divisor bits.
+  \ The dividend goes into r0:r1, and then r0 becomes the remainder and r1 the
+  \ quotient.
+  \ Each steps shifts this pair left, moving the top bit of the low/quotient
+  \ into the high/remainder.
+  \ We shift in a 0 there, but if the remainder is >= the divisor, we subtract
+  \ the divisor from the remainder and make bit 0 of the quotient 1.
+  \ After cycling for as many bits as the divisor is wide (32), all the dividend
+  \ bits have been shifted out of the quotient, and the remainder holds exactly
+  \ the remainder we want!
+  {{ r1 r0 }} pop, \ r0 = high dividend/remainder; r1 = low dividend/quotient
+  32 # r2 mov,     \ r2 = bit counter
+
+  label UM/MOD-loop
+    \ Shift r0:r1 left as a 64-bit value.
+    1 # r0 r0 lsl3,    \ hi first
+    1 # r1 r1 lsl3,    \ then lo, with flags: C gets the last bit shifted out
+    fwd       bcc,     \ skip ahead if we shifted out a zero
+      1 # r0  add2,    \ And a 1 is added to hi if that bit was a 1.
+    resolve
+
+    \ Now if our remainder (r0) is unsigned-higher than the divisor (TOS)
+    \ we can divide once: subtract divisor from remainder, add a 1 bit to the
+    \ quotient.
+    tos r0 cmp,        \ Checking remainder/r0 - divisor/TOS
+    fwd    bcc,        \ Jump ahead if it's not so
+      tos r0 r0 sub3,  \ Only do this if it's unsigned higher, ie. remainder < TOS
+      1 #    r1 add2,
+    resolve
+    1 # r2 sub2,       \ Decrement the bit count
+  UM/MOD-loop bne,     \ Keep looping if it's not 0 yet.
+
+  \ Now r0 is the remainder, r1 the quotient.
+  {{ r0 }} push,
+  r1 tos mov,     ( rem quot )
+end-code-lr
 
 
 \ MOVEs ======================================================================
@@ -98,9 +156,9 @@ end-code-lr
 \ Copies src to dst from higher addresses to lower, one byte at a time.
 code MOVE> ( src dst u -- )
   {{ r0 r1 }} pop,      \ src -> r1, dst -> r0
-  tos r0      add2,     \ dst+len   -> r0
+  tos r0   r0 add3,     \ dst+len   -> r0
   1 # r0      sub2,     \ dst+len-1 -> r0
-  tos r1      add2,     \ src+len   -> r1
+  tos r1   r1 add3,     \ src+len   -> r1
   1 # r1      sub2,     \ src+len-1 -> r1
 
   0 # tos add2, \ Set the Z flag for the branch below.
@@ -119,8 +177,11 @@ code MOVE> ( src dst u -- )
   {{ tos }} pop,
 end-code-lr
 
+?stack-clear
 
+tcode-align
 code FILL8 ( c-addr u ch -- )
+label FILL8-top
   tos r2          mov,   \ ch -> r2
   {{ r0 r1 tos }} pop,   \ addr -> r1,  len -> r0
 
@@ -134,6 +195,10 @@ code FILL8 ( c-addr u ch -- )
     resolve
     FILL8-loop bne,
 end-code-lr
+
+code FILL
+  FILL8-top b,
+end-code-bare
 
 \ NOTE: Address must be halfword-aligned. Length is in units, not bytes!
 code FILL16 ( h-addr u h -- )
@@ -172,6 +237,7 @@ end-code-lr
 
 
 \ DO LOOP helpers ============================================================
+?stack-clear
 code (DO) ( limit index --    R: -- limit index )
   {{ r2 r1 }}  pop,   \ limit -> r1,   new-TOS -> r2
   r1       pushrsp,
@@ -179,15 +245,14 @@ code (DO) ( limit index --    R: -- limit index )
   r2 tos       mov,
 end-code-lr
 
+?stack-clear
 code (LOOP-END)  ( delta -- done?    R: limit index1 -- limit index2 )
   rsp     []  r3 ldr,    \ index -> r3
   1 # rsp [+] r4 ldr,    \ limit -> r4
-  r3          r2 mov,    \ index -> r2
-  r4          r2 sub2,   \ i-l   -> r2
+  r4      r3  r2 sub3,   \ i-l   -> r2
 
   \ We want delta + index - limit
-  tos    r0 mov,
-  r2     r0 add2,   \ delta + index - limit -> r0
+  r2 tos r0 add3,   \ delta + index - limit -> r0
   0 #    r1 mov,    \ false -> r1
   r2     r0 eor,    \ d+i-l ^ i-l           -> r0
   \ That set N based on the top bit!
@@ -195,17 +260,21 @@ code (LOOP-END)  ( delta -- done?    R: limit index1 -- limit index2 )
     r1 r1 mvn,      \ true -> r1, when the top bit is clear.
   resolve
   r1     r0 mov,    \ flag1 -> r0
+?stack-clear
 
   \ Now calculate delta XOR index-limit
   0 #    r1 mov,    \ false -> r1
   tos    r2 eor,
   fwd       bmi,    \ Jump ahead if the top bit is set, i.e. negative.
     r1 r1 mvn,      \ true -> r1, when the top bit is clear.
+  resolve
   r1     r0 orr,    \ OR both flags -> r0
   r0     r0 mvn,    \ And invert the result
-  tos    r4 add2,   \ delta + index -> r4
-  rsp [] r4 str,    \ And store it back to the return stack
+  tos r3 r3 add3,   \ delta + index -> r3
+  rsp [] r3 str,    \ And store it back to the return stack
   r0    tos mov,    \ done flag -> tos
 end-code-lr
+
+?stack-clear
 
 \ TODO: Implementing the necessary pieces for multitasking.

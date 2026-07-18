@@ -12,6 +12,7 @@ target definitions
 : main-loop ( -- ) BEGIN AGAIN ;
 
 : game-start ( -- )
+  \ $deadbeef break
   boot
   init-display
   the-frame

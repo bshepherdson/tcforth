@@ -29,8 +29,8 @@ host <T'> LITERAL 0=   has-dictionary? and [IF]
 host [THEN]
 
 \ Alignment ==================================================================
-\ Only needed when the target alignment is > 1.
-host alignment 1 > [IF]
+\ Only needed when the target alignment is > 1 and it's interactive.
+host alignment 1 >   has-dictionary? and [IF]
   target : ALIGNED
       [ host alignment 1- tliteral target ] +
       [ host alignment 1- tliteral target ] invert and ;
